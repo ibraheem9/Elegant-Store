@@ -10,10 +10,9 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _usernameController = TextEditingController(text: 'hamoda');
-  final _passwordController = TextEditingController(text: 'demo');
+  final _usernameController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _isLoading = false;
-  String? _errorMessage;
 
   @override
   void dispose() {
@@ -22,28 +21,46 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  Future<void> _handleLogin() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+  void _login() async {
+    if (_usernameController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter username')),
+      );
+      return;
+    }
 
-    final authService = context.read<AuthService>();
-    final success = await authService.login(
-      _usernameController.text,
-      _passwordController.text,
-    );
+    setState(() => _isLoading = true);
 
-    if (!mounted) return;
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      bool success = await authService.login(
+        _usernameController.text,
+        _passwordController.text,
+      );
 
-    if (success) {
-      // Navigate to dashboard
-      Navigator.of(context).pushReplacementNamed('/dashboard');
-    } else {
-      setState(() {
-        _errorMessage = 'Invalid username or password';
-        _isLoading = false;
-      });
+      if (success) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Login successful')),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Login failed')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -51,14 +68,11 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFF1E3A8A),
-              const Color(0xFF3B82F6),
-            ],
+            colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6)],
           ),
         ),
         child: Center(
@@ -67,43 +81,38 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Logo/Title
+                const SizedBox(height: 40),
                 Container(
-                  padding: const EdgeInsets.all(24),
+                  width: 80,
+                  height: 80,
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.store,
-                        size: 64,
-                        color: const Color(0xFF1E3A8A),
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Elegant Store',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1E3A8A),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Retail Management System',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ],
+                  child: const Icon(
+                    Icons.store,
+                    size: 50,
+                    color: Color(0xFF1E3A8A),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Elegant Store',
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Retail Management System',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.white70,
                   ),
                 ),
                 const SizedBox(height: 48),
-
-                // Login Form
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
@@ -112,101 +121,49 @@ class _LoginScreenState extends State<LoginScreen> {
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withOpacity(0.1),
-                        blurRadius: 16,
-                        offset: const Offset(0, 8),
+                        blurRadius: 10,
+                        offset: const Offset(0, 5),
                       ),
                     ],
                   ),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Username field
-                      const Text(
-                        'Username',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF1F2937),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
                       TextField(
                         controller: _usernameController,
                         decoration: InputDecoration(
-                          hintText: 'Enter your username',
+                          hintText: 'Username',
                           prefixIcon: const Icon(Icons.person),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          filled: true,
-                          fillColor: Colors.grey[100],
-                        ),
-                        enabled: !_isLoading,
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Password field
-                      const Text(
-                        'Password',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF1F2937),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 16),
                       TextField(
                         controller: _passwordController,
                         obscureText: true,
                         decoration: InputDecoration(
-                          hintText: 'Enter your password',
+                          hintText: 'Password',
                           prefixIcon: const Icon(Icons.lock),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          filled: true,
-                          fillColor: Colors.grey[100],
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
                         ),
-                        enabled: !_isLoading,
                       ),
                       const SizedBox(height: 24),
-
-                      // Error message
-                      if (_errorMessage != null)
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.red[50],
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.red),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.error, color: Colors.red),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  _errorMessage!,
-                                  style: const TextStyle(color: Colors.red),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      if (_errorMessage != null) const SizedBox(height: 24),
-
-                      // Login button
                       SizedBox(
                         width: double.infinity,
                         height: 48,
                         child: ElevatedButton(
-                          onPressed: _isLoading ? null : _handleLogin,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1E3A8A),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
+                          onPressed: _isLoading ? null : _login,
                           child: _isLoading
                               ? const SizedBox(
                                   height: 24,
@@ -229,40 +186,16 @@ class _LoginScreenState extends State<LoginScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 32),
-
-                // Test accounts info
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.3),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Test Accounts',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Accountants: hamoda, eldaj, ahmed_yaghi\nManager: ibrahim_manager\nCustomers: customer_hassan, customer_ali, customer_fatima\nPassword: demo (or any value)',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.white70,
-                        ),
-                      ),
-                    ],
+                const SizedBox(height: 24),
+                const Text(
+                  'Test Accounts:\nhamoda, eldaj, ahmed_yaghi\ncustomer_hassan, customer_ali',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.white70,
                   ),
                 ),
+                const SizedBox(height: 40),
               ],
             ),
           ),

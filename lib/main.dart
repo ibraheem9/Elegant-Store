@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'services/database_service.dart';
 import 'services/auth_service.dart';
 import 'screens/login_screen.dart';
@@ -40,19 +40,11 @@ class ElegantStoreApp extends StatelessWidget {
           seedColor: const Color(0xFF1E3A8A),
           brightness: Brightness.light,
         ),
-        textTheme: GoogleFonts.segoeUiTextTheme(
-          Theme.of(context).textTheme,
-        ),
-        appBarTheme: AppBarTheme(
-          backgroundColor: const Color(0xFF1E3A8A),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF1E3A8A),
           foregroundColor: Colors.white,
           elevation: 0,
           centerTitle: true,
-          titleTextStyle: GoogleFonts.segoeUi(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
@@ -64,14 +56,7 @@ class ElegantStoreApp extends StatelessWidget {
             ),
           ),
         ),
-        inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          filled: true,
-          fillColor: Colors.grey[100],
-        ),
+
       ),
       home: Consumer<AuthService>(
         builder: (context, authService, _) {
