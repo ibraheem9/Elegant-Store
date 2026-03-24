@@ -47,13 +47,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           setState(() => _selectedIndex = index);
         },
         type: BottomNavigationBarType.fixed,
+        selectedItemColor: const Color(0xFF1E3A8A),
+        unselectedItemColor: Colors.grey,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.receipt), label: 'Sales'),
-          BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: 'Stats'),
-          BottomNavigationBarItem(icon: Icon(Icons.shopping_cart), label: 'Buy'),
-          BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Customers'),
-          BottomNavigationBarItem(icon: Icon(Icons.payment), label: 'Pay'),
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'الرئيسية'),
+          BottomNavigationBarItem(icon: Icon(Icons.receipt), label: 'البيع'),
+          BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: 'الإحصائيات'),
+          BottomNavigationBarItem(icon: Icon(Icons.shopping_cart), label: 'المشتريات'),
+          BottomNavigationBarItem(icon: Icon(Icons.people), label: 'الزبائن'),
+          BottomNavigationBarItem(icon: Icon(Icons.payment), label: 'المدفوعات'),
         ],
       ),
     );
@@ -65,15 +67,18 @@ class DashboardHomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final user = Provider.of<AuthService>(context).currentUser;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Welcome to Elegant Store',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          Text(
+            'مرحباً، ${user?.name ?? "المستخدم"}',
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
+          const SizedBox(height: 8),
+          const Text('نظام إدارة المتجر - نظرة عامة', style: TextStyle(color: Colors.grey)),
           const SizedBox(height: 24),
           GridView.count(
             crossAxisCount: 2,
@@ -82,12 +87,12 @@ class DashboardHomeScreen extends StatelessWidget {
             mainAxisSpacing: 16,
             crossAxisSpacing: 16,
             children: [
-              _buildCard('Sales', Icons.receipt, Colors.blue),
-              _buildCard('Statistics', Icons.bar_chart, Colors.green),
-              _buildCard('Purchases', Icons.shopping_cart, Colors.orange),
-              _buildCard('Customers', Icons.people, Colors.purple),
-              _buildCard('Payments', Icons.payment, Colors.red),
-              _buildCard('Settings', Icons.settings, Colors.grey),
+              _buildCard('المبيعات', Icons.receipt, Colors.blue),
+              _buildCard('الإحصائيات', Icons.bar_chart, Colors.green),
+              _buildCard('المشتريات', Icons.shopping_cart, Colors.orange),
+              _buildCard('الزبائن', Icons.people, Colors.purple),
+              _buildCard('المدفوعات', Icons.payment, Colors.red),
+              _buildCard('الإعدادات', Icons.settings, Colors.grey),
             ],
           ),
           const SizedBox(height: 24),
@@ -100,13 +105,13 @@ class DashboardHomeScreen extends StatelessWidget {
             child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Quick Stats', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Text('إحصائيات سريعة', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 SizedBox(height: 12),
-                Text('Pending Invoices: 5'),
+                Text('فواتير معلقة: 5'),
                 SizedBox(height: 8),
-                Text('Total Pending: 500 ₪'),
+                Text('إجمالي الديون: 500 ₪'),
                 SizedBox(height: 8),
-                Text('Today Sales: 150 ₪'),
+                Text('مبيعات اليوم: 150 ₪'),
               ],
             ),
           ),

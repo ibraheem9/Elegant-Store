@@ -13,6 +13,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -21,10 +22,10 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _login() async {
-    if (_usernameController.text.isEmpty) {
+  Future<void> _login() async {
+    if (_usernameController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter username')),
+        const SnackBar(content: Text('يرجى إدخال اسم المستخدم وكلمة المرور')),
       );
       return;
     }
@@ -41,20 +42,20 @@ class _LoginScreenState extends State<LoginScreen> {
       if (success) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Login successful')),
+            const SnackBar(content: Text('تم تسجيل الدخول بنجاح')),
           );
         }
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Login failed')),
+            const SnackBar(content: Text('خطأ في اسم المستخدم أو كلمة المرور')),
           );
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text('خطأ: $e')),
         );
       }
     } finally {
@@ -106,7 +107,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Retail Management System',
+                  'نظام إدارة مبيعات التجزئة',
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.white70,
@@ -131,7 +132,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       TextField(
                         controller: _usernameController,
                         decoration: InputDecoration(
-                          hintText: 'Username',
+                          hintText: 'اسم المستخدم',
                           prefixIcon: const Icon(Icons.person),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
@@ -145,10 +146,14 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 16),
                       TextField(
                         controller: _passwordController,
-                        obscureText: true,
+                        obscureText: _obscurePassword,
                         decoration: InputDecoration(
-                          hintText: 'Password',
+                          hintText: 'كلمة المرور',
                           prefixIcon: const Icon(Icons.lock),
+                          suffixIcon: IconButton(
+                            icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
+                            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                          ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -175,7 +180,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                 )
                               : const Text(
-                                  'Login',
+                                  'تسجيل الدخول',
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
@@ -188,7 +193,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 24),
                 const Text(
-                  'Test Accounts:\nhamoda, eldaj, ahmed_yaghi\ncustomer_hassan, customer_ali',
+                  'حسابات تجريبية:\nhamoda, eldaj, ahmed_yaghi, ibrahim\nكلمة المرور: 123',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 12,

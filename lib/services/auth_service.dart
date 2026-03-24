@@ -14,7 +14,7 @@ class AuthService extends ChangeNotifier {
 
   Future<bool> login(String username, String password) async {
     try {
-      final user = await _dbService.getUserByUsername(username);
+      final user = await _dbService.authenticate(username, password);
       if (user != null) {
         _currentUser = user;
         _isLoggedIn = true;

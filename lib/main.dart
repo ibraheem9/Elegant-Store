@@ -56,8 +56,13 @@ class ElegantStoreApp extends StatelessWidget {
             ),
           ),
         ),
-
       ),
+      builder: (context, child) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: child!,
+        );
+      },
       home: Consumer<AuthService>(
         builder: (context, authService, _) {
           if (authService.isLoggedIn) {
