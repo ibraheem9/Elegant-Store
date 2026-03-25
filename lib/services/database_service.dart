@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:intl/intl.dart';
@@ -17,13 +18,21 @@ class DatabaseService {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, dbName);
 
-    return await openDatabase(
+    if (kDebugMode) {
+      debugPrint('[DatabaseService] DB path: $path');
+    }
+
+    final db = await openDatabase(
       path,
-      version: 2, // Increment version for schema changes
+      version: 2,
       onCreate: _createTables,
       onUpgrade: (db, oldVersion, newVersion) async {
+        if (kDebugMode) {
+          debugPrint(
+              '[DatabaseService] Upgrading DB from v$oldVersion to v$newVersion');
+        }
         if (oldVersion < 2) {
-          // Simplest upgrade for development: drop and recreate
+          // Development upgrade: drop and recreate all tables.
           await db.execute('DROP TABLE IF EXISTS users');
           await db.execute('DROP TABLE IF EXISTS payment_methods');
           await db.execute('DROP TABLE IF EXISTS invoices');
@@ -35,9 +44,19 @@ class DatabaseService {
         }
       },
     );
+
+    if (kDebugMode) {
+      debugPrint('[DatabaseService] Database initialized successfully.');
+    }
+
+    _database = db;
+    return db;
   }
 
   Future<void> _createTables(Database db, int version) async {
+    if (kDebugMode) {
+      debugPrint('[DatabaseService] Creating tables (v$version)…');
+    }
     // Users table
     await db.execute('''
       CREATE TABLE IF NOT EXISTS users (
