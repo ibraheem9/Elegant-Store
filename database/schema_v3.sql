@@ -1,0 +1,1 @@
+This script defines the updated schema for version 3, including the new customers table and the necessary changes.
