@@ -2,6 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 import 'services/database_service.dart';
 import 'services/auth_service.dart';
@@ -10,6 +12,9 @@ import 'screens/dashboard_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Arabic locale data
+  await initializeDateFormatting('ar_SA', null);
   
   // Initialize database for Desktop (Windows/Linux)
   if (Platform.isWindows || Platform.isLinux) {

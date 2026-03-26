@@ -67,141 +67,124 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6)],
-          ),
-        ),
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const SizedBox(height: 40),
-                Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Icon(
-                    Icons.store,
-                    size: 50,
-                    color: Color(0xFF1E3A8A),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                const Text(
-                  'Elegant Store',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'نظام إدارة مبيعات التجزئة',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.white70,
-                  ),
-                ),
-                const SizedBox(height: 48),
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 10,
-                        offset: const Offset(0, 5),
+      backgroundColor: Colors.grey[50],
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 450),
+            child: Card(
+              elevation: 4,
+              shadowColor: Colors.black26,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              child: Padding(
+                padding: const EdgeInsets.all(40.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Logo Placeholder
+                    Container(
+                      height: 100,
+                      width: 100,
+                      decoration: BoxDecoration(
+                        color: theme.primaryColor.withOpacity(0.1),
+                        shape: BoxShape.circle,
                       ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      TextField(
-                        controller: _usernameController,
-                        decoration: InputDecoration(
-                          hintText: 'اسم المستخدم',
-                          prefixIcon: const Icon(Icons.person),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
+                      child: Icon(Icons.storefront_rounded, size: 50, color: theme.primaryColor),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Elegant Store',
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: theme.primaryColor,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'نظام إدارة مبيعات التجزئة',
+                      style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+                    ),
+                    const SizedBox(height: 40),
+                    TextField(
+                      controller: _usernameController,
+                      decoration: InputDecoration(
+                        labelText: 'اسم المستخدم',
+                        hintText: 'أدخل اسم المستخدم',
+                        prefixIcon: const Icon(Icons.person_outline_rounded),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey[300]!),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _passwordController,
-                        obscureText: _obscurePassword,
-                        decoration: InputDecoration(
-                          hintText: 'كلمة المرور',
-                          prefixIcon: const Icon(Icons.lock),
-                          suffixIcon: IconButton(
-                            icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
-                            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey[300]!),
                         ),
+                        filled: true,
+                        fillColor: Colors.grey[50],
                       ),
-                      const SizedBox(height: 24),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: ElevatedButton(
-                          onPressed: _isLoading ? null : _login,
-                          child: _isLoading
-                              ? const SizedBox(
-                                  height: 24,
-                                  width: 24,
-                                  child: CircularProgressIndicator(
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
-                                    ),
-                                  ),
-                                )
-                              : const Text(
-                                  'تسجيل الدخول',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
+                    ),
+                    const SizedBox(height: 20),
+                    TextField(
+                      controller: _passwordController,
+                      obscureText: _obscurePassword,
+                      decoration: InputDecoration(
+                        labelText: 'كلمة المرور',
+                        hintText: 'أدخل كلمة المرور',
+                        prefixIcon: const Icon(Icons.lock_outline_rounded),
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscurePassword ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                         ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey[300]!),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey[300]!),
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey[50],
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 40),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 54,
+                      child: ElevatedButton(
+                        onPressed: _isLoading ? null : _login,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.primaryColor,
+                          foregroundColor: Colors.white,
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: _isLoading 
+                          ? const SizedBox(
+                              height: 24,
+                              width: 24,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
+                            )
+                          : const Text(
+                              'تسجيل الدخول',
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    Text(
+                      'حسابات تجريبية: hamoda, ibrahim (كلمة المرور: 123)',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 24),
-                const Text(
-                  'حسابات تجريبية:\nhamoda, eldaj, ahmed_yaghi, ibrahim\nكلمة المرور: 123',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.white70,
-                  ),
-                ),
-                const SizedBox(height: 40),
-              ],
+              ),
             ),
           ),
         ),
