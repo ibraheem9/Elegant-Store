@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'services/database_service.dart';
 import 'services/auth_service.dart';
@@ -16,8 +17,8 @@ void main() async {
   // Initialize Arabic locale data
   await initializeDateFormatting('ar_SA', null);
   
-  // Initialize database for Desktop (Windows/Linux)
-  if (Platform.isWindows || Platform.isLinux) {
+  // Initialize database for Desktop (Windows)
+  if (Platform.isWindows) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }
@@ -25,7 +26,7 @@ void main() async {
   // Initialize database
   final dbService = DatabaseService();
   await dbService.initDatabase();
-  
+
   runApp(
     MultiProvider(
       providers: [
@@ -70,12 +71,15 @@ class ElegantStoreApp extends StatelessWidget {
           ),
         ),
       ),
-      builder: (context, child) {
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: child!,
-        );
-      },
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('ar', 'SA'),
+      ],
+      locale: const Locale('ar', 'SA'),
       home: Consumer<AuthService>(
         builder: (context, authService, _) {
           if (authService.isLoggedIn) {
