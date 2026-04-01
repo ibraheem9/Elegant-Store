@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
+import '../services/auth_service.dart';
 
 class CustomersScreen extends StatefulWidget {
   const CustomersScreen({Key? key}) : super(key: key);
@@ -44,6 +45,85 @@ class _CustomersScreenState extends State<CustomersScreen> {
     });
   }
 
+  void _showAddOrEditCustomerDialog({User? customer}) {
+    final nameController = TextEditingController(text: customer?.name ?? '');
+    final phoneController = TextEditingController(text: customer?.phone ?? '');
+    final limitController = TextEditingController(text: customer?.creditLimit?.toString() ?? '');
+    final balanceController = TextEditingController(text: customer?.balance.toString() ?? '0');
+    bool isPermanent = customer?.isPermanentCustomer == 1;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: Text(customer == null ? 'إضافة زبون جديد' : 'تعديل بيانات الزبون', style: const TextStyle(fontWeight: FontWeight.bold)),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: 400,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildDialogField('الاسم الكامل', nameController, Icons.person_outline),
+                  _buildDialogField('رقم الهاتف', phoneController, Icons.phone_android),
+                  SwitchListTile(
+                    title: const Text('زبون دائم', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                    value: isPermanent,
+                    onChanged: (val) => setState(() => isPermanent = val),
+                  ),
+                  if (isPermanent) _buildDialogField('سقف الدين (₪)', limitController, Icons.speed, isNumeric: true),
+                  if (customer != null) _buildDialogField('تصحيح الرصيد الحالي (₪)', balanceController, Icons.account_balance_wallet, isNumeric: true),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+            ElevatedButton(
+              onPressed: () async {
+                if (nameController.text.isEmpty) return;
+                final db = context.read<DatabaseService>();
+
+                if (customer == null) {
+                  // Add mode
+                  final newUser = User(
+                    username: 'cust_${DateTime.now().millisecondsSinceEpoch}',
+                    name: nameController.text,
+                    phone: phoneController.text,
+                    role: 'customer',
+                    isPermanentCustomer: isPermanent ? 1 : 0,
+                    creditLimit: isPermanent ? double.tryParse(limitController.text) : 0.0,
+                    createdAt: DateTime.now().toIso8601String(),
+                  );
+                  await db.insertUser(newUser, '123');
+                } else {
+                  // Edit mode
+                  final updatedUser = User(
+                    id: customer.id,
+                    username: customer.username,
+                    name: nameController.text,
+                    phone: phoneController.text,
+                    role: 'customer',
+                    isPermanentCustomer: isPermanent ? 1 : 0,
+                    creditLimit: isPermanent ? double.tryParse(limitController.text) : 0.0,
+                    balance: double.tryParse(balanceController.text) ?? customer.balance,
+                    createdAt: customer.createdAt,
+                  );
+                  await db.updateUser(updatedUser, customer);
+                }
+
+                Navigator.pop(context);
+                _loadCustomers();
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              child: const Text('حفظ التغييرات', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
@@ -76,7 +156,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showAddCustomerDialog,
+        onPressed: () => _showAddOrEditCustomerDialog(),
         backgroundColor: const Color(0xFF0F172A),
         icon: const Icon(Icons.person_add_alt_1_rounded, color: Colors.white, size: 20),
         label: const Text('إضافة زبون', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
@@ -124,7 +204,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
         crossAxisCount: crossAxisCount,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        mainAxisExtent: 120,
+        mainAxisExtent: 130,
       ),
       itemCount: _filteredCustomers.length,
       itemBuilder: (context, index) {
@@ -135,53 +215,64 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   Widget _buildCustomerCard(User customer) {
+    final auth = context.read<AuthService>();
+    final bool isManager = auth.isManager();
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
-      child: InkWell(
-        onTap: () => _navigateToCustomerDetails(customer),
-        borderRadius: BorderRadius.circular(20),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: customer.isPermanentCustomer == 1 ? Colors.blue[50] : Colors.grey[50],
-                child: Text(customer.name[0], style: TextStyle(color: customer.isPermanentCustomer == 1 ? Colors.blue : Colors.grey, fontWeight: FontWeight.bold)),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(customer.name, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Color(0xFF0F172A))),
-                    const SizedBox(height: 4),
-                    Text(customer.phone ?? 'لا يوجد هاتف', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
-                  ],
-                ),
-              ),
-              FutureBuilder<double>(
-                future: context.read<DatabaseService>().getCustomerDebt(customer.id!),
-                builder: (context, snapshot) {
-                  final debt = snapshot.data ?? 0;
-                  return Column(
+      child: Stack(
+        children: [
+          InkWell(
+            onTap: () => _navigateToCustomerDetails(customer),
+            borderRadius: BorderRadius.circular(20),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: customer.isPermanentCustomer == 1 ? Colors.blue[50] : Colors.grey[50],
+                    child: Text(customer.name[0], style: TextStyle(color: customer.isPermanentCustomer == 1 ? Colors.blue : Colors.grey, fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(customer.name, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Color(0xFF0F172A))),
+                        const SizedBox(height: 4),
+                        Text(customer.phone ?? 'لا يوجد هاتف', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                  Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text('${debt.toStringAsFixed(2)} ₪', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: debt > 0 ? Colors.redAccent : Colors.green)),
-                      Text(debt > 0 ? 'دين' : 'خالص', style: TextStyle(fontSize: 10, color: Colors.grey[500], fontWeight: FontWeight.bold)),
+                      Text('${customer.balance.toStringAsFixed(2)} ₪', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: customer.balance < 0 ? Colors.redAccent : Colors.green)),
+                      Text(customer.balance < 0 ? 'دين' : 'خالص/رصيد', style: TextStyle(fontSize: 10, color: Colors.grey[500], fontWeight: FontWeight.bold)),
                     ],
-                  );
-                },
+                  ),
+                  const SizedBox(width: 8),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
+          if (isManager) Positioned(
+            top: 8,
+            left: 8,
+            child: IconButton(
+              icon: const Icon(Icons.edit_note_rounded, color: Colors.blue, size: 20),
+              onPressed: () => _showAddOrEditCustomerDialog(customer: customer),
+              tooltip: 'تعديل بيانات الزبون',
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -206,71 +297,12 @@ class _CustomersScreenState extends State<CustomersScreen> {
     ).then((_) => _loadCustomers());
   }
 
-  void _showAddCustomerDialog() {
-    final nameController = TextEditingController();
-    final phoneController = TextEditingController();
-    final limitController = TextEditingController();
-    bool isPermanent = true;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          title: const Text('إضافة زبون جديد', style: TextStyle(fontWeight: FontWeight.bold)),
-          content: SingleChildScrollView(
-            child: SizedBox(
-              width: 400,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildDialogField('الاسم الكامل', nameController, Icons.person_outline),
-                  _buildDialogField('رقم الهاتف', phoneController, Icons.phone_android),
-                  SwitchListTile(
-                    title: const Text('زبون دائم', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                    value: isPermanent,
-                    onChanged: (val) => setState(() => isPermanent = val),
-                  ),
-                  if (isPermanent) _buildDialogField('سقف الدين (₪)', limitController, Icons.speed, isNumeric: true),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-            ElevatedButton(
-              onPressed: () async {
-                if (nameController.text.isEmpty) return;
-                final db = context.read<DatabaseService>();
-                final newUser = User(
-                  username: 'cust_${DateTime.now().millisecondsSinceEpoch}',
-                  email: 'cust_${DateTime.now().millisecondsSinceEpoch}@store.com',
-                  name: nameController.text,
-                  phone: phoneController.text,
-                  role: 'customer',
-                  isPermanentCustomer: isPermanent ? 1 : 0,
-                  creditLimit: isPermanent ? double.tryParse(limitController.text) : null,
-                  createdAt: DateTime.now().toIso8601String(),
-                );
-                await db.insertUser(newUser, '123');
-                Navigator.pop(context);
-                _loadCustomers();
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-              child: const Text('حفظ', style: TextStyle(color: Colors.white)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildDialogField(String label, TextEditingController controller, IconData icon, {bool isNumeric = false}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: TextField(
         controller: controller,
-        keyboardType: isNumeric ? TextInputType.number : TextInputType.text,
+        keyboardType: isNumeric ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
         decoration: InputDecoration(
           labelText: label,
           prefixIcon: Icon(icon, size: 20, color: Colors.blue),
@@ -293,8 +325,8 @@ class CustomerDetailsScreen extends StatefulWidget {
 
 class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   List<Invoice> _invoices = [];
+  List<Map<String, dynamic>> _editHistory = [];
   bool _isLoading = true;
-  double _totalDebt = 0;
   late User _currentCustomer;
 
   @override
@@ -308,17 +340,17 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     setState(() => _isLoading = true);
     final db = context.read<DatabaseService>();
 
-    // Refresh customer from DB to get latest balance
+    // Refresh customer from DB
     final customers = await db.getCustomers();
     final fresh = customers.firstWhere((c) => c.id == _currentCustomer.id);
 
     final invoices = await db.getCustomerInvoices(fresh.id!);
-    final debt = await db.getCustomerDebt(fresh.id!);
+    final history = await db.getEditHistory(fresh.id!, 'USER');
 
     setState(() {
       _currentCustomer = fresh;
       _invoices = invoices;
-      _totalDebt = debt;
+      _editHistory = history;
       _isLoading = false;
     });
   }
@@ -429,12 +461,41 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                 const SizedBox(height: 24),
                 _buildActionButtons(),
                 const SizedBox(height: 40),
-                const Text('سجل العمليات', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFF1E293B))),
-                const SizedBox(height: 16),
-                _buildInvoicesList(),
+                _buildDetailsTabs(isSmall),
               ],
             ),
           ),
+    );
+  }
+
+  Widget _buildDetailsTabs(bool isSmall) {
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const TabBar(
+            isScrollable: true,
+            labelColor: Colors.blue,
+            unselectedLabelColor: Colors.grey,
+            indicatorColor: Colors.blue,
+            tabs: [
+              Tab(text: 'سجل العمليات'),
+              Tab(text: 'تاريخ التعديلات'),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 500,
+            child: TabBarView(
+              children: [
+                _buildInvoicesList(),
+                _buildEditHistoryList(),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -447,9 +508,9 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       mainAxisSpacing: 20,
       childAspectRatio: 2.5,
       children: [
-        _buildSummaryCard('إجمالي الدين', '${_totalDebt.toStringAsFixed(2)} ₪', Colors.redAccent, Icons.money_off_rounded),
-        _buildSummaryCard('الرصيد المتاح', '${_currentCustomer.balance} ₪', Colors.green, Icons.wallet_rounded),
-        if (_currentCustomer.creditLimit != null)
+        _buildSummaryCard('الرصيد الحالي', '${_currentCustomer.balance.toStringAsFixed(2)} ₪', _currentCustomer.balance < 0 ? Colors.redAccent : Colors.green, _currentCustomer.balance < 0 ? Icons.money_off_rounded : Icons.account_balance_wallet),
+        _buildSummaryCard('الحالة', _currentCustomer.isPermanentCustomer == 1 ? 'زبون دائم' : 'زبون عابر', Colors.blue, Icons.person_search_rounded),
+        if (_currentCustomer.isPermanentCustomer == 1)
           _buildSummaryCard('سقف الدين', '${_currentCustomer.creditLimit} ₪', Colors.orange, Icons.speed_rounded),
       ],
     );
@@ -501,9 +562,8 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   }
 
   Widget _buildInvoicesList() {
+    if (_invoices.isEmpty) return const Center(child: Text('لا توجد عمليات مسجلة'));
     return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
       itemCount: _invoices.length,
       itemBuilder: (context, index) {
         final inv = _invoices[index];
@@ -523,7 +583,6 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
             subtitle: Text('التاريخ: ${inv.invoiceDate}\nملاحظات: ${inv.notes ?? "لا يوجد"}', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
             trailing: !isPaid ? TextButton(
               onPressed: () async {
-                // Quick payment logic
                 final db = context.read<DatabaseService>();
                 final updated = Invoice(
                   id: inv.id,
@@ -532,7 +591,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                   amount: inv.amount,
                   notes: inv.notes,
                   paymentStatus: 'paid',
-                  paymentMethodId: 1, // Default to cash for quick settling
+                  paymentMethodId: 1,
                   createdAt: inv.createdAt
                 );
                 await db.updateInvoice(updated);
@@ -540,6 +599,43 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
               },
               child: const Text('تسديد الآن', style: TextStyle(fontWeight: FontWeight.bold))
             ) : const Icon(Icons.done_all, color: Colors.blue, size: 20),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildEditHistoryList() {
+    if (_editHistory.isEmpty) return const Center(child: Text('لم يتم إجراء أي تعديلات على بيانات هذا الزبون'));
+    return ListView.builder(
+      itemCount: _editHistory.length,
+      itemBuilder: (context, index) {
+        final edit = _editHistory[index];
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: Colors.blue[50]!.withOpacity(0.3), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.blue[100]!)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('تعديل حقل: ${edit['field_name']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                  Text(edit['created_at'].toString().substring(0, 16), style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Text('من: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  Text(edit['old_value'], style: const TextStyle(fontSize: 12, color: Colors.red)),
+                  const SizedBox(width: 16),
+                  const Text('إلى: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  Text(edit['new_value'], style: const TextStyle(fontSize: 12, color: Colors.green)),
+                ],
+              ),
+            ],
           ),
         );
       },

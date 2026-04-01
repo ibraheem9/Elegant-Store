@@ -34,10 +34,23 @@ void main() async {
         ChangeNotifierProvider<AuthService>(
           create: (_) => AuthService(dbService),
         ),
+        ChangeNotifierProvider<ThemeNotifier>(
+          create: (_) => ThemeNotifier(),
+        ),
       ],
       child: const ElegantStoreApp(),
     ),
   );
+}
+
+class ThemeNotifier extends ChangeNotifier {
+  ThemeMode _themeMode = ThemeMode.light;
+  ThemeMode get themeMode => _themeMode;
+
+  void toggleTheme(bool isDark) {
+    _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
+    notifyListeners();
+  }
 }
 
 class ElegantStoreApp extends StatelessWidget {
@@ -45,29 +58,62 @@ class ElegantStoreApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final themeNotifier = context.watch<ThemeNotifier>();
+
     return MaterialApp(
       title: 'Elegant Store',
       debugShowCheckedModeBanner: false,
+      themeMode: themeNotifier.themeMode,
       theme: ThemeData(
         useMaterial3: true,
+        brightness: Brightness.light,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1E3A8A),
-          brightness: Brightness.light,
+          seedColor: const Color(0xFF0B74FF),
+          primary: const Color(0xFF0B74FF),
+          onPrimary: Colors.white,
+          secondary: const Color(0xFF0A4DA2),
+          surface: const Color(0xFFE6F4FF),
         ),
+        scaffoldBackgroundColor: const Color(0xFFF8FAFC),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF1E3A8A),
+          backgroundColor: Color(0xFF0B74FF),
           foregroundColor: Colors.white,
           elevation: 0,
-          centerTitle: true,
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF1E3A8A),
+            backgroundColor: const Color(0xFF0B74FF),
             foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            elevation: 2,
+            textStyle: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ),
+      ),
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFF1E90FF),
+          onPrimary: Colors.white,
+          secondary: Color(0xFF00E5FF),
+          onSecondary: Colors.black,
+          surface: Color(0xFF0F172A),
+          background: Color(0xFF071028),
+          onBackground: Color(0xFFDCEFFF),
+          onSurface: Color(0xFFDCEFFF),
+        ),
+        scaffoldBackgroundColor: const Color(0xFF071028),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF071028),
+          foregroundColor: Color(0xFFDCEFFF),
+          elevation: 0,
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF1E90FF),
+            foregroundColor: Colors.white,
+            elevation: 2,
+            textStyle: const TextStyle(fontWeight: FontWeight.bold),
           ),
         ),
       ),

@@ -16,11 +16,9 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   final _amountController = TextEditingController();
   final _notesController = TextEditingController();
   
-  List<PaymentMethod> _appMethods = [];
+  List<PaymentMethod> _purchaseMethods = [];
   PaymentMethod? _selectedMethod;
-  List<Purchase> _ibraheemPurchases = [];
-  List<Purchase> _hamodaPurchases = [];
-  List<Purchase> _cashPurchases = [];
+  Map<int, List<Purchase>> _groupedPurchases = {};
   bool _isLoading = false;
 
   @override
@@ -32,25 +30,22 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   Future<void> _loadData() async {
     if (!mounted) return;
     final db = context.read<DatabaseService>();
-    final methods = await db.getPaymentMethods();
+    final allMethods = await db.getPaymentMethods();
+    
+    // We only want methods suitable for purchases (cash and app)
+    final methods = allMethods.where((m) => m.type == 'cash' || m.type == 'app').toList();
 
-    final ibraheem = await db.getPurchasesByMethod('تطبيق إبراهيم');
-    final hamoda = await db.getPurchasesByMethod('تطبيق حمودة');
-
-    final allToday = await db.getTodayPurchases();
-    final cash = allToday.where((p) => p.paymentSource == 'CASH').toList();
+    Map<int, List<Purchase>> grouped = {};
+    for (var m in methods) {
+      grouped[m.id!] = await db.getPurchasesByMethod(m.id!);
+    }
 
     setState(() {
-      _appMethods = methods.where((m) =>
-        m.name == 'تطبيق إبراهيم' || m.name == 'تطبيق حمودة' || m.name == 'كاش'
-      ).toList();
+      _purchaseMethods = methods;
+      _groupedPurchases = grouped;
 
-      _ibraheemPurchases = ibraheem;
-      _hamodaPurchases = hamoda;
-      _cashPurchases = cash;
-
-      if (_appMethods.isNotEmpty && _selectedMethod == null) {
-        _selectedMethod = _appMethods.firstWhere((m) => m.name == 'كاش', orElse: () => _appMethods.first);
+      if (_purchaseMethods.isNotEmpty && _selectedMethod == null) {
+        _selectedMethod = _purchaseMethods.first;
       }
     });
   }
@@ -101,11 +96,16 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
             const SizedBox(height: 32),
             _buildPurchaseForm(theme),
             const SizedBox(height: 48),
-            _buildSection('مشتريات إبراهيم (Ibraheem)', _ibraheemPurchases, Colors.blue),
-            const SizedBox(height: 32),
-            _buildSection('مشتريات حمودة (Hamoda)', _hamodaPurchases, Colors.orange),
-            const SizedBox(height: 32),
-            _buildSection('مشتريات كاش (Cash)', _cashPurchases, Colors.green),
+            ..._purchaseMethods.map((method) {
+              final items = _groupedPurchases[method.id] ?? [];
+              Color color = method.type == 'cash' ? Colors.green : Colors.blue;
+              if (method.name.contains('حمودة')) color = Colors.orange;
+              
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 32),
+                child: _buildSection('مشتريات ${method.name}', items, color),
+              );
+            }).toList(),
           ],
         ),
       ),
@@ -130,7 +130,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
               Expanded(
                 child: DropdownButtonFormField<PaymentMethod>(
                   value: _selectedMethod,
-                  items: _appMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name, style: const TextStyle(fontSize: 18)))).toList(),
+                  items: _purchaseMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name, style: const TextStyle(fontSize: 18)))).toList(),
                   onChanged: (val) => setState(() => _selectedMethod = val),
                   decoration: const InputDecoration(labelText: 'وسيلة الدفع', prefixIcon: Icon(Icons.account_balance_wallet)),
                 ),
@@ -144,7 +144,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
             width: double.infinity, height: 60,
             child: ElevatedButton(
               onPressed: _isLoading ? null : _addPurchase,
-              style: ElevatedButton.styleFrom(backgroundColor: theme.primaryColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4F629F), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
               child: const Text('تسجيل المشتريات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
             ),
           ),

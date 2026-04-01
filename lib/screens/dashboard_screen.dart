@@ -10,6 +10,8 @@ import 'payments_screen.dart';
 import 'calendar_screen.dart';
 import 'settings_screen.dart';
 import 'reports_screen.dart';
+import 'payment_methods_screen.dart';
+import 'purchases_methods_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -32,7 +34,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 5: return const PaymentsScreen();
       case 6: return const CalendarScreen();
       case 7: return const ReportsScreen();
-      case 8: return const SettingsScreen();
+      case 8: return const PaymentMethodsScreen();
+      case 9: return const PurchasesMethodsScreen();
+      case 10: return const SettingsScreen();
       default: return const DashboardHomeScreen();
     }
   }
@@ -81,7 +85,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         children: [
           _buildSidebarHeader(),
-          const SizedBox(height: 20),
+          const SizedBox(height: 5),
           Expanded(
             child: ListView(
               children: [
@@ -93,7 +97,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _buildSidebarItem(5, 'مراجعة المدفوعات', Icons.payments_rounded),
                 _buildSidebarItem(6, 'التقويم المالي', Icons.calendar_month_rounded),
                 _buildSidebarItem(7, 'التقارير التحليلية', Icons.pie_chart_rounded),
-                _buildSidebarItem(8, 'الإعدادات والسمة', Icons.settings_rounded),
+                _buildSidebarItem(8, 'طرق دفع المبيعات', Icons.payment_rounded),
+                _buildSidebarItem(9, 'طرق دفع المشتريات', Icons.account_balance_rounded),
+                _buildSidebarItem(10, 'الإعدادات والسمة', Icons.settings_rounded),
               ],
             ),
           ),
@@ -118,12 +124,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
       destinations: const [
         NavigationRailDestination(icon: Icon(Icons.dashboard_rounded), label: Text('الرئيسية')),
         NavigationRailDestination(icon: Icon(Icons.receipt_long_rounded), label: Text('البيع')),
-        NavigationRailDestination(icon: Icon(Icons.bar_chart_rounded), label: Text('الإحصائيات')),
+        NavigationRailDestination(icon: Icon(Icons.bar_chart_rounded), label: Text('إحصائيات')),
         NavigationRailDestination(icon: Icon(Icons.shopping_cart_rounded), label: Text('المشتريات')),
         NavigationRailDestination(icon: Icon(Icons.people_alt_rounded), label: Text('الزبائن')),
         NavigationRailDestination(icon: Icon(Icons.payments_rounded), label: Text('المدفوعات')),
         NavigationRailDestination(icon: Icon(Icons.calendar_month_rounded), label: Text('التقويم')),
         NavigationRailDestination(icon: Icon(Icons.pie_chart_rounded), label: Text('التقارير')),
+        NavigationRailDestination(icon: Icon(Icons.payment_rounded), label: Text('دفع المبيعات')),
+        NavigationRailDestination(icon: Icon(Icons.account_balance_rounded), label: Text('دفع المشتريات')),
         NavigationRailDestination(icon: Icon(Icons.settings_rounded), label: Text('الإعدادات')),
       ],
     );
@@ -131,7 +139,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildBottomNav(ThemeData theme) {
     return BottomNavigationBar(
-      currentIndex: _selectedIndex,
+      currentIndex: _selectedIndex > 4 ? 0 : _selectedIndex,
       onTap: (index) => setState(() => _selectedIndex = index),
       type: BottomNavigationBarType.fixed,
       selectedItemColor: Colors.blue[700],
@@ -139,7 +147,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       items: const [
         BottomNavigationBarItem(icon: Icon(Icons.dashboard_rounded), label: 'الرئيسية'),
         BottomNavigationBarItem(icon: Icon(Icons.receipt_long_rounded), label: 'البيع'),
-        BottomNavigationBarItem(icon: Icon(Icons.bar_chart_rounded), label: 'الإحصائيات'),
+        BottomNavigationBarItem(icon: Icon(Icons.bar_chart_rounded), label: 'إحصائيات'),
         BottomNavigationBarItem(icon: Icon(Icons.shopping_cart_rounded), label: 'المشتريات'),
         BottomNavigationBarItem(icon: Icon(Icons.pie_chart_rounded), label: 'التقارير'),
       ],
@@ -148,21 +156,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildSidebarHeader() {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
-      child: Row(
-        children: [
-          Image.asset(
-            'assets/logo.png',
-            height: 50,
-            errorBuilder: (context, error, stackTrace) => Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: Colors.blue.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
-              child: const Icon(Icons.storefront_rounded, color: Colors.blue, size: 28),
-            ),
+      padding: const EdgeInsets.only(top: 40, bottom: 10, left: 24, right: 24),
+      child: Center(
+        child: Image.asset(
+          'assets/logo.png',
+          height: 100,
+          errorBuilder: (context, error, stackTrace) => Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: Colors.blue.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+            child: const Icon(Icons.storefront_rounded, color: Colors.blue, size: 28),
           ),
-          const SizedBox(width: 16),
-          const Expanded(child: Text('Elegant Store', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900))),
-        ],
+        ),
       ),
     );
   }
@@ -170,12 +174,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildSidebarItem(int index, String title, IconData icon) {
     bool isSelected = _selectedIndex == index;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       child: InkWell(
         onTap: () => setState(() => _selectedIndex = index),
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(color: isSelected ? Colors.blue.withOpacity(0.1) : Colors.transparent, borderRadius: BorderRadius.circular(12)),
           child: Row(
             children: [
@@ -191,7 +195,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildUserCard(bool isFull) {
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(16),
       child: Consumer<AuthService>(
         builder: (context, auth, _) => Container(
           padding: const EdgeInsets.all(12),

@@ -6,6 +6,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/database_service.dart';
 import '../services/auth_service.dart';
+import '../models/models.dart';
+import '../main.dart'; // Import ThemeNotifier
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -15,7 +17,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _isDarkMode = false;
   final _storeNameController = TextEditingController(text: 'Elegant Store');
   final _adminNameController = TextEditingController();
 
@@ -26,10 +27,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _adminNameController.text = auth.currentUser?.name ?? '';
   }
 
+  // --- دوال التصدير والمسح الحالية ---
   Future<void> _exportData() async {
     try {
       final db = context.read<DatabaseService>();
-      // This is a simplified export. A real one would query all tables.
       final customers = await db.getCustomers();
       final invoices = await db.getInvoices();
       final purchases = await db.getTodayPurchases();
@@ -42,7 +43,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       };
 
       String jsonString = jsonEncode(exportData);
-
       String? outputFile = await FilePicker.platform.saveFile(
         dialogTitle: 'اختر مكان حفظ النسخة الاحتياطية',
         fileName: 'elegant_store_backup_${DateTime.now().millisecondsSinceEpoch}.json',
@@ -58,86 +58,57 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _wipeData() async {
-    final auth = context.read<AuthService>();
-    if (!auth.isManager()) {
-      _showSnackBar('عذراً، صلاحية مسح البيانات للمدير فقط', Colors.orange);
-      return;
-    }
-
-    bool confirm = await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('تأكيد مسح كافة البيانات'),
-        content: const Text('هل أنت متأكد من مسح كافة سجلات المبيعات والمشتريات والزبائن؟ لا يمكن التراجع عن هذه العملية.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('مسح نهائي', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    ) ?? false;
-
-    if (confirm) {
-       // Logic to wipe tables in DatabaseService should be called here
-       _showSnackBar('تم مسح البيانات بنجاح', Colors.green);
-    }
-  }
-
   void _showSnackBar(String msg, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: color));
   }
 
   @override
   Widget build(BuildContext context) {
+    final themeNotifier = context.watch<ThemeNotifier>();
+    final isDark = themeNotifier.themeMode == ThemeMode.dark;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(32),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('الإعدادات والسمة', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Color(0xFF0F172A))),
+            Text(
+              'الإعدادات والتحكم', 
+              style: TextStyle(
+                fontSize: 32, 
+                fontWeight: FontWeight.w900, 
+                color: isDark ? const Color(0xFFDCEFFF) : const Color(0xFF0F172A)
+              )
+            ),
             const SizedBox(height: 32),
-            _buildSection('الملف الشخصي والمتجر', [
-              _buildTextField('اسم المتجر', _storeNameController, Icons.store),
+
+            _buildSection('الملف الشخصي والمتجر', isDark, [
+              _buildTextField('اسم المتجر', _storeNameController, Icons.store, isDark),
               const SizedBox(height: 16),
-              _buildTextField('اسم المسؤول', _adminNameController, Icons.person),
+              _buildTextField('اسم المسؤول', _adminNameController, Icons.person, isDark),
             ]),
+
             const SizedBox(height: 32),
-            _buildSection('المظهر والسمة', [
+            _buildSection('النظام والبيانات', isDark, [
               SwitchListTile(
-                title: const Text('الوضع الداكن (Dark Mode)', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text('تغيير ألوان التطبيق للوضع الليلي'),
-                value: _isDarkMode,
-                onChanged: (val) => setState(() => _isDarkMode = val),
-                secondary: Icon(Icons.dark_mode, color: _isDarkMode ? Colors.blue : Colors.grey),
+                title: Text(
+                  'الوضع الداكن (Dark Mode)', 
+                  style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)
+                ),
+                value: isDark,
+                onChanged: (val) => themeNotifier.toggleTheme(val),
+                secondary: Icon(Icons.dark_mode, color: isDark ? const Color(0xFF00E5FF) : Colors.grey),
               ),
-            ]),
-            const SizedBox(height: 32),
-            _buildSection('إدارة البيانات', [
+              const Divider(),
               ListTile(
-                title: const Text('تصدير البيانات (Backup)', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text('حفظ نسخة احتياطية من كافة البيانات كملف JSON'),
-                leading: const Icon(Icons.download, color: Colors.blue),
+                title: Text(
+                  'تصدير البيانات (Backup)', 
+                  style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)
+                ),
+                leading: const Icon(Icons.download, color: Color(0xFF0B74FF)),
                 onTap: _exportData,
-              ),
-              const Divider(),
-              ListTile(
-                title: const Text('استيراد البيانات (Restore)', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text('استعادة البيانات من ملف نسخة احتياطية سابق'),
-                leading: const Icon(Icons.upload, color: Colors.orange),
-                onTap: () {}, // Implementation for import
-              ),
-              const Divider(),
-              ListTile(
-                title: const Text('مسح كافة البيانات', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
-                subtitle: const Text('حذف جميع السجلات من النظام نهائياً'),
-                leading: const Icon(Icons.delete_forever, color: Colors.red),
-                onTap: _wipeData,
               ),
             ]),
           ],
@@ -146,14 +117,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildSection(String title, List<Widget> children) {
+  Widget _buildSection(String title, bool isDark, List<Widget> children) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: const Color(0xFFE2E8F0))),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0F172A) : Colors.white, 
+        borderRadius: BorderRadius.circular(24), 
+        border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0))
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue)),
+          Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0B74FF))),
           const SizedBox(height: 24),
           ...children,
         ],
@@ -161,13 +137,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildTextField(String label, TextEditingController controller, IconData icon) {
+  Widget _buildTextField(String label, TextEditingController controller, IconData icon, bool isDark) {
     return TextField(
       controller: controller,
+      style: TextStyle(color: isDark ? Colors.white : Colors.black),
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: Icon(icon),
+        labelStyle: TextStyle(color: isDark ? Colors.grey : Colors.black54),
+        prefixIcon: Icon(icon, color: const Color(0xFF0B74FF)),
+        filled: true,
+        fillColor: isDark ? const Color(0xFF071028) : Colors.transparent,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+        ),
       ),
     );
   }

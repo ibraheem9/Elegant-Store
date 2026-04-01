@@ -72,6 +72,7 @@ class PaymentMethod {
   final String type; // cash, app, deferred, credit_balance, unpaid
   final String? description;
   final int isActive;
+  final int sortOrder;
 
   PaymentMethod({
     this.id,
@@ -79,6 +80,7 @@ class PaymentMethod {
     required this.type,
     this.description,
     this.isActive = 1,
+    this.sortOrder = 0,
   });
 
   Map<String, dynamic> toMap() {
@@ -88,6 +90,7 @@ class PaymentMethod {
       'type': type,
       'description': description,
       'is_active': isActive,
+      'sort_order': sortOrder,
     };
   }
 
@@ -98,6 +101,18 @@ class PaymentMethod {
       type: map['type'] ?? '',
       description: map['description'],
       isActive: map['is_active'] ?? 1,
+      sortOrder: map['sort_order'] ?? 0,
+    );
+  }
+
+  PaymentMethod copyWith({int? sortOrder}) {
+    return PaymentMethod(
+      id: id,
+      name: name,
+      type: type,
+      description: description,
+      isActive: isActive,
+      sortOrder: sortOrder ?? this.sortOrder,
     );
   }
 }
