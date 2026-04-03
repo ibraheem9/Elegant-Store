@@ -45,21 +45,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final width = MediaQuery.of(context).size.width;
+    final isDark = theme.brightness == Brightness.dark;
 
     final bool isMobile = width < 650;
     final bool isTablet = width >= 650 && width < 1100;
     final bool isDesktop = width >= 1100;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: Row(
         children: [
-          if (isDesktop) _buildFullSidebar(theme),
-          if (isTablet) _buildNavigationRail(theme),
+          if (isDesktop) _buildFullSidebar(theme, isDark),
+          if (isTablet) _buildNavigationRail(theme, isDark),
           Expanded(
             child: Column(
               children: [
-                _buildAdaptiveAppBar(theme, width, isMobile),
+                _buildAdaptiveAppBar(theme, width, isMobile, isDark),
                 Expanded(
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 300),
@@ -78,10 +79,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildFullSidebar(ThemeData theme) {
+  Widget _buildFullSidebar(ThemeData theme, bool isDark) {
     return Container(
       width: 280,
-      color: const Color(0xFF0F172A),
+      color: isDark ? const Color(0xFF0F172A) : const Color(0xFF0F172A),
       child: Column(
         children: [
           _buildSidebarHeader(),
@@ -103,13 +104,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
-          _buildUserCard(true),
+          _buildUserCard(true, isDark),
         ],
       ),
     );
   }
 
-  Widget _buildNavigationRail(ThemeData theme) {
+  Widget _buildNavigationRail(ThemeData theme, bool isDark) {
     return NavigationRail(
       selectedIndex: _selectedIndex,
       onDestinationSelected: (index) => setState(() => _selectedIndex = index),
@@ -193,7 +194,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildUserCard(bool isFull) {
+  Widget _buildUserCard(bool isFull, bool isDark) {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Consumer<AuthService>(
@@ -218,23 +219,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildAdaptiveAppBar(ThemeData theme, double width, bool isMobile) {
+  Widget _buildAdaptiveAppBar(ThemeData theme, double width, bool isMobile, bool isDark) {
     return Container(
       height: 70,
       padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 24),
-      decoration: const BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0)))),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF071028) : Colors.white, 
+        border: Border(bottom: BorderSide(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)))
+      ),
       child: Row(
         children: [
-          if (width < 1100 && !isMobile) const Text('Elegant Store', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Color(0xFF0F172A))),
+          if (width < 1100 && !isMobile) Text('Elegant Store', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: isDark ? const Color(0xFFDCEFFF) : const Color(0xFF0F172A))),
           if (isMobile) Image.asset('assets/logo.png', height: 35, errorBuilder: (context, error, stackTrace) => const Icon(Icons.storefront_rounded, color: Colors.blue, size: 28)),
           const Spacer(),
-          _buildNotificationIcon(),
+          _buildNotificationIcon(isDark),
         ],
       ),
     );
   }
 
-  Widget _buildNotificationIcon() {
+  Widget _buildNotificationIcon(bool isDark) {
     return Consumer<DatabaseService>(
       builder: (context, db, _) => FutureBuilder<Map<String, dynamic>>(
         future: db.getGlobalStats(),
@@ -242,7 +246,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           bool hasAlert = (snap.data?['unpaid_non_permanent_count'] ?? 0) > 0;
           return Stack(
             children: [
-              Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.grey[100], shape: BoxShape.circle), child: const Icon(Icons.notifications_none_rounded, color: Color(0xFF64748B), size: 22)),
+              Container(
+                padding: const EdgeInsets.all(8), 
+                decoration: BoxDecoration(color: isDark ? const Color(0xFF1E293B) : Colors.grey[100], shape: BoxShape.circle), 
+                child: Icon(Icons.notifications_none_rounded, color: isDark ? const Color(0xFF00E5FF) : const Color(0xFF64748B), size: 22)
+              ),
               if (hasAlert) Positioned(right: 2, top: 2, child: Container(width: 10, height: 10, decoration: BoxDecoration(color: Colors.red, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)))),
             ],
           );
@@ -257,6 +265,8 @@ class DashboardHomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final size = MediaQuery.of(context).size;
     final isMobile = size.width < 650;
     int crossAxisCount = (size.width > 1400) ? 4 : (size.width > 900 ? 2 : 1);
@@ -267,7 +277,14 @@ class DashboardHomeScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('لوحة التحكم', style: TextStyle(fontSize: isMobile ? 24 : 32, fontWeight: FontWeight.w900, color: const Color(0xFF0F172A))),
+          Text(
+            'لوحة التحكم', 
+            style: TextStyle(
+              fontSize: isMobile ? 24 : 32, 
+              fontWeight: FontWeight.w900, 
+              color: isDark ? const Color(0xFFDCEFFF) : const Color(0xFF0F172A)
+            )
+          ),
           const SizedBox(height: 32),
           FutureBuilder<Map<String, dynamic>>(
             future: db.getGlobalStats(),
@@ -282,10 +299,10 @@ class DashboardHomeScreen extends StatelessWidget {
                 crossAxisSpacing: 20,
                 childAspectRatio: isMobile ? 2.2 : 1.5,
                 children: [
-                  _buildStatCard('إجمالي الديون القائمة', '${stats['total_debts'].toStringAsFixed(2)} ₪', Icons.money_off_rounded, const Color(0xFFEF4444)),
-                  _buildStatCard('إجمالي الأرصدة المودعة', '${stats['total_balances'].toStringAsFixed(2)} ₪', Icons.account_balance_rounded, const Color(0xFF10B981)),
-                  _buildStatCard('عدد الزبائن الكلي', '${stats['total_customers']}', Icons.group_rounded, const Color(0xFF3B82F6)),
-                  _buildStatCard('تنبيهات غير مسددة', '${stats['unpaid_non_permanent_count'] ?? 0}', Icons.warning_amber_rounded, Colors.orange),
+                  _buildStatCard('إجمالي الديون القائمة', '${stats['total_debts'].toStringAsFixed(2)} ₪', Icons.money_off_rounded, const Color(0xFFEF4444), isDark),
+                  _buildStatCard('إجمالي الأرصدة المودعة', '${stats['total_balances'].toStringAsFixed(2)} ₪', Icons.account_balance_rounded, const Color(0xFF10B981), isDark),
+                  _buildStatCard('عدد الزبائن الكلي', '${stats['total_customers']}', Icons.group_rounded, const Color(0xFF3B82F6), isDark),
+                  _buildStatCard('تنبيهات غير مسددة', '${stats['unpaid_non_permanent_count'] ?? 0}', Icons.warning_amber_rounded, Colors.orange, isDark),
                 ],
               );
             },
@@ -295,18 +312,23 @@ class DashboardHomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+  Widget _buildStatCard(String title, String value, IconData icon, Color color, bool isDark) {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE2E8F0)), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)]),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0F172A) : Colors.white, 
+        borderRadius: BorderRadius.circular(20), 
+        border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)), 
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)), child: Icon(icon, size: 24, color: color)),
           const Spacer(),
-          Text(title, style: const TextStyle(fontSize: 13, color: Color(0xFF64748B), fontWeight: FontWeight.w600)),
+          Text(title, style: TextStyle(fontSize: 13, color: isDark ? Colors.white60 : const Color(0xFF64748B), fontWeight: FontWeight.w600)),
           const SizedBox(height: 4),
-          Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF0F172A))),
+          Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A))),
         ],
       ),
     );

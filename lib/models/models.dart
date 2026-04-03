@@ -6,11 +6,13 @@ class User {
   final String username;
   final String? email;
   final String name;
+  final String? nickname; // اللقب
   final String role; // SUPER_ADMIN, ACCOUNTANT, CUSTOMER
   final int isPermanentCustomer; // 0 for NON_PERMANENT, 1 for PERMANENT
   final double? creditLimit; // debt_limit in blueprint
   final String? phone;
-  final String? notes;
+  final String? notes; // الملاحظات
+  final String? transferNames; // أسماء التحويلات
   final double balance; // Positive = Credit, Negative = Debt (Blueprint 6.2)
   final String createdAt;
   final String? deletedAt;
@@ -20,11 +22,13 @@ class User {
     required this.username,
     this.email,
     required this.name,
+    this.nickname,
     required this.role,
     this.isPermanentCustomer = 0,
     this.creditLimit = 0.0,
     this.phone,
     this.notes,
+    this.transferNames,
     this.balance = 0.0,
     required this.createdAt,
     this.deletedAt,
@@ -36,11 +40,13 @@ class User {
       'username': username,
       'email': email,
       'name': name,
+      'nickname': nickname,
       'role': role,
       'is_permanent_customer': isPermanentCustomer,
       'credit_limit': creditLimit,
       'phone': phone,
       'notes': notes,
+      'transfer_names': transferNames,
       'balance': balance,
       'created_at': createdAt,
       'deleted_at': deletedAt,
@@ -53,11 +59,13 @@ class User {
       username: map['username'] ?? '',
       email: map['email'],
       name: map['name'] ?? '',
+      nickname: map['nickname'],
       role: map['role'] ?? 'CUSTOMER',
       isPermanentCustomer: map['is_permanent_customer'] ?? 0,
       creditLimit: map['credit_limit']?.toDouble() ?? 0.0,
       phone: map['phone'],
       notes: map['notes'],
+      transferNames: map['transfer_names'],
       balance: map['balance']?.toDouble() ?? 0.0,
       createdAt: map['created_at'] ?? '',
       deletedAt: map['deleted_at'],

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/auth_service.dart';
@@ -15,6 +16,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
   List<User> _customers = [];
   List<User> _filteredCustomers = [];
   bool _isLoading = false;
+  bool _isTableView = false; 
+  
+  int _sortColumnIndex = 0;
+  bool _isAscending = true;
 
   @override
   void initState() {
@@ -29,8 +34,31 @@ class _CustomersScreenState extends State<CustomersScreen> {
     final customers = await db.getCustomers();
     setState(() {
       _customers = customers;
-      _filteredCustomers = customers;
+      _filteredCustomers = List.from(customers);
       _isLoading = false;
+      _applySort(); 
+    });
+  }
+
+  void _applySort() {
+    setState(() {
+      if (_sortColumnIndex == 0) { 
+        _filteredCustomers.sort((a, b) => _isAscending 
+          ? a.name.compareTo(b.name) 
+          : b.name.compareTo(a.name));
+      } else if (_sortColumnIndex == 1) { 
+        _filteredCustomers.sort((a, b) => _isAscending 
+          ? a.balance.compareTo(b.balance) 
+          : b.balance.compareTo(a.balance));
+      }
+    });
+  }
+
+  void _onSort(int columnIndex, bool ascending) {
+    setState(() {
+      _sortColumnIndex = columnIndex;
+      _isAscending = ascending;
+      _applySort();
     });
   }
 
@@ -39,40 +67,114 @@ class _CustomersScreenState extends State<CustomersScreen> {
       _filteredCustomers = _customers
           .where((c) =>
             c.name.toLowerCase().contains(query.toLowerCase()) ||
+            (c.nickname != null && c.nickname!.toLowerCase().contains(query.toLowerCase())) ||
             (c.phone != null && c.phone!.contains(query)) ||
+            (c.transferNames != null && c.transferNames!.toLowerCase().contains(query.toLowerCase())) ||
             (c.notes != null && c.notes!.toLowerCase().contains(query.toLowerCase())))
           .toList();
+      _applySort(); 
     });
+  }
+
+  Future<void> _deleteCustomer(User customer) async {
+    final db = context.read<DatabaseService>();
+    final hasInvoices = await db.hasInvoices(customer.id!);
+    if (!mounted) return;
+
+    if (hasInvoices) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('لا يمكن الحذف', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          content: Text('الزبون "${customer.name}" لديه فواتير مسجلة. لا يمكن حذفه للحفاظ على الحسابات.'),
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً'))],
+        ),
+      );
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('تأكيد الحذف'),
+        content: Text('هل أنت متأكد من حذف الزبون "${customer.name}"؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('حذف', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await db.softDeleteUser(customer.id!);
+      _loadCustomers();
+    }
   }
 
   void _showAddOrEditCustomerDialog({User? customer}) {
     final nameController = TextEditingController(text: customer?.name ?? '');
+    final nicknameController = TextEditingController(text: customer?.nickname ?? '');
     final phoneController = TextEditingController(text: customer?.phone ?? '');
-    final limitController = TextEditingController(text: customer?.creditLimit?.toString() ?? '');
+    final transferNamesController = TextEditingController(text: customer?.transferNames ?? '');
+    final notesController = TextEditingController(text: customer?.notes ?? '');
+    
+    final limitController = TextEditingController(
+      text: customer == null ? '100' : (customer.creditLimit == -1 ? '' : customer.creditLimit?.toString() ?? '100')
+    );
     final balanceController = TextEditingController(text: customer?.balance.toString() ?? '0');
-    bool isPermanent = customer?.isPermanentCustomer == 1;
+    bool isPermanent = customer == null ? true : (customer.isPermanentCustomer == 1);
+    bool isUnlimited = customer?.creditLimit == -1;
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
+        builder: (context, setDialogState) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           title: Text(customer == null ? 'إضافة زبون جديد' : 'تعديل بيانات الزبون', style: const TextStyle(fontWeight: FontWeight.bold)),
           content: SingleChildScrollView(
             child: SizedBox(
-              width: 400,
+              width: 450,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildDialogField('الاسم الكامل', nameController, Icons.person_outline),
+                  _buildDialogField('الاسم الكامل', nameController, Icons.person_outline, onChanged: (val) => setDialogState(() {})),
+                  
+                  if (nameController.text.isNotEmpty && _customers.any((c) => c.name.trim() == nameController.text.trim() && c.id != customer?.id))
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 12, right: 12),
+                      child: Text('⚠️ هذا الاسم موجود مسبقاً لزبون آخر!', style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+
+                  if (notesController.text.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16, right: 12),
+                      child: Text('📝 ملاحظة: ${notesController.text}', style: const TextStyle(color: Colors.blueGrey, fontSize: 13, fontStyle: FontStyle.italic)),
+                    ),
+
+                  _buildDialogField('اللقب', nicknameController, Icons.badge_outlined),
                   _buildDialogField('رقم الهاتف', phoneController, Icons.phone_android),
+                  _buildDialogField('أسماء التحويلات', transferNamesController, Icons.swap_horiz_rounded),
+                  _buildDialogField('ملاحظات إضافية', notesController, Icons.note_alt_outlined, maxLines: 2, onChanged: (val) => setDialogState(() {})),
+                  
+                  const Divider(),
                   SwitchListTile(
                     title: const Text('زبون دائم', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                     value: isPermanent,
-                    onChanged: (val) => setState(() => isPermanent = val),
+                    onChanged: (val) => setDialogState(() => isPermanent = val),
                   ),
-                  if (isPermanent) _buildDialogField('سقف الدين (₪)', limitController, Icons.speed, isNumeric: true),
-                  if (customer != null) _buildDialogField('تصحيح الرصيد الحالي (₪)', balanceController, Icons.account_balance_wallet, isNumeric: true),
+                  if (isPermanent) ...[
+                    CheckboxListTile(
+                      title: const Text('دين غير محدود (Verified)', style: TextStyle(fontSize: 14)),
+                      value: isUnlimited,
+                      activeColor: Colors.blue,
+                      onChanged: (val) => setDialogState(() => isUnlimited = val ?? false),
+                    ),
+                    if (!isUnlimited)
+                      _buildDialogField('سقف الدين (₪)', limitController, Icons.speed, isNumeric: true),
+                  ],
+                  if (customer != null) 
+                    _buildDialogField('تصحيح الرصيد الحالي (₪)', balanceController, Icons.account_balance_wallet, isNumeric: true),
                 ],
               ),
             ),
@@ -83,40 +185,36 @@ class _CustomersScreenState extends State<CustomersScreen> {
               onPressed: () async {
                 if (nameController.text.isEmpty) return;
                 final db = context.read<DatabaseService>();
+                double limit = isUnlimited ? -1 : (double.tryParse(limitController.text) ?? 100.0);
+
+                final userData = User(
+                  id: customer?.id,
+                  username: customer?.username ?? 'cust_${DateTime.now().millisecondsSinceEpoch}',
+                  name: nameController.text.trim(),
+                  nickname: nicknameController.text.trim(),
+                  phone: phoneController.text.trim(),
+                  role: 'customer',
+                  isPermanentCustomer: isPermanent ? 1 : 0,
+                  creditLimit: isPermanent ? limit : 0.0,
+                  balance: customer != null ? (double.tryParse(balanceController.text) ?? customer.balance) : 0.0,
+                  transferNames: transferNamesController.text.trim(),
+                  notes: notesController.text.trim(),
+                  createdAt: customer?.createdAt ?? DateTime.now().toIso8601String(),
+                );
 
                 if (customer == null) {
-                  // Add mode
-                  final newUser = User(
-                    username: 'cust_${DateTime.now().millisecondsSinceEpoch}',
-                    name: nameController.text,
-                    phone: phoneController.text,
-                    role: 'customer',
-                    isPermanentCustomer: isPermanent ? 1 : 0,
-                    creditLimit: isPermanent ? double.tryParse(limitController.text) : 0.0,
-                    createdAt: DateTime.now().toIso8601String(),
-                  );
-                  await db.insertUser(newUser, '123');
+                  await db.insertUser(userData, '123');
                 } else {
-                  // Edit mode
-                  final updatedUser = User(
-                    id: customer.id,
-                    username: customer.username,
-                    name: nameController.text,
-                    phone: phoneController.text,
-                    role: 'customer',
-                    isPermanentCustomer: isPermanent ? 1 : 0,
-                    creditLimit: isPermanent ? double.tryParse(limitController.text) : 0.0,
-                    balance: double.tryParse(balanceController.text) ?? customer.balance,
-                    createdAt: customer.createdAt,
-                  );
-                  await db.updateUser(updatedUser, customer);
+                  await db.updateUser(userData, customer);
                 }
-
-                Navigator.pop(context);
-                _loadCustomers();
+                
+                if (mounted) {
+                  Navigator.pop(context);
+                  _loadCustomers();
+                }
               },
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-              child: const Text('حفظ التغييرات', style: TextStyle(color: Colors.white)),
+              child: const Text('حفظ البيانات', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -128,7 +226,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final bool isSmall = size.width < 700;
-    final bool isLarge = size.width > 1200;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -140,9 +239,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildHeader(isSmall),
+                _buildHeader(isSmall, isDark),
                 const SizedBox(height: 24),
-                _buildSearchBar(),
+                _buildSearchBar(isDark),
               ],
             ),
           ),
@@ -150,8 +249,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _filteredCustomers.isEmpty
-                  ? _buildEmptyState()
-                  : _buildCustomerGrid(isSmall, isLarge),
+                  ? _buildEmptyState(isDark)
+                  : _isTableView 
+                    ? _buildCustomerTable(size, isDark)
+                    : _buildCustomerGrid(size, isDark),
           ),
         ],
       ),
@@ -164,144 +265,264 @@ class _CustomersScreenState extends State<CustomersScreen> {
     );
   }
 
-  Widget _buildHeader(bool isSmall) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildHeader(bool isSmall, bool isDark) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text('إدارة الزبائن', style: TextStyle(fontSize: isSmall ? 24 : 32, fontWeight: FontWeight.w900, color: const Color(0xFF0F172A))),
-        const SizedBox(height: 4),
-        Text('تتبع الديون، الرصيد المودع، وبيانات التواصل', style: TextStyle(color: const Color(0xFF64748B), fontSize: isSmall ? 13 : 15)),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('إدارة الزبائن', style: TextStyle(fontSize: isSmall ? 24 : 32, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A))),
+              const SizedBox(height: 4),
+              Text('تتبع الديون، الملاحظات، وأسماء التحويلات', 
+                style: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF64748B), fontSize: isSmall ? 12 : 15),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+        _buildViewToggle(isDark),
       ],
     );
   }
 
-  Widget _buildSearchBar() {
+  Widget _buildViewToggle(bool isDark) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(icon: Icon(Icons.grid_view_rounded, color: !_isTableView ? Colors.blue : Colors.grey, size: 20), onPressed: () => setState(() => _isTableView = false)),
+          IconButton(icon: Icon(Icons.table_rows_rounded, color: _isTableView ? Colors.blue : Colors.grey, size: 20), onPressed: () => setState(() => _isTableView = true)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchBar(bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0F172A) : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+        border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
       ),
       child: TextField(
         onChanged: _filterCustomers,
-        decoration: const InputDecoration(
-          hintText: 'بحث بالاسم أو الهاتف...',
-          prefixIcon: Icon(Icons.search_rounded, color: Colors.blue),
+        style: TextStyle(color: isDark ? Colors.white : Colors.black),
+        decoration: InputDecoration(
+          hintText: 'بحث بالاسم، اللقب، أو اسم التحويل...',
+          hintStyle: TextStyle(color: isDark ? Colors.grey : Colors.grey[400]),
+          prefixIcon: const Icon(Icons.search_rounded, color: Colors.blue),
           border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
         ),
       ),
     );
   }
 
-  Widget _buildCustomerGrid(bool isSmall, bool isLarge) {
-    int crossAxisCount = isSmall ? 1 : (isLarge ? 3 : 2);
-
+  Widget _buildCustomerGrid(Size size, bool isDark) {
+    int crossAxisCount = (size.width > 1400) ? 4 : (size.width > 1000 ? 3 : (size.width > 650 ? 2 : 1));
     return GridView.builder(
-      padding: EdgeInsets.symmetric(horizontal: isSmall ? 16 : 32, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: crossAxisCount,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        mainAxisExtent: 130,
+        mainAxisExtent: 175,
       ),
       itemCount: _filteredCustomers.length,
-      itemBuilder: (context, index) {
-        final customer = _filteredCustomers[index];
-        return _buildCustomerCard(customer);
-      },
+      itemBuilder: (context, index) => _buildCustomerCard(_filteredCustomers[index], isDark),
     );
   }
 
-  Widget _buildCustomerCard(User customer) {
-    final auth = context.read<AuthService>();
-    final bool isManager = auth.isManager();
-
+  Widget _buildCustomerCard(User customer, bool isDark) {
+    final bool isVerified = customer.creditLimit == -1;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? const Color(0xFF0F172A) : Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
       ),
-      child: Stack(
-        children: [
-          InkWell(
-            onTap: () => _navigateToCustomerDetails(customer),
-            borderRadius: BorderRadius.circular(20),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
+      child: InkWell(
+        onTap: () => _navigateToCustomerDetails(customer),
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
                   CircleAvatar(
                     radius: 24,
                     backgroundColor: customer.isPermanentCustomer == 1 ? Colors.blue[50] : Colors.grey[50],
-                    child: Text(customer.name[0], style: TextStyle(color: customer.isPermanentCustomer == 1 ? Colors.blue : Colors.grey, fontWeight: FontWeight.bold)),
+                    child: Text(customer.name[0], style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(customer.name, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Color(0xFF0F172A))),
-                        const SizedBox(height: 4),
-                        Text(customer.phone ?? 'لا يوجد هاتف', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                        Row(
+                          children: [
+                            Flexible(child: Text(customer.name, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: isDark ? Colors.white : Colors.black), overflow: TextOverflow.ellipsis)),
+                            if (isVerified) ...[
+                              const SizedBox(width: 4),
+                              const Icon(Icons.verified, color: Colors.blue, size: 16),
+                            ],
+                          ],
+                        ),
+                        if (customer.nickname != null && customer.nickname!.isNotEmpty)
+                          Text(customer.nickname!, style: const TextStyle(color: Colors.blueAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                        Text(customer.phone ?? 'بدون هاتف', style: TextStyle(color: Colors.grey, fontSize: 11)),
                       ],
                     ),
                   ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text('${customer.balance.toStringAsFixed(2)} ₪', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: customer.balance < 0 ? Colors.redAccent : Colors.green)),
-                      Text(customer.balance < 0 ? 'دين' : 'خالص/رصيد', style: TextStyle(fontSize: 10, color: Colors.grey[500], fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const SizedBox(width: 8),
+                  _buildBalanceInfo(customer),
                 ],
               ),
-            ),
+              if (customer.transferNames != null && customer.transferNames!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(color: Colors.blue.withOpacity(0.05), borderRadius: BorderRadius.circular(8)),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.swap_horiz, size: 12, color: Colors.blue),
+                      const SizedBox(width: 4),
+                      Flexible(child: Text('يُحوّل بـ: ${customer.transferNames}', style: const TextStyle(fontSize: 10, color: Colors.blue), overflow: TextOverflow.ellipsis)),
+                    ],
+                  ),
+                ),
+              ],
+              const Spacer(),
+              _buildCardActions(customer, isDark),
+            ],
           ),
-          if (isManager) Positioned(
-            top: 8,
-            left: 8,
-            child: IconButton(
-              icon: const Icon(Icons.edit_note_rounded, color: Colors.blue, size: 20),
-              onPressed: () => _showAddOrEditCustomerDialog(customer: customer),
-              tooltip: 'تعديل بيانات الزبون',
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.person_off_rounded, size: 64, color: Colors.grey[300]),
-          const SizedBox(height: 16),
-          Text('لا يوجد نتائج تطابق بحثك', style: TextStyle(color: Colors.grey[500], fontWeight: FontWeight.bold)),
-        ],
+  Widget _buildBalanceInfo(User customer) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text('${customer.balance.toStringAsFixed(2)} ₪', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: customer.balance < 0 ? Colors.redAccent : Colors.green)),
+        Text(customer.balance < 0 ? 'دين' : 'رصيد', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+      ],
+    );
+  }
+
+  Widget _buildCardActions(User customer, bool isDark) {
+    if (!context.read<AuthService>().isManager()) return const SizedBox();
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        TextButton.icon(
+          onPressed: () => _showAddOrEditCustomerDialog(customer: customer),
+          icon: const Icon(Icons.edit_outlined, size: 14),
+          label: const Text('تعديل', style: TextStyle(fontSize: 11)),
+          style: TextButton.styleFrom(foregroundColor: Colors.orange, padding: const EdgeInsets.symmetric(horizontal: 8)),
+        ),
+        TextButton.icon(
+          onPressed: () => _deleteCustomer(customer),
+          icon: const Icon(Icons.delete_outline, size: 14),
+          label: const Text('حذف', style: TextStyle(fontSize: 11)),
+          style: TextButton.styleFrom(foregroundColor: Colors.red, padding: const EdgeInsets.symmetric(horizontal: 8)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCustomerTable(Size size, bool isDark) {
+    bool isCompact = size.width < 1000;
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.vertical, // Added vertical scrolling
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Container(
+          constraints: BoxConstraints(minWidth: size.width - 64),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF0F172A) : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+          ),
+          child: DataTable(
+            sortColumnIndex: _sortColumnIndex,
+            sortAscending: _isAscending,
+            columnSpacing: isCompact ? 12 : 24,
+            horizontalMargin: 16,
+            headingRowColor: MaterialStateProperty.all(isDark ? const Color(0xFF1E293B) : Colors.grey[50]),
+            columns: [
+              DataColumn(
+                label: const Text('معلومات الزبون', style: TextStyle(fontWeight: FontWeight.bold)),
+                onSort: _onSort,
+              ),
+              DataColumn(
+                label: const Text('الحساب', style: TextStyle(fontWeight: FontWeight.bold)),
+                onSort: _onSort,
+              ),
+              const DataColumn(label: Text('الإجراءات', style: TextStyle(fontWeight: FontWeight.bold))),
+            ],
+            rows: _filteredCustomers.map((c) => DataRow(cells: [
+              DataCell(Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Row(children: [
+                      Text(c.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      if (c.creditLimit == -1) ...[const SizedBox(width: 4), const Icon(Icons.verified, color: Colors.blue, size: 14)]
+                    ]),
+                    Text(c.nickname ?? c.phone ?? 'لا توجد بيانات إضافية', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                  ],
+                ),
+              )),
+              DataCell(Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('${c.balance} ₪', style: TextStyle(color: c.balance < 0 ? Colors.red : Colors.green, fontWeight: FontWeight.bold, fontSize: 13)),
+                  Text(c.creditLimit == -1 ? 'دين مفتوح' : 'سقف: ${c.creditLimit}₪', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                ],
+              )),
+              DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
+                IconButton(icon: const Icon(Icons.info_outline, color: Colors.blue, size: 18), onPressed: () => _navigateToCustomerDetails(c)),
+                IconButton(icon: const Icon(Icons.edit_outlined, color: Colors.orange, size: 18), onPressed: () => _showAddOrEditCustomerDialog(customer: c)),
+                IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18), onPressed: () => _deleteCustomer(c)),
+              ])),
+            ])).toList(),
+          ),
+        ),
       ),
     );
+  }
+
+  Widget _buildEmptyState(bool isDark) {
+    return Center(child: Text('لا يوجد زبائن حالياً', style: TextStyle(color: isDark ? Colors.white30 : Colors.grey)));
   }
 
   void _navigateToCustomerDetails(User customer) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => CustomerDetailsScreen(customer: customer)),
-    ).then((_) => _loadCustomers());
+    Navigator.push(context, MaterialPageRoute(builder: (_) => CustomerDetailsScreen(customer: customer))).then((_) => _loadCustomers());
   }
 
-  Widget _buildDialogField(String label, TextEditingController controller, IconData icon, {bool isNumeric = false}) {
+  Widget _buildDialogField(String label, TextEditingController controller, IconData icon, {bool isNumeric = false, int maxLines = 1, Function(String)? onChanged}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: TextField(
         controller: controller,
+        maxLines: maxLines,
+        onChanged: onChanged,
         keyboardType: isNumeric ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
         decoration: InputDecoration(
           labelText: label,
@@ -318,14 +539,12 @@ class _CustomersScreenState extends State<CustomersScreen> {
 class CustomerDetailsScreen extends StatefulWidget {
   final User customer;
   const CustomerDetailsScreen({Key? key, required this.customer}) : super(key: key);
-
   @override
   State<CustomerDetailsScreen> createState() => _CustomerDetailsScreenState();
 }
 
 class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   List<Invoice> _invoices = [];
-  List<Map<String, dynamic>> _editHistory = [];
   bool _isLoading = true;
   late User _currentCustomer;
 
@@ -339,303 +558,112 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     final db = context.read<DatabaseService>();
-
-    // Refresh customer from DB
     final customers = await db.getCustomers();
     final fresh = customers.firstWhere((c) => c.id == _currentCustomer.id);
-
     final invoices = await db.getCustomerInvoices(fresh.id!);
-    final history = await db.getEditHistory(fresh.id!, 'USER');
-
     setState(() {
       _currentCustomer = fresh;
       _invoices = invoices;
-      _editHistory = history;
       _isLoading = false;
     });
   }
 
-  void _showDepositDialog() {
-    final amountController = TextEditingController();
-    final notesController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('إيداع رصيد (Deposit)', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: amountController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'المبلغ (₪)', prefixIcon: Icon(Icons.add_card, color: Colors.green))),
-            const SizedBox(height: 16),
-            TextField(controller: notesController, decoration: const InputDecoration(labelText: 'ملاحظات', prefixIcon: Icon(Icons.note_alt_outlined))),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-          ElevatedButton(
-            onPressed: () async {
-              if (amountController.text.isEmpty) return;
-              final db = context.read<DatabaseService>();
-              await db.addCredit(_currentCustomer.id!, double.parse(amountController.text), notesController.text);
-              Navigator.pop(context);
-              _loadData();
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت إضافة الرصيد بنجاح'), backgroundColor: Colors.green));
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            child: const Text('تأكيد الإيداع', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showAdvanceDebtDialog() {
-    final amountController = TextEditingController();
-    final notesController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('تسجيل دين يدوي (Advance Debt)', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: amountController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'المبلغ (₪)', prefixIcon: Icon(Icons.money_off, color: Colors.red))),
-            const SizedBox(height: 16),
-            TextField(controller: notesController, decoration: const InputDecoration(labelText: 'ملاحظات', prefixIcon: Icon(Icons.note_alt_outlined))),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-          ElevatedButton(
-            onPressed: () async {
-              if (amountController.text.isEmpty) return;
-              final db = context.read<DatabaseService>();
-
-              // Create a special "Advance Debt" invoice
-              final now = DateTime.now();
-              final invoice = Invoice(
-                userId: _currentCustomer.id!,
-                invoiceDate: '${now.day}-${now.month}-${now.year} يدوي',
-                amount: double.parse(amountController.text),
-                notes: '[دين يدوي] ${notesController.text}',
-                paymentStatus: 'pending',
-                createdAt: now.toIso8601String(),
-              );
-              await db.insertInvoice(invoice);
-
-              Navigator.pop(context);
-              _loadData();
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تسجيل الدين بنجاح'), backgroundColor: Colors.redAccent));
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            child: const Text('تأكيد الدين', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.of(context).size.width;
-    final bool isSmall = width < 700;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: isDark ? const Color(0xFF071028) : const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: Text(_currentCustomer.name, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
-        backgroundColor: Colors.white,
+        title: Row(
+          children: [
+            Text(_currentCustomer.name, style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+            if (_currentCustomer.creditLimit == -1) ...[
+              const SizedBox(width: 8),
+              const Icon(Icons.verified, color: Colors.blue, size: 24),
+            ],
+          ],
+        ),
+        backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
         elevation: 0,
-        foregroundColor: const Color(0xFF0F172A),
+        iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black),
       ),
-      body: _isLoading
-        ? const Center(child: CircularProgressIndicator())
-        : SingleChildScrollView(
-            padding: EdgeInsets.all(isSmall ? 16 : 32),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildSummaryGrid(isSmall),
-                const SizedBox(height: 24),
-                _buildActionButtons(),
-                const SizedBox(height: 40),
-                _buildDetailsTabs(isSmall),
-              ],
-            ),
-          ),
+      body: _isLoading ? const Center(child: CircularProgressIndicator()) : SingleChildScrollView(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildInfoGrid(isDark),
+            const SizedBox(height: 40),
+            Text('سجل الفواتير', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+            const SizedBox(height: 16),
+            _buildInvoicesList(isDark),
+          ],
+        ),
+      ),
     );
   }
 
-  Widget _buildDetailsTabs(bool isSmall) {
-    return DefaultTabController(
-      length: 2,
+  Widget _buildInfoGrid(bool isDark) {
+    return Wrap(
+      spacing: 20,
+      runSpacing: 20,
+      children: [
+        _buildDetailCard('الرصيد الحالي', '${_currentCustomer.balance.toStringAsFixed(2)} ₪', _currentCustomer.balance < 0 ? Colors.red : Colors.green, isDark, width: 250),
+        _buildDetailCard('سقف الدين', _currentCustomer.creditLimit == -1 ? 'غير محدود' : '${_currentCustomer.creditLimit} ₪', Colors.orange, isDark, width: 250),
+        if (_currentCustomer.nickname != null) _buildDetailCard('اللقب', _currentCustomer.nickname!, Colors.blue, isDark, width: 250),
+        if (_currentCustomer.transferNames != null) _buildDetailCard('أسماء التحويل', _currentCustomer.transferNames!, Colors.purple, isDark, width: 250),
+        if (_currentCustomer.notes != null) _buildDetailCard('ملاحظات', _currentCustomer.notes!, Colors.blueGrey, isDark, width: 520),
+      ],
+    );
+  }
+
+  Widget _buildDetailCard(String label, String value, Color color, bool isDark, {double? width}) {
+    return Container(
+      width: width,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0F172A) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const TabBar(
-            isScrollable: true,
-            labelColor: Colors.blue,
-            unselectedLabelColor: Colors.grey,
-            indicatorColor: Colors.blue,
-            tabs: [
-              Tab(text: 'سجل العمليات'),
-              Tab(text: 'تاريخ التعديلات'),
-            ],
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: 500,
-            child: TabBarView(
-              children: [
-                _buildInvoicesList(),
-                _buildEditHistoryList(),
-              ],
-            ),
-          ),
+          Text(label, style: TextStyle(color: isDark ? Colors.white60 : Colors.grey, fontSize: 14)),
+          const SizedBox(height: 8),
+          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: color)),
         ],
       ),
     );
   }
 
-  Widget _buildSummaryGrid(bool isSmall) {
-    return GridView.count(
-      crossAxisCount: isSmall ? 1 : 3,
+  Widget _buildInvoicesList(bool isDark) {
+    if (_invoices.isEmpty) return Center(child: Text('لا توجد فواتير مسجلة', style: TextStyle(color: isDark ? Colors.white30 : Colors.grey)));
+    return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 20,
-      mainAxisSpacing: 20,
-      childAspectRatio: 2.5,
-      children: [
-        _buildSummaryCard('الرصيد الحالي', '${_currentCustomer.balance.toStringAsFixed(2)} ₪', _currentCustomer.balance < 0 ? Colors.redAccent : Colors.green, _currentCustomer.balance < 0 ? Icons.money_off_rounded : Icons.account_balance_wallet),
-        _buildSummaryCard('الحالة', _currentCustomer.isPermanentCustomer == 1 ? 'زبون دائم' : 'زبون عابر', Colors.blue, Icons.person_search_rounded),
-        if (_currentCustomer.isPermanentCustomer == 1)
-          _buildSummaryCard('سقف الدين', '${_currentCustomer.creditLimit} ₪', Colors.orange, Icons.speed_rounded),
-      ],
-    );
-  }
-
-  Widget _buildSummaryCard(String label, String value, Color color, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE2E8F0))),
-      child: Row(
-        children: [
-          Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle), child: Icon(icon, color: color, size: 24)),
-          const SizedBox(width: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[500], fontWeight: FontWeight.bold)),
-              Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: color)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionButtons() {
-    return Row(
-      children: [
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: _showDepositDialog,
-            icon: const Icon(Icons.add_card, color: Colors.white),
-            label: const Text('إيداع رصيد جديد', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, padding: const EdgeInsets.symmetric(vertical: 20), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: _showAdvanceDebtDialog,
-            icon: const Icon(Icons.money_off, color: Colors.white),
-            label: const Text('تسجيل دين يدوي', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, padding: const EdgeInsets.symmetric(vertical: 20), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildInvoicesList() {
-    if (_invoices.isEmpty) return const Center(child: Text('لا توجد عمليات مسجلة'));
-    return ListView.builder(
       itemCount: _invoices.length,
       itemBuilder: (context, index) {
         final inv = _invoices[index];
         bool isPaid = inv.paymentStatus == 'paid';
-        bool isManualDebt = inv.notes?.contains('[دين يدوي]') ?? false;
-
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE2E8F0))),
-          child: ListTile(
-            contentPadding: const EdgeInsets.all(16),
-            leading: Icon(
-              isPaid ? Icons.check_circle_rounded : (isManualDebt ? Icons.warning_rounded : Icons.schedule_rounded),
-              color: isPaid ? Colors.green : (isManualDebt ? Colors.red : Colors.orange)
-            ),
-            title: Text('${inv.amount.toStringAsFixed(2)} ₪', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-            subtitle: Text('التاريخ: ${inv.invoiceDate}\nملاحظات: ${inv.notes ?? "لا يوجد"}', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
-            trailing: !isPaid ? TextButton(
-              onPressed: () async {
-                final db = context.read<DatabaseService>();
-                final updated = Invoice(
-                  id: inv.id,
-                  userId: inv.userId,
-                  invoiceDate: inv.invoiceDate,
-                  amount: inv.amount,
-                  notes: inv.notes,
-                  paymentStatus: 'paid',
-                  paymentMethodId: 1,
-                  createdAt: inv.createdAt
-                );
-                await db.updateInvoice(updated);
-                _loadData();
-              },
-              child: const Text('تسديد الآن', style: TextStyle(fontWeight: FontWeight.bold))
-            ) : const Icon(Icons.done_all, color: Colors.blue, size: 20),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF0F172A) : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
           ),
-        );
-      },
-    );
-  }
-
-  Widget _buildEditHistoryList() {
-    if (_editHistory.isEmpty) return const Center(child: Text('لم يتم إجراء أي تعديلات على بيانات هذا الزبون'));
-    return ListView.builder(
-      itemCount: _editHistory.length,
-      itemBuilder: (context, index) {
-        final edit = _editHistory[index];
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: Colors.blue[50]!.withOpacity(0.3), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.blue[100]!)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('تعديل حقل: ${edit['field_name']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
-                  Text(edit['created_at'].toString().substring(0, 16), style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Text('من: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                  Text(edit['old_value'], style: const TextStyle(fontSize: 12, color: Colors.red)),
-                  const SizedBox(width: 16),
-                  const Text('إلى: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                  Text(edit['new_value'], style: const TextStyle(fontSize: 12, color: Colors.green)),
-                ],
-              ),
-            ],
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            title: Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: isDark ? Colors.white : Colors.black)),
+            subtitle: Text('التاريخ: ${inv.invoiceDate}', style: const TextStyle(color: Colors.grey)),
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(color: isPaid ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+              child: Text(isPaid ? 'مدفوع' : 'دين قائمة', style: TextStyle(color: isPaid ? Colors.green : Colors.red, fontWeight: FontWeight.bold)),
+            ),
           ),
         );
       },

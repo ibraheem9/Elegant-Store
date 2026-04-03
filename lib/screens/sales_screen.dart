@@ -68,6 +68,16 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
+  // دالة لتطبيع النصوص العربية (إزالة الهمزات وتوحيد التاء المربوطة)
+  String _normalizeArabic(String text) {
+    String normalized = text;
+    normalized = normalized.replaceAll(RegExp(r'[أإآا]'), 'ا');
+    normalized = normalized.replaceAll(RegExp(r'[ة]'), 'ه');
+    normalized = normalized.replaceAll(RegExp(r'[ى]'), 'ي');
+    normalized = normalized.toLowerCase().trim();
+    return normalized;
+  }
+
   void _showOverlay() {
     if (_overlayEntry != null) _overlayEntry!.remove();
     _overlayEntry = _createOverlayEntry();
@@ -109,8 +119,16 @@ class _SalesScreenState extends State<SalesScreen> {
                         final c = _filteredCustomers[index];
                         return ListTile(
                           hoverColor: isDark ? Colors.white10 : Colors.blue[50],
-                          title: Text(c.name, style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
-                          subtitle: Text(c.phone ?? 'بدون هاتف', style: TextStyle(color: isDark ? Colors.white60 : Colors.black54)),
+                          title: Row(
+                            children: [
+                              Text(c.name, style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+                              if (c.creditLimit == -1) ...[
+                                const SizedBox(width: 4),
+                                const Icon(Icons.verified, color: Colors.blue, size: 14),
+                              ]
+                            ],
+                          ),
+                          subtitle: Text(c.nickname ?? c.phone ?? 'بدون هاتف', style: TextStyle(color: isDark ? Colors.white60 : Colors.black54)),
                           trailing: Text('${c.balance} ₪',
                             style: TextStyle(
                               color: c.balance >= 0 ? Colors.green : Colors.red,
@@ -138,9 +156,18 @@ class _SalesScreenState extends State<SalesScreen> {
       return;
     }
 
-    final searchLower = query.trim().toLowerCase();
+    final searchNormalized = _normalizeArabic(query);
+    
     _filteredCustomers = _allCustomers
-        .where((c) => c.name.toLowerCase().contains(searchLower) || (c.phone != null && c.phone!.contains(searchLower)))
+        .where((c) {
+          final nameNormalized = _normalizeArabic(c.name);
+          final nicknameNormalized = _normalizeArabic(c.nickname ?? "");
+          final phoneMatch = c.phone != null && c.phone!.contains(query.trim());
+          
+          return nameNormalized.contains(searchNormalized) || 
+                 nicknameNormalized.contains(searchNormalized) || 
+                 phoneMatch;
+        })
         .toList();
 
     if (_filteredCustomers.isNotEmpty) {
@@ -342,7 +369,7 @@ class _SalesScreenState extends State<SalesScreen> {
                         onChanged: _filterCustomers,
                         style: TextStyle(fontSize: 18, color: isDark ? Colors.white : Colors.black),
                         decoration: InputDecoration(
-                          hintText: 'ابحث عن زبون أو أدخل اسماً جديداً...',
+                          hintText: 'ابحث عن زبون (ابراهيم، أيمن، ...) أو أدخل جديداً...',
                           hintStyle: TextStyle(color: isDark ? Colors.white30 : Colors.black38),
                           prefixIcon: const Icon(Icons.person_search, color: Color(0xFF0B74FF)),
                           suffixIcon: _selectedCustomer != null ? IconButton(icon: const Icon(Icons.close), onPressed: () {
@@ -357,14 +384,22 @@ class _SalesScreenState extends State<SalesScreen> {
                     ),
                     if (_selectedCustomer != null) ...[
                       const SizedBox(height: 8),
-                      Text(
-                        _selectedCustomer!.balance < 0 
-                          ? 'الدين الحالي: ${_selectedCustomer!.balance.abs()} ₪' 
-                          : 'الرصيد المتاح: ${_selectedCustomer!.balance} ₪',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: _selectedCustomer!.balance < 0 ? Colors.redAccent : Colors.greenAccent
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            _selectedCustomer!.balance < 0 
+                              ? 'الدين الحالي: ${_selectedCustomer!.balance.abs()} ₪' 
+                              : 'الرصيد المتاح: ${_selectedCustomer!.balance} ₪',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: _selectedCustomer!.balance < 0 ? Colors.redAccent : Colors.greenAccent
+                            ),
+                          ),
+                          if (_selectedCustomer!.creditLimit == -1) ...[
+                            const SizedBox(width: 8),
+                            const Icon(Icons.verified, color: Colors.blue, size: 16),
+                          ]
+                        ],
                       ),
                     ]
                   ],
@@ -539,7 +574,11 @@ class _SalesScreenState extends State<SalesScreen> {
                 DataColumn(label: Text('ملاحظات', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black))),
               ],
               rows: _invoices.map((inv) => DataRow(cells: [
-                DataCell(Text(inv.customerName ?? 'عابر', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black))),
+                DataCell(Row(
+                  children: [
+                    Text(inv.customerName ?? 'عابر', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+                  ],
+                )),
                 DataCell(Text('${inv.amount} ₪', style: const TextStyle(color: Color(0xFF0B74FF), fontWeight: FontWeight.w900))),
                 DataCell(Text(inv.methodName ?? '-', style: TextStyle(color: isDark ? Colors.white70 : Colors.black87))),
                 DataCell(Text(inv.notes ?? '-', style: TextStyle(color: isDark ? Colors.white70 : Colors.black87), overflow: TextOverflow.ellipsis)),

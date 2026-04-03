@@ -17,6 +17,7 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
   String _selectedType = 'cash';
   bool _isReordering = false;
   List<PaymentMethod> _methods = [];
+  bool _isLoading = true;
 
   final List<Map<String, String>> _types = [
     {'value': 'cash', 'label': 'كاش (نقدي)'},
@@ -32,17 +33,33 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
   }
 
   Future<void> _refreshMethods() async {
-    final db = context.read<DatabaseService>();
-    final m = await db.getPaymentMethods();
-    setState(() {
-      _methods = m;
-    });
+    setState(() => _isLoading = true);
+    try {
+      final db = context.read<DatabaseService>();
+      final m = await db.getPaymentMethods();
+      setState(() {
+        _methods = m;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showErrorSnackBar('فشل تحميل البيانات: $e');
+    }
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.redAccent),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: Colors.transparent,
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -50,9 +67,9 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
             FloatingActionButton.extended(
               heroTag: 'addBtn',
               onPressed: () => _showMethodDialog(),
-              label: const Text('إضافة طريقة دفع'),
-              icon: const Icon(Icons.add_rounded),
-              backgroundColor: Colors.blue[700],
+              label: const Text('إضافة طريقة دفع', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+              icon: const Icon(Icons.add_rounded, color: Colors.white),
+              backgroundColor: const Color(0xFF0B74FF),
             ),
           const SizedBox(height: 12),
           FloatingActionButton.extended(
@@ -64,9 +81,9 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
               }
               setState(() => _isReordering = !_isReordering);
             },
-            label: Text(_isReordering ? 'حفظ الترتيب' : 'تغيير الترتيب'),
-            icon: Icon(_isReordering ? Icons.check_rounded : Icons.reorder_rounded),
-            backgroundColor: _isReordering ? Colors.green[700] : Colors.blueGrey[700],
+            label: Text(_isReordering ? 'حفظ الترتيب' : 'تغيير الترتيب', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+            icon: Icon(_isReordering ? Icons.check_rounded : Icons.reorder_rounded, color: Colors.white),
+            backgroundColor: _isReordering ? Colors.green[600] : const Color(0xFF1E293B),
           ),
         ],
       ),
@@ -77,9 +94,9 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
           children: [
             Row(
               children: [
-                const Text(
+                Text(
                   'إدارة طرق الدفع',
-                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Color(0xFF0F172A)),
+                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A)),
                 ),
                 const Spacer(),
                 if (_isReordering)
@@ -90,13 +107,15 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
               ],
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'يمكنك إضافة أو تعديل طرق الدفع المتاحة عند تسجيل الفواتير وترتيبها لتظهر في شاشة البيع بالشكل المطلوب',
-              style: TextStyle(fontSize: 16, color: Color(0xFF64748B)),
+              style: TextStyle(fontSize: 16, color: isDark ? Colors.white60 : const Color(0xFF64748B)),
             ),
             const SizedBox(height: 32),
             Expanded(
-              child: _isReordering ? _buildReorderableList() : _buildMethodsGrid(),
+              child: _isLoading 
+                ? const Center(child: CircularProgressIndicator())
+                : _isReordering ? _buildReorderableList(isDark) : _buildMethodsGrid(isDark),
             ),
           ],
         ),
@@ -104,27 +123,27 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
     );
   }
 
-  Widget _buildMethodsGrid() {
+  Widget _buildMethodsGrid(bool isDark) {
     if (_methods.isEmpty) {
-      return const Center(child: Text('لا يوجد طرق دفع مسجلة'));
+      return Center(child: Text('لا يوجد طرق دفع مسجلة', style: TextStyle(color: isDark ? Colors.white30 : Colors.grey)));
     }
 
     return GridView.builder(
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 400,
-        mainAxisExtent: 180,
+        mainAxisExtent: 200,
         crossAxisSpacing: 20,
         mainAxisSpacing: 20,
       ),
       itemCount: _methods.length,
       itemBuilder: (context, index) {
         final method = _methods[index];
-        return _buildMethodCard(method);
+        return _buildMethodCard(method, isDark);
       },
     );
   }
 
-  Widget _buildReorderableList() {
+  Widget _buildReorderableList(bool isDark) {
     return Theme(
       data: Theme.of(context).copyWith(canvasColor: Colors.transparent),
       child: ReorderableListView(
@@ -139,13 +158,14 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
           for (final method in _methods)
             Card(
               key: ValueKey(method.id),
+              color: isDark ? const Color(0xFF0F172A) : Colors.white,
               margin: const EdgeInsets.only(bottom: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0))),
               child: ListTile(
                 leading: const Icon(Icons.drag_indicator_rounded, color: Colors.grey),
-                title: Text(method.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text(_types.firstWhere((t) => t['value'] == method.type)['label'] ?? method.type),
-                trailing: const Icon(Icons.reorder_rounded),
+                title: Text(method.name, style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+                subtitle: Text(_types.firstWhere((t) => t['value'] == method.type)['label'] ?? method.type, style: const TextStyle(color: Colors.blue)),
+                trailing: const Icon(Icons.reorder_rounded, color: Colors.grey),
               ),
             ),
         ],
@@ -153,38 +173,24 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
     );
   }
 
-  Widget _buildMethodCard(PaymentMethod method) {
+  Widget _buildMethodCard(PaymentMethod method, bool isDark) {
     IconData icon;
     Color color;
 
     switch (method.type) {
-      case 'cash':
-        icon = Icons.money_rounded;
-        color = Colors.green;
-        break;
-      case 'app':
-        icon = Icons.smartphone_rounded;
-        color = Colors.blue;
-        break;
-      case 'deferred':
-        icon = Icons.timer_outlined;
-        color = Colors.orange;
-        break;
-      case 'credit_balance':
-        icon = Icons.account_balance_wallet_rounded;
-        color = Colors.purple;
-        break;
-      default:
-        icon = Icons.payment_rounded;
-        color = Colors.grey;
+      case 'cash': icon = Icons.money_rounded; color = Colors.green; break;
+      case 'app': icon = Icons.smartphone_rounded; color = const Color(0xFF0B74FF); break;
+      case 'deferred': icon = Icons.timer_outlined; color = Colors.orange; break;
+      case 'credit_balance': icon = Icons.account_balance_wallet_rounded; color = Colors.purple; break;
+      default: icon = Icons.payment_rounded; color = Colors.grey;
     }
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        color: isDark ? const Color(0xFF0F172A) : Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
       ),
       child: Column(
@@ -193,44 +199,48 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, size: 24, color: color),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(14)),
+                child: Icon(icon, size: 28, color: color),
               ),
               const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.edit_outlined, size: 20, color: Color(0xFF64748B)),
-                onPressed: () => _showMethodDialog(method: method),
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline_rounded, size: 20, color: Colors.redAccent),
-                onPressed: () => _confirmDelete(method),
-              ),
+              _buildActionButton(Icons.edit_outlined, Colors.orange, () => _showMethodDialog(method: method), isDark),
+              const SizedBox(width: 8),
+              _buildActionButton(Icons.delete_outline_rounded, Colors.redAccent, () => _confirmDelete(method), isDark),
             ],
           ),
           const Spacer(),
           Text(
             method.name,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A)),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Text(
             _types.firstWhere((t) => t['value'] == method.type)['label'] ?? method.type,
-            style: TextStyle(fontSize: 13, color: color, fontWeight: FontWeight.w600),
+            style: TextStyle(fontSize: 13, color: color, fontWeight: FontWeight.bold),
           ),
           if (method.description != null && method.description!.isNotEmpty) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             Text(
               method.description!,
-              style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+              style: TextStyle(fontSize: 12, color: isDark ? Colors.white30 : const Color(0xFF94A3B8)),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton(IconData icon, Color color, VoidCallback onTap, bool isDark) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(color: isDark ? const Color(0xFF1E293B) : Colors.grey[50], borderRadius: BorderRadius.circular(8)),
+        child: Icon(icon, size: 18, color: color),
       ),
     );
   }
@@ -248,95 +258,153 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text(method == null ? 'إضافة طريقة دفع جديدة' : 'تعديل طريقة الدفع'),
-          content: SizedBox(
-            width: 400,
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(labelText: 'اسم الطريقة (مثلاً: كاش، بنك فلسطين، ...)'),
-                    validator: (v) => v == null || v.isEmpty ? 'مطلوب' : null,
+      builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24), side: BorderSide(color: isDark ? const Color(0xFF1E293B) : Colors.transparent)),
+            title: Text(
+              method == null ? 'إضافة طريقة دفع جديدة' : 'تعديل طريقة الدفع',
+              style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black),
+            ),
+            content: SizedBox(
+              width: 450,
+              child: Form(
+                key: _formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildLabel('اسم الطريقة', isDark),
+                      TextFormField(
+                        controller: _nameController,
+                        style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                        decoration: _inputDecoration('مثلاً: كاش، بنك فلسطين، حمودة...', isDark),
+                        validator: (v) => v == null || v.isEmpty ? 'يرجى إدخال الاسم' : null,
+                      ),
+                      const SizedBox(height: 20),
+                      _buildLabel('نوع العملية', isDark),
+                      DropdownButtonFormField<String>(
+                        value: _selectedType,
+                        dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                        style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                        decoration: _inputDecoration('', isDark),
+                        items: _types.map((t) => DropdownMenuItem(value: t['value'], child: Text(t['label']!))).toList(),
+                        onChanged: (v) => setDialogState(() => _selectedType = v!),
+                      ),
+                      const SizedBox(height: 20),
+                      _buildLabel('وصف إضافي (اختياري)', isDark),
+                      TextFormField(
+                        controller: _descController,
+                        style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                        maxLines: 2,
+                        decoration: _inputDecoration('اكتب ملاحظات بسيطة عن هذه الطريقة...', isDark),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    value: _selectedType,
-                    decoration: const InputDecoration(labelText: 'نوع العملية'),
-                    items: _types.map((t) => DropdownMenuItem(value: t['value'], child: Text(t['label']!))).toList(),
-                    onChanged: (v) => setDialogState(() => _selectedType = v!),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _descController,
-                    decoration: const InputDecoration(labelText: 'وصف إضافي (اختياري)'),
-                    maxLines: 2,
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-            ElevatedButton(
-              onPressed: () async {
-                if (_formKey.currentState!.validate()) {
-                  final db = context.read<DatabaseService>();
-                  final newMethod = PaymentMethod(
-                    id: method?.id,
-                    name: _nameController.text,
-                    type: _selectedType,
-                    description: _descController.text,
-                    isActive: method?.isActive ?? 1,
-                    sortOrder: method?.sortOrder ?? 0,
-                  );
+            actionsPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: Text('إلغاء', style: TextStyle(color: isDark ? Colors.white60 : Colors.black54))),
+              ElevatedButton(
+                onPressed: () async {
+                  if (_formKey.currentState!.validate()) {
+                    try {
+                      final db = context.read<DatabaseService>();
+                      final newMethod = PaymentMethod(
+                        id: method?.id,
+                        name: _nameController.text.trim(),
+                        type: _selectedType,
+                        description: _descController.text.trim(),
+                        isActive: method?.isActive ?? 1,
+                        sortOrder: method?.sortOrder ?? 0,
+                      );
 
-                  if (method == null) {
-                    await db.insertPaymentMethod(newMethod);
-                  } else {
-                    await db.updatePaymentMethod(newMethod);
+                      if (method == null) {
+                        await db.insertPaymentMethod(newMethod);
+                      } else {
+                        await db.updatePaymentMethod(newMethod);
+                      }
+                      
+                      if (mounted) {
+                        Navigator.pop(context);
+                        _refreshMethods();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(method == null ? 'تمت الإضافة بنجاح' : 'تم التعديل بنجاح'), backgroundColor: Colors.green),
+                        );
+                      }
+                    } catch (e) {
+                      _showErrorSnackBar('خطأ أثناء الحفظ: $e');
+                    }
                   }
-                  
-                  if (mounted) {
-                    Navigator.pop(context);
-                    _refreshMethods();
-                  }
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[700], foregroundColor: Colors.white),
-              child: const Text('حفظ'),
-            ),
-          ],
-        ),
-      ),
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0B74FF), 
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('حفظ البيانات', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLabel(String text, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Text(text, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : Colors.black87)),
+    );
+  }
+
+  InputDecoration _inputDecoration(String hint, bool isDark) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: TextStyle(color: isDark ? Colors.white24 : Colors.black26, fontSize: 14),
+      filled: true,
+      fillColor: isDark ? const Color(0xFF071028) : const Color(0xFFF8FAFC),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDark ? const Color(0xFF1E293B) : Colors.transparent)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
     );
   }
 
   void _confirmDelete(PaymentMethod method) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('تأكيد الحذف'),
-        content: Text('هل أنت متأكد من حذف "${method.name}"؟ ستبقى البيانات القديمة محفوظة ولكن لن تظهر هذه الطريقة في الفواتير الجديدة.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-          TextButton(
-            onPressed: () async {
-              await context.read<DatabaseService>().deletePaymentMethod(method.id!);
-              if (mounted) {
-                Navigator.pop(context);
-                _refreshMethods();
-              }
-            },
-            child: const Text('حذف', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+      builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return AlertDialog(
+          backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+          title: const Text('تأكيد الحذف', style: TextStyle(fontWeight: FontWeight.bold)),
+          content: Text('هل أنت متأكد من حذف "${method.name}"؟ ستبقى البيانات القديمة محفوظة ولكن لن تظهر هذه الطريقة في الفواتير الجديدة.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: Text('إلغاء', style: TextStyle(color: isDark ? Colors.white60 : Colors.black54))),
+            TextButton(
+              onPressed: () async {
+                try {
+                  await context.read<DatabaseService>().deletePaymentMethod(method.id!);
+                  if (mounted) {
+                    Navigator.pop(context);
+                    _refreshMethods();
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم الحذف بنجاح'), backgroundColor: Colors.orange));
+                  }
+                } catch (e) {
+                  _showErrorSnackBar('فشل الحذف: $e');
+                }
+              },
+              child: const Text('حذف', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
     );
   }
 }

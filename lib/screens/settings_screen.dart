@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/database_service.dart';
 import '../services/auth_service.dart';
+import '../services/theme_service.dart';
+import '../services/notification_service.dart';
 import '../models/models.dart';
-import '../main.dart'; // Import ThemeNotifier
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -19,15 +21,42 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final _storeNameController = TextEditingController(text: 'Elegant Store');
   final _adminNameController = TextEditingController();
+  
+  bool _notificationsEnabled = true;
+  TimeOfDay _notificationTime = const TimeOfDay(hour: 10, minute: 0);
 
   @override
   void initState() {
     super.initState();
-    final auth = context.read<AuthService>();
-    _adminNameController.text = auth.currentUser?.name ?? '';
+    _loadSettings();
   }
 
-  // --- دوال التصدير والمسح الحالية ---
+  Future<void> _loadSettings() async {
+    final auth = context.read<AuthService>();
+    _adminNameController.text = auth.currentUser?.name ?? '';
+    
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _notificationsEnabled = prefs.getBool('notifications_enabled') ?? true;
+      String? timeStr = prefs.getString('notification_time');
+      if (timeStr != null) {
+        final parts = timeStr.split(':');
+        _notificationTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+      }
+    });
+  }
+
+  Future<void> _saveNotificationSettings(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('notifications_enabled', enabled);
+    await prefs.setString('notification_time', "${_notificationTime.hour}:${_notificationTime.minute}");
+    setState(() => _notificationsEnabled = enabled);
+    
+    if (enabled) {
+      NotificationService.scheduleDailyCheck(context.read<DatabaseService>());
+    }
+  }
+
   Future<void> _exportData() async {
     try {
       final db = context.read<DatabaseService>();
@@ -88,6 +117,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildTextField('اسم المتجر', _storeNameController, Icons.store, isDark),
               const SizedBox(height: 16),
               _buildTextField('اسم المسؤول', _adminNameController, Icons.person, isDark),
+            ]),
+
+            const SizedBox(height: 32),
+            _buildSection('نظام التنبيهات الذكي', isDark, [
+              SwitchListTile(
+                title: const Text('تفعيل تنبيهات الديون والتحصيل', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text('سيقوم النظام بإعلامك يومياً بالفواتير المتأخرة والزبائن المتجاوزين للسقف'),
+                value: _notificationsEnabled,
+                onChanged: _saveNotificationSettings,
+                activeColor: const Color(0xFF0B74FF),
+              ),
+              if (_notificationsEnabled)
+                ListTile(
+                  title: const Text('وقت التنبيه اليومي'),
+                  trailing: TextButton(
+                    onPressed: () async {
+                      final picked = await showTimePicker(context: context, initialTime: _notificationTime);
+                      if (picked != null) {
+                        setState(() => _notificationTime = picked);
+                        _saveNotificationSettings(true);
+                      }
+                    },
+                    child: Text(_notificationTime.format(context), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  ),
+                  leading: const Icon(Icons.access_time_filled_rounded, color: Colors.orange),
+                ),
             ]),
 
             const SizedBox(height: 32),
