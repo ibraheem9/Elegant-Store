@@ -27,6 +27,16 @@ class _SalesScreenState extends State<SalesScreen> {
   List<PaymentMethod> _paymentMethods = [];
   PaymentMethod? _selectedPaymentMethod;
   List<Invoice> _invoices = [];
+  
+  // Filtering states
+  DateTime? _startDate = DateTime.now();
+  DateTime? _endDate = DateTime.now();
+  PaymentMethod? _filterPaymentMethod;
+  
+  // Sorting states
+  int? _sortColumnIndex;
+  bool _isAscending = true;
+
   Map<String, dynamic> _todayStats = {'total_sales': 0.0, 'total_debt': 0.0, 'buyers_count': 0};
   bool _isLoading = false;
   bool _isDataLoading = true;
@@ -49,7 +59,12 @@ class _SalesScreenState extends State<SalesScreen> {
       final db = context.read<DatabaseService>();
       final customers = await db.getCustomers();
       final methods = await db.getPaymentMethods();
-      final invoices = await db.getTodayInvoices();
+      
+      // Fetch invoices based on date range
+      DateTime rangeStart = DateTime(_startDate!.year, _startDate!.month, _startDate!.day);
+      DateTime rangeEnd = DateTime(_endDate!.year, _endDate!.month, _endDate!.day, 23, 59, 59);
+      
+      final invoices = await db.getInvoices(start: rangeStart, end: rangeEnd);
       final stats = await db.getSalesStatsToday();
 
       setState(() {
@@ -60,6 +75,7 @@ class _SalesScreenState extends State<SalesScreen> {
         if (methods.isNotEmpty && _selectedPaymentMethod == null) {
           _selectedPaymentMethod = methods.first;
         }
+        _applyClientSideFilters();
         _isDataLoading = false;
       });
     } catch (e) {
@@ -68,7 +84,38 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
-  // دالة لتطبيع النصوص العربية (إزالة الهمزات وتوحيد التاء المربوطة)
+  void _applyClientSideFilters() {
+    if (_filterPaymentMethod != null) {
+      _invoices = _invoices.where((inv) => inv.paymentMethodId == _filterPaymentMethod!.id).toList();
+    }
+    _applySort();
+  }
+
+  void _applySort() {
+    if (_sortColumnIndex == null) return;
+
+    setState(() {
+      _invoices.sort((a, b) {
+        dynamic aVal, bVal;
+        switch (_sortColumnIndex) {
+          case 0: aVal = a.customerName ?? ''; bVal = b.customerName ?? ''; break;
+          case 1: aVal = a.amount; bVal = b.amount; break;
+          case 2: aVal = a.methodName ?? ''; bVal = b.methodName ?? ''; break;
+          default: return 0;
+        }
+        return _isAscending ? Comparable.compare(aVal, bVal) : Comparable.compare(bVal, aVal);
+      });
+    });
+  }
+
+  void _onSort(int columnIndex, bool ascending) {
+    setState(() {
+      _sortColumnIndex = columnIndex;
+      _isAscending = ascending;
+      _applySort();
+    });
+  }
+
   String _normalizeArabic(String text) {
     String normalized = text;
     normalized = normalized.replaceAll(RegExp(r'[أإآا]'), 'ا');
@@ -155,26 +202,15 @@ class _SalesScreenState extends State<SalesScreen> {
       _hideOverlay();
       return;
     }
-
     final searchNormalized = _normalizeArabic(query);
-    
-    _filteredCustomers = _allCustomers
-        .where((c) {
-          final nameNormalized = _normalizeArabic(c.name);
-          final nicknameNormalized = _normalizeArabic(c.nickname ?? "");
-          final phoneMatch = c.phone != null && c.phone!.contains(query.trim());
-          
-          return nameNormalized.contains(searchNormalized) || 
-                 nicknameNormalized.contains(searchNormalized) || 
-                 phoneMatch;
-        })
-        .toList();
+    _filteredCustomers = _allCustomers.where((c) {
+      final nameNormalized = _normalizeArabic(c.name);
+      final nicknameNormalized = _normalizeArabic(c.nickname ?? "");
+      return nameNormalized.contains(searchNormalized) || nicknameNormalized.contains(searchNormalized);
+    }).toList();
 
-    if (_filteredCustomers.isNotEmpty) {
-      _showOverlay();
-    } else {
-      _hideOverlay();
-    }
+    if (_filteredCustomers.isNotEmpty) _showOverlay();
+    else _hideOverlay();
     setState(() {});
   }
 
@@ -246,8 +282,9 @@ class _SalesScreenState extends State<SalesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isSmall = MediaQuery.of(context).size.width < 900;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final size = MediaQuery.of(context).size;
+    final bool isSmall = size.width < 900;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -301,9 +338,7 @@ class _SalesScreenState extends State<SalesScreen> {
   Widget _buildStatsRow(bool isSmall, bool isDark) {
     return Row(
       children: [
-        _buildStatCard('إجمالي مبيعات اليوم', '${_todayStats['total_sales'].toStringAsFixed(2)} ₪', Icons.trending_up, Colors.blue, isDark),
-        const SizedBox(width: 20),
-        _buildStatCard('ديون اليوم', '${_todayStats['total_debt'].toStringAsFixed(2)} ₪', Icons.money_off, Colors.red, isDark),
+        _buildStatCard('إجمالي مبيعات الفترة', '${_todayStats['total_sales'].toStringAsFixed(2)} ₪', Icons.trending_up, Colors.blue, isDark),
         const SizedBox(width: 20),
         _buildStatCard('إجمالي الزبائن', '${_allCustomers.length}', Icons.people, Colors.green, isDark),
       ],
@@ -355,7 +390,6 @@ class _SalesScreenState extends State<SalesScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Search Field
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -378,35 +412,13 @@ class _SalesScreenState extends State<SalesScreen> {
                           filled: true,
                           fillColor: isDark ? const Color(0xFF071028) : const Color(0xFFF8FAFC),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDark ? const Color(0xFF1E293B) : Colors.transparent)),
                         ),
                       ),
                     ),
-                    if (_selectedCustomer != null) ...[
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Text(
-                            _selectedCustomer!.balance < 0 
-                              ? 'الدين الحالي: ${_selectedCustomer!.balance.abs()} ₪' 
-                              : 'الرصيد المتاح: ${_selectedCustomer!.balance} ₪',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: _selectedCustomer!.balance < 0 ? Colors.redAccent : Colors.greenAccent
-                            ),
-                          ),
-                          if (_selectedCustomer!.creditLimit == -1) ...[
-                            const SizedBox(width: 8),
-                            const Icon(Icons.verified, color: Colors.blue, size: 16),
-                          ]
-                        ],
-                      ),
-                    ]
                   ],
                 ),
               ),
               const SizedBox(width: 24),
-              // Amount Field
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -417,32 +429,14 @@ class _SalesScreenState extends State<SalesScreen> {
                       controller: _amountController,
                       keyboardType: TextInputType.number,
                       style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black),
-                      onChanged: (val) {
-                        setState(() {}); // Trigger UI update for final amount
-                      },
                       decoration: InputDecoration(
                         hintText: '0.00',
-                        hintStyle: TextStyle(color: isDark ? Colors.white30 : Colors.black38),
                         prefixIcon: const Icon(Icons.payments, color: Colors.greenAccent),
                         filled: true,
                         fillColor: isDark ? const Color(0xFF071028) : const Color(0xFFF8FAFC),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDark ? const Color(0xFF1E293B) : Colors.transparent)),
                       ),
                     ),
-                    if (_selectedCustomer != null && _amountController.text.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Builder(
-                        builder: (context) {
-                          double am = double.tryParse(_amountController.text) ?? 0;
-                          double finalBal = _selectedCustomer!.balance - am;
-                          return Text(
-                            finalBal < 0 ? 'الرصيد المتوقع: ${finalBal.abs()} ₪ (دين)' : 'الرصيد المتوقع: $finalBal ₪ (فائض)',
-                            style: TextStyle(fontSize: 12, color: isDark ? Colors.white54 : Colors.grey[600]),
-                          );
-                        }
-                      ),
-                    ]
                   ],
                 ),
               ),
@@ -451,7 +445,29 @@ class _SalesScreenState extends State<SalesScreen> {
           const SizedBox(height: 24),
           Row(
             children: [
-              // Phone Field
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('طريقة الدفع', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : const Color(0xFF475569))),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<PaymentMethod>(
+                      value: _selectedPaymentMethod,
+                      dropdownColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+                      style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                      items: _paymentMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name))).toList(),
+                      onChanged: (v) => setState(() => _selectedPaymentMethod = v),
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.wallet, color: Color(0xFF0B74FF)),
+                        filled: true,
+                        fillColor: isDark ? const Color(0xFF071028) : const Color(0xFFF8FAFC),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 24),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -463,65 +479,16 @@ class _SalesScreenState extends State<SalesScreen> {
                       style: TextStyle(color: isDark ? Colors.white : Colors.black),
                       decoration: InputDecoration(
                         hintText: '05X XXX XXXX',
-                        hintStyle: TextStyle(color: isDark ? Colors.white30 : Colors.black38),
                         prefixIcon: const Icon(Icons.phone_android, color: Colors.orangeAccent),
                         filled: true,
                         fillColor: isDark ? const Color(0xFF071028) : const Color(0xFFF8FAFC),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDark ? const Color(0xFF1E293B) : Colors.transparent)),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 24),
-              // Payment Method Field
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('طريقة الدفع', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : const Color(0xFF475569))),
-                    const SizedBox(height: 8),
-                    _paymentMethods.isEmpty
-                      ? Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(color: Colors.red[900]?.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-                          child: const Text('⚠️ لم يتم تحميل طرق الدفع - يرجى التحديث', style: TextStyle(color: Colors.redAccent, fontSize: 12)),
-                        )
-                      : DropdownButtonFormField<PaymentMethod>(
-                          value: _selectedPaymentMethod,
-                          dropdownColor: isDark ? const Color(0xFF0F172A) : Colors.white,
-                          style: TextStyle(color: isDark ? Colors.white : Colors.black),
-                          items: _paymentMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name))).toList(),
-                          onChanged: (v) => setState(() => _selectedPaymentMethod = v),
-                          decoration: InputDecoration(
-                            prefixIcon: const Icon(Icons.wallet, color: Color(0xFF0B74FF)),
-                            filled: true,
-                            fillColor: isDark ? const Color(0xFF071028) : const Color(0xFFF8FAFC),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDark ? const Color(0xFF1E293B) : Colors.transparent)),
-                          ),
-                        ),
-                  ],
-                ),
-              ),
             ],
-          ),
-          const SizedBox(height: 24),
-          Text('ملاحظات إضافية', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : const Color(0xFF475569))),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _notesController,
-            maxLines: 2,
-            style: TextStyle(color: isDark ? Colors.white : Colors.black),
-            decoration: InputDecoration(
-              hintText: 'اكتب أي تفاصيل هنا...',
-              hintStyle: TextStyle(color: isDark ? Colors.white30 : Colors.black38),
-              filled: true,
-              fillColor: isDark ? const Color(0xFF071028) : const Color(0xFFF8FAFC),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDark ? const Color(0xFF1E293B) : Colors.transparent)),
-            ),
           ),
           const SizedBox(height: 32),
           SizedBox(
@@ -529,18 +496,9 @@ class _SalesScreenState extends State<SalesScreen> {
             height: 64,
             child: ElevatedButton.icon(
               onPressed: _isLoading ? null : _createInvoice,
-              icon: _isLoading 
-                ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
-                : const Icon(Icons.check_circle, color: Colors.white),
-              label: Text(
-                _isLoading ? 'جاري الحفظ...' : 'حفظ الفاتورة وتأكيد العملية', 
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0B74FF), 
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                elevation: 4
-              ),
+              icon: const Icon(Icons.check_circle, color: Colors.white),
+              label: Text(_isLoading ? 'جاري الحفظ...' : 'حفظ الفاتورة وتأكيد العملية', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0B74FF), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
             ),
           ),
         ],
@@ -552,7 +510,13 @@ class _SalesScreenState extends State<SalesScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('سجل العمليات الأخيرة', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: isDark ? const Color(0xFFDCEFFF) : const Color(0xFF0F172A))),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('سجل العمليات الأخيرة', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: isDark ? const Color(0xFFDCEFFF) : const Color(0xFF0F172A))),
+            _buildTableFilters(isDark),
+          ],
+        ),
         const SizedBox(height: 16),
         Container(
           width: double.infinity,
@@ -564,25 +528,90 @@ class _SalesScreenState extends State<SalesScreen> {
           child: Theme(
             data: Theme.of(context).copyWith(dividerColor: isDark ? Colors.white10 : Colors.black12),
             child: DataTable(
+              sortColumnIndex: _sortColumnIndex,
+              sortAscending: _isAscending,
               horizontalMargin: 24,
               columnSpacing: 24,
               headingRowHeight: 60,
               columns: [
-                DataColumn(label: Text('المشتري', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black))),
-                DataColumn(label: Text('المبلغ', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black))),
-                DataColumn(label: Text('طريقة الدفع', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black))),
-                DataColumn(label: Text('ملاحظات', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black))),
+                DataColumn(label: Text('المشتري', style: const TextStyle(fontWeight: FontWeight.bold)), onSort: _onSort),
+                DataColumn(label: Text('المبلغ', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true, onSort: _onSort),
+                DataColumn(label: Text('طريقة الدفع', style: const TextStyle(fontWeight: FontWeight.bold)), onSort: _onSort),
+                const DataColumn(label: Text('ملاحظات', style: TextStyle(fontWeight: FontWeight.bold))),
               ],
               rows: _invoices.map((inv) => DataRow(cells: [
-                DataCell(Row(
-                  children: [
-                    Text(inv.customerName ?? 'عابر', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
-                  ],
-                )),
+                DataCell(Text(inv.customerName ?? 'عابر', style: const TextStyle(fontWeight: FontWeight.bold))),
                 DataCell(Text('${inv.amount} ₪', style: const TextStyle(color: Color(0xFF0B74FF), fontWeight: FontWeight.w900))),
-                DataCell(Text(inv.methodName ?? '-', style: TextStyle(color: isDark ? Colors.white70 : Colors.black87))),
-                DataCell(Text(inv.notes ?? '-', style: TextStyle(color: isDark ? Colors.white70 : Colors.black87), overflow: TextOverflow.ellipsis)),
+                DataCell(Text(inv.methodName ?? '-')),
+                DataCell(Text(inv.notes ?? '-', overflow: TextOverflow.ellipsis)),
               ])).toList(),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTableFilters(bool isDark) {
+    return Row(
+      children: [
+        // Date Range Filter
+        InkWell(
+          onTap: () async {
+            final picked = await showDateRangePicker(
+              context: context,
+              firstDate: DateTime(2023),
+              lastDate: DateTime.now(),
+              initialDateRange: DateTimeRange(start: _startDate!, end: _endDate!),
+            );
+            if (picked != null) {
+              setState(() {
+                _startDate = picked.start;
+                _endDate = picked.end;
+              });
+              _loadData();
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E293B) : Colors.blue[50],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.calendar_month, size: 18, color: Colors.blue),
+                const SizedBox(width: 8),
+                Text(
+                  "${DateFormat('MM/dd').format(_startDate!)} - ${DateFormat('MM/dd').format(_endDate!)}",
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        // Payment Method Filter
+        Container(
+          width: 150,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E293B) : Colors.grey[100],
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<PaymentMethod?>(
+              value: _filterPaymentMethod,
+              hint: const Text('كل الطرق', style: TextStyle(fontSize: 12)),
+              isExpanded: true,
+              items: [
+                const DropdownMenuItem(value: null, child: Text('كل الطرق', style: TextStyle(fontSize: 12))),
+                ..._paymentMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name, style: const TextStyle(fontSize: 12)))),
+              ],
+              onChanged: (v) {
+                setState(() => _filterPaymentMethod = v);
+                _loadData();
+              },
             ),
           ),
         ),
