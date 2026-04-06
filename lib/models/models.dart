@@ -133,6 +133,7 @@ class Invoice {
   final double amount;
   final int? paymentMethodId;
   final String paymentStatus; // PAID, UNPAID
+  final String type; // SALE, WITHDRAWAL
   final String? notes;
   final String createdAt;
   final String? updatedAt;
@@ -150,6 +151,7 @@ class Invoice {
     required this.amount,
     this.paymentMethodId,
     required this.paymentStatus,
+    this.type = 'SALE',
     this.notes,
     required this.createdAt,
     this.updatedAt,
@@ -167,6 +169,7 @@ class Invoice {
       'amount': amount,
       'payment_method_id': paymentMethodId,
       'payment_status': paymentStatus,
+      'type': type,
       'notes': notes,
       'created_at': createdAt,
       'updated_at': updatedAt,
@@ -182,6 +185,7 @@ class Invoice {
       amount: map['amount']?.toDouble() ?? 0.0,
       paymentMethodId: map['payment_method_id'],
       paymentStatus: map['payment_status'] ?? 'UNPAID',
+      type: map['type'] ?? 'SALE',
       notes: map['notes'],
       createdAt: map['created_at'] ?? '',
       updatedAt: map['updated_at'],

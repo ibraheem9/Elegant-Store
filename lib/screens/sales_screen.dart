@@ -50,6 +50,10 @@ class _SalesScreenState extends State<SalesScreen> {
   @override
   void dispose() {
     _hideOverlay();
+    _amountController.dispose();
+    _notesController.dispose();
+    _customerSearchController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -72,6 +76,8 @@ class _SalesScreenState extends State<SalesScreen> {
         _paymentMethods = methods;
         _invoices = invoices;
         _todayStats = stats;
+        
+        // Default selection based on sort order if nothing selected
         if (methods.isNotEmpty && _selectedPaymentMethod == null) {
           _selectedPaymentMethod = methods.first;
         }
@@ -219,6 +225,23 @@ class _SalesScreenState extends State<SalesScreen> {
       _selectedCustomer = customer;
       _customerSearchController.text = customer.name;
       _phoneController.text = customer.phone ?? '';
+      
+      // تلقائياً اختر طريقة الدفع بناءً على نوع الزبون
+      if (customer.isPermanentCustomer == 1) {
+        // للزبائن الدائمين: ابحث عن طريقة دفع من نوع deferred (آجل)
+        try {
+          _selectedPaymentMethod = _paymentMethods.firstWhere((m) => m.type == 'deferred');
+        } catch (_) {
+          // إذا لم توجد، ابقِ على الحالي
+        }
+      } else {
+        // للزبائن غير الدائمين: ابحث عن طريقة دفع من نوع unpaid (غير مدفوع)
+        try {
+          _selectedPaymentMethod = _paymentMethods.firstWhere((m) => m.type == 'unpaid');
+        } catch (_) {
+          // إذا لم توجد، حاول البحث عن 'cash' كخيار بديل أو ابقِ على الحالي
+        }
+      }
     });
   }
 
@@ -251,22 +274,24 @@ class _SalesScreenState extends State<SalesScreen> {
         customer = (await db.getCustomers()).firstWhere((c) => c.id == id);
       }
 
+      // تحديد حالة الدفع بناءً على نوع الزبون وطريقة الدفع
+      String status = 'PAID';
+      if (_selectedPaymentMethod!.type == 'deferred' || _selectedPaymentMethod!.type == 'unpaid') {
+        status = (customer.isPermanentCustomer == 1) ? 'DEFERRED' : 'UNPAID';
+      }
+
       final invoice = Invoice(
         userId: customer.id!,
         invoiceDate: DateFormat('dd-MM-yyyy EEEE', 'ar').format(DateTime.now()),
         amount: amount,
-        paymentStatus: (_selectedPaymentMethod!.type == 'deferred' || _selectedPaymentMethod!.type == 'unpaid') ? 'UNPAID' : 'PAID',
+        paymentStatus: status,
         paymentMethodId: _selectedPaymentMethod?.id,
         createdAt: DateTime.now().toIso8601String(),
         notes: _notesController.text,
       );
 
       await db.insertInvoice(invoice);
-      _amountController.clear();
-      _notesController.clear();
-      _customerSearchController.clear();
-      _phoneController.clear();
-      _selectedCustomer = null;
+      _clearFields();
       await _loadData();
       _showSnackBar('تم تسجيل الفاتورة بنجاح', Colors.green);
     } catch (e) {
@@ -274,6 +299,56 @@ class _SalesScreenState extends State<SalesScreen> {
     } finally {
       setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _handleCashWithdrawal() async {
+    if (_amountController.text.isEmpty) {
+      _showSnackBar('يرجى إدخال المبلغ المسحوب', Colors.redAccent);
+      return;
+    }
+    
+    final amount = double.tryParse(_amountController.text) ?? 0;
+    final db = context.read<DatabaseService>();
+    setState(() => _isLoading = true);
+
+    try {
+      User customer;
+      if (_selectedCustomer != null) {
+        customer = _selectedCustomer!;
+      } else {
+        final id = await db.insertUser(User(
+          username: 'cust_${DateTime.now().millisecondsSinceEpoch}',
+          name: _customerSearchController.text.trim().isEmpty ? 'زبون عابر' : _customerSearchController.text.trim(),
+          phone: _phoneController.text,
+          role: 'customer',
+          createdAt: DateTime.now().toIso8601String(),
+        ), '123');
+        customer = (await db.getCustomers()).firstWhere((c) => c.id == id);
+      }
+
+      await db.recordCashWithdrawal(
+        customer: customer,
+        amount: amount,
+        notes: _notesController.text,
+        paymentMethodId: _selectedPaymentMethod?.id,
+      );
+
+      _clearFields();
+      await _loadData();
+      _showSnackBar('تم تسجيل عملية السحب النقدي كدين على المشتري', Colors.orange);
+    } catch (e) {
+      _showSnackBar('خطأ أثناء الحفظ: $e', Colors.red);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _clearFields() {
+    _amountController.clear();
+    _notesController.clear();
+    _customerSearchController.clear();
+    _phoneController.clear();
+    _selectedCustomer = null;
   }
 
   void _showSnackBar(String msg, Color color) {
@@ -472,14 +547,14 @@ class _SalesScreenState extends State<SalesScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('رقم الجوال (اختياري)', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : const Color(0xFF475569))),
+                    Text('ملاحظات العملية', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : const Color(0xFF475569))),
                     const SizedBox(height: 8),
                     TextField(
-                      controller: _phoneController,
+                      controller: _notesController,
                       style: TextStyle(color: isDark ? Colors.white : Colors.black),
                       decoration: InputDecoration(
-                        hintText: '05X XXX XXXX',
-                        prefixIcon: const Icon(Icons.phone_android, color: Colors.orangeAccent),
+                        hintText: 'مثلاً: دفعة تحت الحساب، سحب نقدي للطوارئ...',
+                        prefixIcon: const Icon(Icons.note_alt, color: Colors.amber),
                         filled: true,
                         fillColor: isDark ? const Color(0xFF071028) : const Color(0xFFF8FAFC),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
@@ -491,15 +566,34 @@ class _SalesScreenState extends State<SalesScreen> {
             ],
           ),
           const SizedBox(height: 32),
-          SizedBox(
-            width: double.infinity,
-            height: 64,
-            child: ElevatedButton.icon(
-              onPressed: _isLoading ? null : _createInvoice,
-              icon: const Icon(Icons.check_circle, color: Colors.white),
-              label: Text(_isLoading ? 'جاري الحفظ...' : 'حفظ الفاتورة وتأكيد العملية', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0B74FF), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-            ),
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: SizedBox(
+                  height: 64,
+                  child: ElevatedButton.icon(
+                    onPressed: _isLoading ? null : _createInvoice,
+                    icon: const Icon(Icons.check_circle, color: Colors.white),
+                    label: Text(_isLoading ? 'جاري الحفظ...' : 'حفظ الفاتورة وتأكيد العملية', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0B74FF), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                flex: 1,
+                child: SizedBox(
+                  height: 64,
+                  child: ElevatedButton.icon(
+                    onPressed: _isLoading ? null : _handleCashWithdrawal,
+                    icon: const Icon(Icons.outbox_rounded, color: Colors.white),
+                    label: const Text('سحب نقدي (دين)', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
