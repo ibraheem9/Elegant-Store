@@ -62,14 +62,13 @@ class _SalesScreenState extends State<SalesScreen> {
     try {
       final db = context.read<DatabaseService>();
       final customers = await db.getCustomers();
-      final methods = await db.getPaymentMethods();
+      final methods = await db.getPaymentMethods(category: 'SALE');
       
-      // Fetch invoices based on date range
       DateTime rangeStart = DateTime(_startDate!.year, _startDate!.month, _startDate!.day);
       DateTime rangeEnd = DateTime(_endDate!.year, _endDate!.month, _endDate!.day, 23, 59, 59);
       
+      final stats = await db.getSalesStats(start: rangeStart, end: rangeEnd);
       final invoices = await db.getInvoices(start: rangeStart, end: rangeEnd);
-      final stats = await db.getSalesStatsToday();
 
       setState(() {
         _allCustomers = customers;
@@ -77,7 +76,6 @@ class _SalesScreenState extends State<SalesScreen> {
         _invoices = invoices;
         _todayStats = stats;
         
-        // Default selection based on sort order if nothing selected
         if (methods.isNotEmpty && _selectedPaymentMethod == null) {
           _selectedPaymentMethod = methods.first;
         }
@@ -226,21 +224,14 @@ class _SalesScreenState extends State<SalesScreen> {
       _customerSearchController.text = customer.name;
       _phoneController.text = customer.phone ?? '';
       
-      // تلقائياً اختر طريقة الدفع بناءً على نوع الزبون
       if (customer.isPermanentCustomer == 1) {
-        // للزبائن الدائمين: ابحث عن طريقة دفع من نوع deferred (آجل)
         try {
           _selectedPaymentMethod = _paymentMethods.firstWhere((m) => m.type == 'deferred');
-        } catch (_) {
-          // إذا لم توجد، ابقِ على الحالي
-        }
+        } catch (_) {}
       } else {
-        // للزبائن غير الدائمين: ابحث عن طريقة دفع من نوع unpaid (غير مدفوع)
         try {
           _selectedPaymentMethod = _paymentMethods.firstWhere((m) => m.type == 'unpaid');
-        } catch (_) {
-          // إذا لم توجد، حاول البحث عن 'cash' كخيار بديل أو ابقِ على الحالي
-        }
+        } catch (_) {}
       }
     });
   }
@@ -257,8 +248,19 @@ class _SalesScreenState extends State<SalesScreen> {
 
     final amount = double.tryParse(_amountController.text) ?? 0;
     final db = context.read<DatabaseService>();
-    setState(() => _isLoading = true);
+    
+    if (_selectedPaymentMethod!.type == 'credit_balance') {
+      if (_selectedCustomer == null) {
+        _showSnackBar('يرجى اختيار زبون مسجل لاستخدام رصيد المحفظة', Colors.orange);
+        return;
+      }
+      if (_selectedCustomer!.balance < amount) {
+        _showSnackBar('رصيد الزبون غير كافٍ. الرصيد الحالي: ${_selectedCustomer!.balance} ₪', Colors.red);
+        return;
+      }
+    }
 
+    setState(() => _isLoading = true);
     try {
       User customer;
       if (_selectedCustomer != null) {
@@ -274,7 +276,6 @@ class _SalesScreenState extends State<SalesScreen> {
         customer = (await db.getCustomers()).firstWhere((c) => c.id == id);
       }
 
-      // تحديد حالة الدفع بناءً على نوع الزبون وطريقة الدفع
       String status = 'PAID';
       if (_selectedPaymentMethod!.type == 'deferred' || _selectedPaymentMethod!.type == 'unpaid') {
         status = (customer.isPermanentCustomer == 1) ? 'DEFERRED' : 'UNPAID';
@@ -343,6 +344,32 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
+  Future<void> _handleAddCredit() async {
+    if (_amountController.text.isEmpty) {
+      _showSnackBar('يرجى إدخال مبلغ الرصيد المضاف', Colors.redAccent);
+      return;
+    }
+    if (_selectedCustomer == null) {
+      _showSnackBar('يرجى اختيار زبون مسجل لإضافة رصيد', Colors.orange);
+      return;
+    }
+    
+    final amount = double.tryParse(_amountController.text) ?? 0;
+    final db = context.read<DatabaseService>();
+    setState(() => _isLoading = true);
+
+    try {
+      await db.addCredit(_selectedCustomer!.id!, amount, _notesController.text);
+      _clearFields();
+      await _loadData();
+      _showSnackBar('تم إضافة الرصيد بنجاح لمحفظة الزبون', Colors.green);
+    } catch (e) {
+      _showSnackBar('خطأ أثناء الحفظ: $e', Colors.red);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
   void _clearFields() {
     _amountController.clear();
     _notesController.clear();
@@ -395,16 +422,32 @@ class _SalesScreenState extends State<SalesScreen> {
             Text('إضافة فاتورة جديدة ومتابعة المبيعات اليومية', style: TextStyle(color: isDark ? Colors.white60 : const Color(0xFF64748B), fontSize: 14)),
           ],
         ),
-        ElevatedButton.icon(
-          onPressed: _loadData,
-          icon: const Icon(Icons.refresh),
-          label: const Text('تحديث البيانات'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white, 
-            foregroundColor: isDark ? const Color(0xFF00E5FF) : Colors.blue,
-            elevation: 0,
-            side: BorderSide(color: isDark ? const Color(0xFF334155) : Colors.blue[100]!)
-          ),
+        Row(
+          children: [
+            ElevatedButton.icon(
+              onPressed: () => _showDeletedInvoicesDialog(isDark),
+              icon: const Icon(Icons.delete_sweep_rounded),
+              label: const Text('سلة المحذوفات'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.red[50], 
+                foregroundColor: Colors.redAccent,
+                elevation: 0,
+                side: BorderSide(color: isDark ? const Color(0xFF334155) : Colors.red[100]!)
+              ),
+            ),
+            const SizedBox(width: 12),
+            ElevatedButton.icon(
+              onPressed: _loadData,
+              icon: const Icon(Icons.refresh),
+              label: const Text('تحديث البيانات'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white, 
+                foregroundColor: isDark ? const Color(0xFF00E5FF) : Colors.blue,
+                elevation: 0,
+                side: BorderSide(color: isDark ? const Color(0xFF334155) : Colors.blue[100]!)
+              ),
+            ),
+          ],
         )
       ],
     );
@@ -569,7 +612,7 @@ class _SalesScreenState extends State<SalesScreen> {
           Row(
             children: [
               Expanded(
-                flex: 2,
+                flex: 3,
                 child: SizedBox(
                   height: 64,
                   child: ElevatedButton.icon(
@@ -580,9 +623,9 @@ class _SalesScreenState extends State<SalesScreen> {
                   ),
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
               Expanded(
-                flex: 1,
+                flex: 2,
                 child: SizedBox(
                   height: 64,
                   child: ElevatedButton.icon(
@@ -590,6 +633,19 @@ class _SalesScreenState extends State<SalesScreen> {
                     icon: const Icon(Icons.outbox_rounded, color: Colors.white),
                     label: const Text('سحب نقدي (دين)', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: SizedBox(
+                  height: 64,
+                  child: ElevatedButton.icon(
+                    onPressed: _isLoading ? null : _handleAddCredit,
+                    icon: const Icon(Icons.add_moderator_rounded, color: Colors.white),
+                    label: const Text('إيداع رصيد', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
                   ),
                 ),
               ),
@@ -630,15 +686,38 @@ class _SalesScreenState extends State<SalesScreen> {
               columns: [
                 DataColumn(label: Text('المشتري', style: const TextStyle(fontWeight: FontWeight.bold)), onSort: _onSort),
                 DataColumn(label: Text('المبلغ', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true, onSort: _onSort),
+                DataColumn(label: Text('النوع', style: const TextStyle(fontWeight: FontWeight.bold))),
                 DataColumn(label: Text('طريقة الدفع', style: const TextStyle(fontWeight: FontWeight.bold)), onSort: _onSort),
-                const DataColumn(label: Text('ملاحظات', style: TextStyle(fontWeight: FontWeight.bold))),
+                const DataColumn(label: Text('إجراءات', style: TextStyle(fontWeight: FontWeight.bold))),
               ],
-              rows: _invoices.map((inv) => DataRow(cells: [
-                DataCell(Text(inv.customerName ?? 'عابر', style: const TextStyle(fontWeight: FontWeight.bold))),
-                DataCell(Text('${inv.amount} ₪', style: const TextStyle(color: Color(0xFF0B74FF), fontWeight: FontWeight.w900))),
-                DataCell(Text(inv.methodName ?? '-')),
-                DataCell(Text(inv.notes ?? '-', overflow: TextOverflow.ellipsis)),
-              ])).toList(),
+              rows: _invoices.map((inv) {
+                Color typeColor = Colors.blue;
+                String typeLabel = 'بيع';
+                if (inv.type == 'WITHDRAWAL') {
+                  typeColor = Colors.orange;
+                  typeLabel = 'سحب نقدي';
+                } else if (inv.type == 'DEPOSIT') {
+                  typeColor = Colors.green;
+                  typeLabel = 'إيداع رصيد';
+                }
+
+                return DataRow(cells: [
+                  DataCell(Text(inv.customerName ?? 'عابر', style: const TextStyle(fontWeight: FontWeight.bold))),
+                  DataCell(Text('${inv.amount} ₪', style: TextStyle(color: typeColor, fontWeight: FontWeight.w900))),
+                  DataCell(Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(color: typeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                    child: Text(typeLabel, style: TextStyle(color: typeColor, fontSize: 12, fontWeight: FontWeight.bold)),
+                  )),
+                  DataCell(Text(inv.methodName ?? '-')),
+                  DataCell(Row(
+                    children: [
+                      IconButton(icon: const Icon(Icons.edit_note, color: Colors.blue), onPressed: () => _showEditInvoiceDialog(inv)),
+                      IconButton(icon: const Icon(Icons.delete_outline, color: Colors.redAccent), onPressed: () => _confirmSoftDelete(inv)),
+                    ],
+                  )),
+                ]);
+              }).toList(),
             ),
           ),
         ),
@@ -646,10 +725,197 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
+  void _confirmSoftDelete(Invoice inv) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('حذف الفاتورة'),
+        content: const Text('هل أنت متأكد من نقل هذه الفاتورة إلى سلة المحذوفات؟ سيتم عكس تأثيرها على رصيد الزبون تلقائياً.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await context.read<DatabaseService>().softDeleteInvoice(inv);
+              _loadData();
+              _showSnackBar('تم نقل الفاتورة للمحذوفات وعكس تأثير الرصيد', Colors.orange);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('نقل للمحذوفات'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeletedInvoicesDialog(bool isDark) async {
+    final db = context.read<DatabaseService>();
+    final deletedInvoices = await db.getInvoices(deleted: true);
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => Dialog(
+          backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Container(
+            width: 800,
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('سلة المحذوفات (الفواتير)', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                    IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                if (deletedInvoices.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Text('السلة فارغة'),
+                  )
+                else
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: deletedInvoices.length,
+                      separatorBuilder: (context, index) => const Divider(),
+                      itemBuilder: (context, index) {
+                        final inv = deletedInvoices[index];
+                        return ListTile(
+                          title: Text(inv.customerName ?? 'زبون عابر', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text('${inv.amount} ₪ - ${inv.invoiceDate}\nملاحظات: ${inv.notes ?? '-'}'),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              TextButton.icon(
+                                icon: const Icon(Icons.restore_page_rounded, color: Colors.green),
+                                label: const Text('استعادة', style: TextStyle(color: Colors.green)),
+                                onPressed: () async {
+                                  await db.restoreInvoice(inv);
+                                  Navigator.pop(context);
+                                  _loadData();
+                                  _showSnackBar('تم استعادة الفاتورة وإعادة احتساب الرصيد', Colors.green);
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                icon: const Icon(Icons.delete_forever, color: Colors.red),
+                                onPressed: () async {
+                                  final confirm = await showDialog<bool>(
+                                    context: context,
+                                    builder: (context) => AlertDialog(
+                                      title: const Text('حذف نهائي'),
+                                      content: const Text('تحذير: الحذف النهائي لا يمكن التراجع عنه. هل أنت متأكد؟'),
+                                      actions: [
+                                        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+                                        TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('حذف للأبد')),
+                                      ],
+                                    ),
+                                  );
+                                  if (confirm == true) {
+                                    await db.permanentDeleteInvoice(inv.id!);
+                                    Navigator.pop(context);
+                                    _loadData();
+                                    _showSnackBar('تم حذف الفاتورة نهائياً من النظام', Colors.red);
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showEditInvoiceDialog(Invoice inv) {
+    final amountController = TextEditingController(text: inv.amount.toString());
+    final notesController = TextEditingController(text: inv.notes);
+    PaymentMethod? selectedMethod;
+    try {
+      selectedMethod = _paymentMethods.firstWhere((m) => m.id == inv.paymentMethodId);
+    } catch (_) {}
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('تعديل فاتورة: ${inv.customerName}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: amountController,
+                decoration: const InputDecoration(labelText: 'المبلغ الجديد'),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<PaymentMethod>(
+                value: selectedMethod,
+                items: _paymentMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name))).toList(),
+                onChanged: (v) => setDialogState(() => selectedMethod = v),
+                decoration: const InputDecoration(labelText: 'طريقة الدفع'),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: notesController,
+                decoration: const InputDecoration(labelText: 'ملاحظات التعديل'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+            ElevatedButton(
+              onPressed: () async {
+                final db = context.read<DatabaseService>();
+                // أولاً: حذف (عكس أثر) الفاتورة القديمة مؤقتاً
+                await db.softDeleteInvoice(inv);
+                
+                // ثانياً: إنشاء فاتورة محدثة
+                final updatedInv = Invoice(
+                  id: inv.id, // استخدام نفس المعرف
+                  userId: inv.userId,
+                  invoiceDate: inv.invoiceDate,
+                  amount: double.tryParse(amountController.text) ?? inv.amount,
+                  paymentMethodId: selectedMethod?.id,
+                  paymentStatus: inv.paymentStatus,
+                  type: inv.type,
+                  notes: notesController.text,
+                  createdAt: inv.createdAt,
+                  updatedAt: DateTime.now().toIso8601String(),
+                );
+                
+                // ثالثاً: استعادة الفاتورة بالقيم الجديدة
+                await db.restoreInvoice(updatedInv); // هذه الدالة ستقوم بتحديث الرصيد بالقيم الجديدة
+                await db.updateInvoice(updatedInv);
+                
+                Navigator.pop(context);
+                _loadData();
+                _showSnackBar('تم تحديث بيانات الفاتورة وإعادة ضبط الأرصدة', Colors.blue);
+              },
+              child: const Text('حفظ التغييرات'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildTableFilters(bool isDark) {
     return Row(
       children: [
-        // Date Range Filter
         InkWell(
           onTap: () async {
             final picked = await showDateRangePicker(
@@ -685,7 +951,6 @@ class _SalesScreenState extends State<SalesScreen> {
           ),
         ),
         const SizedBox(width: 12),
-        // Payment Method Filter
         Container(
           width: 150,
           padding: const EdgeInsets.symmetric(horizontal: 12),

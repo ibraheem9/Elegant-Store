@@ -16,7 +16,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   DateTime? _startDate;
   DateTime? _endDate;
   List<Invoice> _pendingInvoices = [];
-  List<PaymentMethod> _allMethods = [];
+  List<PaymentMethod> _saleMethods = [];
   bool _isLoading = false;
 
   @override
@@ -32,24 +32,17 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     setState(() => _isLoading = true);
     final db = context.read<DatabaseService>();
 
-    // جلب جميع طرق الدفع بدون تصفية
-    final methods = await db.getPaymentMethods();
+    // جلب طرق دفع المبيعات فقط (category = 'SALE') لمنع التكرار مع المشتريات
+    final methods = await db.getPaymentMethods(category: 'SALE');
 
     // جلب الفواتير في النطاق الزمني
     final allInvoices = await db.getInvoices(start: _startDate, end: _endDate);
 
     setState(() {
-      _allMethods = methods;
+      _saleMethods = methods;
 
       // عرض الفواتير التي تحتاج مراجعة أو تسوية
-      // تشمل الفواتير "غير المدفوعة" أو التي لها وسيلة دفع تحتاج تأكيد
-      _pendingInvoices = allInvoices.where((inv) =>
-        inv.paymentStatus == 'pending' || 
-        inv.paymentStatus == 'UNPAID' ||
-        inv.paymentMethodId == null ||
-        // أو إظهار الجميع لمنح إمكانية تعديل طريقة الدفع كما طلب المستخدم
-        true 
-      ).toList();
+      _pendingInvoices = allInvoices;
 
       _isLoading = false;
     });
@@ -66,10 +59,17 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     // الاحتفاظ بالملاحظات القديمة وإضافة سجل التعديل
     String currentNotes = inv.notes ?? "";
     if (currentNotes.contains("[تمت التسوية:")) {
-      // إذا كانت مسواة سابقاً، نستبدل السجل القديم بالجديد أو نضيفه
       currentNotes = currentNotes.split("[تمت التسوية:").first.trim();
     }
     String updatedNotes = currentNotes + editLog;
+
+    // منطق التسوية:
+    // 1. إذا كانت الفاتورة أصلاً SALE، نحول الحالة لـ PAID (إلا لو كانت الطريقة المختارة أجلة)
+    // 2. إذا كانت WITHDRAWAL أو DEPOSIT، تبقى كما هي (لا تتحول لـ SALE) وتحدث الطريقة فقط
+    String newStatus = 'PAID';
+    if (selectedMethod.type == 'deferred' || selectedMethod.type == 'unpaid') {
+      newStatus = 'UNPAID';
+    }
 
     final updatedInvoice = Invoice(
       id: inv.id,
@@ -77,8 +77,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
       invoiceDate: inv.invoiceDate,
       amount: inv.amount,
       notes: updatedNotes,
-      paymentStatus: (selectedMethod.type == 'deferred' || selectedMethod.type == 'unpaid') ? 'UNPAID' : 'paid',
+      paymentStatus: newStatus,
       paymentMethodId: selectedMethod.id,
+      type: inv.type, // الحفاظ على النوع الأصلي (SALE, WITHDRAWAL, DEPOSIT)
       createdAt: inv.createdAt,
       updatedAt: DateTime.now().toIso8601String(),
     );
@@ -98,7 +99,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تم حفظ تسوية الفاتورة (الطريقة: ${selectedMethod.name})'), backgroundColor: Colors.blue)
+        SnackBar(content: Text('تم حفظ تسوية العملية بنجاح'), backgroundColor: Colors.blue)
       );
     }
   }
@@ -122,7 +123,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                   children: [
                     Text('تسوية ومعالجة المدفوعات', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A))),
                     const SizedBox(height: 4),
-                    Text('تأكيد وتعديل طرق دفع الفواتير', style: TextStyle(color: isDark ? Colors.white70 : Colors.grey[600])),
+                    Text('تأكيد وتعديل طرق دفع العمليات المختلفة', style: TextStyle(color: isDark ? Colors.white70 : Colors.grey[600])),
                   ],
                 ),
                 _buildDateFilter(isDark),
@@ -185,7 +186,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
           children: [
             Icon(Icons.inbox_rounded, size: 64, color: isDark ? Colors.white10 : Colors.grey[200]),
             const SizedBox(height: 16),
-            const Text('لا توجد فواتير في هذه الفترة', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey)),
+            const Text('لا توجد عمليات في هذه الفترة', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey)),
           ],
         ),
       );
@@ -206,11 +207,21 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     // محاولة تحديد القيمة الحالية للفاتورة في القائمة المنسدلة
     try {
       if (inv.paymentMethodId != null) {
-        localSelectedMethod = _allMethods.firstWhere((m) => m.id == inv.paymentMethodId);
+        localSelectedMethod = _saleMethods.firstWhere((m) => m.id == inv.paymentMethodId);
       } else if (inv.methodName != null) {
-        localSelectedMethod = _allMethods.firstWhere((m) => m.name == inv.methodName);
+        localSelectedMethod = _saleMethods.firstWhere((m) => m.name == inv.methodName);
       }
     } catch (_) {}
+
+    Color typeColor = Colors.blue;
+    String typeLabel = 'بيع';
+    if (inv.type == 'WITHDRAWAL') {
+      typeColor = Colors.orange;
+      typeLabel = 'سحب نقدي';
+    } else if (inv.type == 'DEPOSIT') {
+      typeColor = Colors.green;
+      typeLabel = 'إيداع رصيد';
+    }
 
     return StatefulBuilder(
       builder: (context, setState) => Container(
@@ -234,6 +245,12 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                       Text(inv.customerName ?? 'زبون عابر', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black)),
                       const SizedBox(width: 12),
                       _buildStatusBadge(inv.paymentStatus),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(color: typeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+                        child: Text(typeLabel, style: TextStyle(color: typeColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -251,7 +268,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
             ),
             Expanded(
               flex: 1,
-              child: Text('${inv.amount} ₪', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Color(0xFF0B74FF))),
+              child: Text('${inv.amount} ₪', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: typeColor)),
             ),
             Expanded(
               flex: 2,
@@ -266,7 +283,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                   border: const OutlineInputBorder(),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
                 ),
-                items: _allMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name, overflow: TextOverflow.ellipsis))).toList(),
+                items: _saleMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name, overflow: TextOverflow.ellipsis))).toList(),
                 onChanged: (val) => setState(() => localSelectedMethod = val),
               ),
             ),
