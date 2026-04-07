@@ -15,6 +15,8 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
   final _nameController = TextEditingController();
   final _descController = TextEditingController();
   String _selectedType = 'cash';
+  bool _isLoading = true;
+  List<PaymentMethod> _methods = [];
 
   final List<Map<String, String>> _types = [
     {'value': 'cash', 'label': 'كاش (نقدي)'},
@@ -22,15 +24,36 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _refreshMethods();
+  }
+
+  Future<void> _refreshMethods() async {
+    setState(() => _isLoading = true);
+    try {
+      final db = context.read<DatabaseService>();
+      final m = await db.getPaymentMethods(category: 'PURCHASE');
+      setState(() {
+        _methods = m;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final db = context.read<DatabaseService>();
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showMethodDialog(),
-        label: const Text('إضافة وسيلة دفع للمشتريات'),
-        icon: const Icon(Icons.add_business_rounded),
+        label: const Text('إضافة وسيلة دفع للمشتريات', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        icon: const Icon(Icons.add_business_rounded, color: Colors.white),
         backgroundColor: Colors.orange[800],
       ),
       body: Padding(
@@ -38,47 +61,34 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'طرق دفع المشتريات',
-              style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Color(0xFF0F172A)),
+              style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A)),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'إدارة الوسائل المستخدمة لدفع مستحقات الموردين والمصروفات العامة',
-              style: TextStyle(fontSize: 16, color: Color(0xFF64748B)),
+              style: TextStyle(fontSize: 16, color: isDark ? Colors.white60 : const Color(0xFF64748B)),
             ),
             const SizedBox(height: 32),
             Expanded(
-              child: FutureBuilder<List<PaymentMethod>>(
-                future: db.getPaymentMethods(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  
-                  // For purchases, we typically only use 'cash' and 'app' types
-                  final allMethods = snapshot.data ?? [];
-                  final purchaseMethods = allMethods.where((m) => m.type == 'cash' || m.type == 'app').toList();
-
-                  if (purchaseMethods.isEmpty) {
-                    return const Center(child: Text('لا يوجد طرق دفع مشتريات مسجلة'));
-                  }
-
-                  return GridView.builder(
-                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 400,
-                      mainAxisExtent: 180,
-                      crossAxisSpacing: 20,
-                      mainAxisSpacing: 20,
+              child: _isLoading 
+                ? const Center(child: CircularProgressIndicator())
+                : _methods.isEmpty 
+                  ? Center(child: Text('لا يوجد طرق دفع مشتريات مسجلة', style: TextStyle(color: isDark ? Colors.white30 : Colors.grey)))
+                  : GridView.builder(
+                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 400,
+                        mainAxisExtent: 180,
+                        crossAxisSpacing: 20,
+                        mainAxisSpacing: 20,
+                      ),
+                      itemCount: _methods.length,
+                      itemBuilder: (context, index) {
+                        final method = _methods[index];
+                        return _buildMethodCard(method, isDark);
+                      },
                     ),
-                    itemCount: purchaseMethods.length,
-                    itemBuilder: (context, index) {
-                      final method = purchaseMethods[index];
-                      return _buildMethodCard(method);
-                    },
-                  );
-                },
-              ),
             ),
           ],
         ),
@@ -86,7 +96,7 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
     );
   }
 
-  Widget _buildMethodCard(PaymentMethod method) {
+  Widget _buildMethodCard(PaymentMethod method, bool isDark) {
     IconData icon;
     Color color;
 
@@ -101,9 +111,9 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? const Color(0xFF0F172A) : Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
       ),
       child: Column(
@@ -121,7 +131,7 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
               ),
               const Spacer(),
               IconButton(
-                icon: const Icon(Icons.edit_outlined, size: 20, color: Color(0xFF64748B)),
+                icon: Icon(Icons.edit_outlined, size: 20, color: isDark ? Colors.white60 : const Color(0xFF64748B)),
                 onPressed: () => _showMethodDialog(method: method),
               ),
               IconButton(
@@ -133,7 +143,7 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
           const Spacer(),
           Text(
             method.name,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : const Color(0xFF0F172A)),
           ),
           const SizedBox(height: 4),
           Text(
@@ -144,7 +154,7 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
             const SizedBox(height: 4),
             Text(
               method.description!,
-              style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+              style: TextStyle(fontSize: 12, color: isDark ? Colors.white30 : const Color(0xFF94A3B8)),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -167,93 +177,115 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text(method == null ? 'إضافة وسيلة دفع للمشتريات' : 'تعديل وسيلة الدفع'),
-          content: SizedBox(
-            width: 400,
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(labelText: 'اسم الوسيلة (مثلاً: كاش، تطبيق إبراهيم، ...)'),
-                    validator: (v) => v == null || v.isEmpty ? 'مطلوب' : null,
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    value: _selectedType,
-                    decoration: const InputDecoration(labelText: 'نوع الوسيلة'),
-                    items: _types.map((t) => DropdownMenuItem(value: t['value'], child: Text(t['label']!))).toList(),
-                    onChanged: (v) => setDialogState(() => _selectedType = v!),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _descController,
-                    decoration: const InputDecoration(labelText: 'ملاحظات'),
-                  ),
-                ],
+      builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: isDark ? const Color(0xFF1E293B) : Colors.transparent)),
+            title: Text(method == null ? 'إضافة وسيلة دفع للمشتريات' : 'تعديل وسيلة الدفع', style: TextStyle(color: isDark ? Colors.white : Colors.black)),
+            content: SizedBox(
+              width: 400,
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: _nameController,
+                      style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                      decoration: InputDecoration(
+                        labelText: 'اسم الوسيلة (مثلاً: كاش، تطبيق إبراهيم، ...)',
+                        labelStyle: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
+                      ),
+                      validator: (v) => v == null || v.isEmpty ? 'مطلوب' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: _selectedType,
+                      dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                      style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                      decoration: InputDecoration(
+                        labelText: 'نوع الوسيلة',
+                        labelStyle: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
+                      ),
+                      items: _types.map((t) => DropdownMenuItem(value: t['value'], child: Text(t['label']!))).toList(),
+                      onChanged: (v) => setDialogState(() => _selectedType = v!),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _descController,
+                      style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                      decoration: InputDecoration(
+                        labelText: 'ملاحظات',
+                        labelStyle: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-            ElevatedButton(
-              onPressed: () async {
-                if (_formKey.currentState!.validate()) {
-                  final db = context.read<DatabaseService>();
-                  final newMethod = PaymentMethod(
-                    id: method?.id,
-                    name: _nameController.text,
-                    type: _selectedType,
-                    description: _descController.text,
-                    isActive: method?.isActive ?? 1,
-                  );
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: Text('إلغاء', style: TextStyle(color: isDark ? Colors.white60 : Colors.black54))),
+              ElevatedButton(
+                onPressed: () async {
+                  if (_formKey.currentState!.validate()) {
+                    final db = context.read<DatabaseService>();
+                    final newMethod = PaymentMethod(
+                      id: method?.id,
+                      name: _nameController.text,
+                      type: _selectedType,
+                      category: 'PURCHASE',
+                      description: _descController.text,
+                      isActive: method?.isActive ?? 1,
+                    );
 
-                  if (method == null) {
-                    await db.insertPaymentMethod(newMethod);
-                  } else {
-                    await db.updatePaymentMethod(newMethod);
+                    if (method == null) {
+                      await db.insertPaymentMethod(newMethod);
+                    } else {
+                      await db.updatePaymentMethod(newMethod);
+                    }
+                    
+                    if (mounted) {
+                      Navigator.pop(context);
+                      _refreshMethods();
+                    }
                   }
-                  
-                  if (mounted) {
-                    Navigator.pop(context);
-                    setState(() {});
-                  }
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], foregroundColor: Colors.white),
-              child: const Text('حفظ'),
-            ),
-          ],
-        ),
-      ),
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], foregroundColor: Colors.white),
+                child: const Text('حفظ'),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
   void _confirmDelete(PaymentMethod method) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('تأكيد الحذف'),
-        content: Text('هل أنت متأكد من حذف "${method.name}"؟'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-          TextButton(
-            onPressed: () async {
-              await context.read<DatabaseService>().deletePaymentMethod(method.id!);
-              if (mounted) {
-                Navigator.pop(context);
-                setState(() {});
-              }
-            },
-            child: const Text('حذف', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+      builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return AlertDialog(
+          backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+          title: Text('تأكيد الحذف', style: TextStyle(color: isDark ? Colors.white : Colors.black)),
+          content: Text('هل أنت متأكد من حذف "${method.name}"؟', style: TextStyle(color: isDark ? Colors.white70 : Colors.black87)),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: Text('إلغاء', style: TextStyle(color: isDark ? Colors.white60 : Colors.black54))),
+            TextButton(
+              onPressed: () async {
+                await context.read<DatabaseService>().deletePaymentMethod(method.id!);
+                if (mounted) {
+                  Navigator.pop(context);
+                  _refreshMethods();
+                }
+              },
+              child: const Text('حذف', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
     );
   }
 }

@@ -24,6 +24,7 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
     {'value': 'app', 'label': 'تطبيق إلكتروني'},
     {'value': 'deferred', 'label': 'أجل (دين)'},
     {'value': 'credit_balance', 'label': 'رصيد المحفظة'},
+    {'value': 'unpaid', 'label': 'غير مدفوع'},
   ];
 
   @override
@@ -36,7 +37,7 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
     setState(() => _isLoading = true);
     try {
       final db = context.read<DatabaseService>();
-      final m = await db.getPaymentMethods();
+      final m = await db.getPaymentMethods(category: 'SALE');
       setState(() {
         _methods = m;
         _isLoading = false;
@@ -67,7 +68,7 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
             FloatingActionButton.extended(
               heroTag: 'addBtn',
               onPressed: () => _showMethodDialog(),
-              label: const Text('إضافة طريقة دفع', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+              label: const Text('إضافة طريقة دفع مبيعات', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
               icon: const Icon(Icons.add_rounded, color: Colors.white),
               backgroundColor: const Color(0xFF0B74FF),
             ),
@@ -95,7 +96,7 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
             Row(
               children: [
                 Text(
-                  'إدارة طرق الدفع',
+                  'طرق دفع المبيعات',
                   style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A)),
                 ),
                 const Spacer(),
@@ -108,7 +109,7 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'يمكنك إضافة أو تعديل طرق الدفع المتاحة عند تسجيل الفواتير وترتيبها لتظهر في شاشة البيع بالشكل المطلوب',
+              'إدارة طرق الدفع المتاحة للزبائن عند تسجيل عمليات البيع وترتيب ظهورها في شاشة البيع',
               style: TextStyle(fontSize: 16, color: isDark ? Colors.white60 : const Color(0xFF64748B)),
             ),
             const SizedBox(height: 32),
@@ -125,7 +126,7 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
 
   Widget _buildMethodsGrid(bool isDark) {
     if (_methods.isEmpty) {
-      return Center(child: Text('لا يوجد طرق دفع مسجلة', style: TextStyle(color: isDark ? Colors.white30 : Colors.grey)));
+      return Center(child: Text('لا يوجد طرق دفع مبيعات مسجلة', style: TextStyle(color: isDark ? Colors.white30 : Colors.grey)));
     }
 
     return GridView.builder(
@@ -164,7 +165,7 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
               child: ListTile(
                 leading: const Icon(Icons.drag_indicator_rounded, color: Colors.grey),
                 title: Text(method.name, style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
-                subtitle: Text(_types.firstWhere((t) => t['value'] == method.type)['label'] ?? method.type, style: const TextStyle(color: Colors.blue)),
+                subtitle: Text(_types.firstWhere((t) => t['value'] == method.type, orElse: () => {'label': method.type})['label'] ?? method.type, style: const TextStyle(color: Colors.blue)),
                 trailing: const Icon(Icons.reorder_rounded, color: Colors.grey),
               ),
             ),
@@ -182,6 +183,7 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
       case 'app': icon = Icons.smartphone_rounded; color = const Color(0xFF0B74FF); break;
       case 'deferred': icon = Icons.timer_outlined; color = Colors.orange; break;
       case 'credit_balance': icon = Icons.account_balance_wallet_rounded; color = Colors.purple; break;
+      case 'unpaid': icon = Icons.warning_amber_rounded; color = Colors.redAccent; break;
       default: icon = Icons.payment_rounded; color = Colors.grey;
     }
 
@@ -216,7 +218,7 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            _types.firstWhere((t) => t['value'] == method.type)['label'] ?? method.type,
+            _types.firstWhere((t) => t['value'] == method.type, orElse: () => {'label': method.type})['label'] ?? method.type,
             style: TextStyle(fontSize: 13, color: color, fontWeight: FontWeight.bold),
           ),
           if (method.description != null && method.description!.isNotEmpty) ...[
@@ -265,7 +267,7 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
             backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24), side: BorderSide(color: isDark ? const Color(0xFF1E293B) : Colors.transparent)),
             title: Text(
-              method == null ? 'إضافة طريقة دفع جديدة' : 'تعديل طريقة الدفع',
+              method == null ? 'إضافة طريقة دفع مبيعات' : 'تعديل طريقة الدفع',
               style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black),
             ),
             content: SizedBox(
@@ -319,6 +321,7 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                         id: method?.id,
                         name: _nameController.text.trim(),
                         type: _selectedType,
+                        category: 'SALE',
                         description: _descController.text.trim(),
                         isActive: method?.isActive ?? 1,
                         sortOrder: method?.sortOrder ?? 0,

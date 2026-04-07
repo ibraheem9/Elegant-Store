@@ -78,6 +78,7 @@ class PaymentMethod {
   final int? id;
   final String name;
   final String type; // cash, app, deferred, credit_balance, unpaid
+  final String category; // SALE, PURCHASE
   final String? description;
   final int isActive;
   final int sortOrder;
@@ -86,6 +87,7 @@ class PaymentMethod {
     this.id,
     required this.name,
     required this.type,
+    this.category = 'SALE',
     this.description,
     this.isActive = 1,
     this.sortOrder = 0,
@@ -96,6 +98,7 @@ class PaymentMethod {
       'id': id,
       'name': name,
       'type': type,
+      'category': category,
       'description': description,
       'is_active': isActive,
       'sort_order': sortOrder,
@@ -107,6 +110,7 @@ class PaymentMethod {
       id: map['id'],
       name: map['name'] ?? '',
       type: map['type'] ?? '',
+      category: map['category'] ?? 'SALE',
       description: map['description'],
       isActive: map['is_active'] ?? 1,
       sortOrder: map['sort_order'] ?? 0,
@@ -118,6 +122,7 @@ class PaymentMethod {
       id: id,
       name: name,
       type: type,
+      category: category,
       description: description,
       isActive: isActive,
       sortOrder: sortOrder ?? this.sortOrder,
@@ -132,7 +137,7 @@ class Invoice {
   final String invoiceDate;
   final double amount;
   final int? paymentMethodId;
-  final String paymentStatus; // PAID, UNPAID
+  final String paymentStatus; // PAID, UNPAID, DEFERRED
   final String type; // SALE, WITHDRAWAL
   final String? notes;
   final String createdAt;
@@ -250,6 +255,9 @@ class Purchase {
   final String? updatedAt;
   final String? deletedAt;
 
+  // Virtual field
+  final String? methodName;
+
   Purchase({
     this.id,
     required this.merchantName,
@@ -260,6 +268,7 @@ class Purchase {
     required this.createdAt,
     this.updatedAt,
     this.deletedAt,
+    this.methodName,
   });
 
   Map<String, dynamic> toMap() {
@@ -287,6 +296,7 @@ class Purchase {
       createdAt: map['created_at'] ?? '',
       updatedAt: map['updated_at'],
       deletedAt: map['deleted_at'],
+      methodName: map['method_name'],
     );
   }
 }
