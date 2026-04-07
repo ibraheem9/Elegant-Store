@@ -19,6 +19,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   List<PaymentMethod> _purchaseMethods = [];
   PaymentMethod? _selectedMethod;
   Map<int, List<Purchase>> _groupedPurchases = {};
+  double _totalPurchases = 0.0;
   bool _isLoading = false;
   bool _isInitialLoading = true;
 
@@ -32,17 +33,23 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     if (!mounted) return;
     final db = context.read<DatabaseService>();
     try {
-      // جلب طرق الدفع الخاصة بالمشتريات فقط
       final methods = await db.getPaymentMethods(category: 'PURCHASE');
       
       Map<int, List<Purchase>> grouped = {};
+      double total = 0.0;
+      
       for (var m in methods) {
-        grouped[m.id!] = await db.getPurchasesByMethod(m.id!);
+        final purchases = await db.getPurchasesByMethod(m.id!);
+        grouped[m.id!] = purchases;
+        for (var p in purchases) {
+          total += p.amount;
+        }
       }
 
       setState(() {
         _purchaseMethods = methods;
         _groupedPurchases = grouped;
+        _totalPurchases = total;
 
         if (_purchaseMethods.isNotEmpty && _selectedMethod == null) {
           _selectedMethod = _purchaseMethods.first;
@@ -118,32 +125,67 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       backgroundColor: isDark ? Colors.transparent : const Color(0xFFF1F5F9),
       body: _isInitialLoading 
         ? const Center(child: CircularProgressIndicator())
-        : SingleChildScrollView(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('إدارة المشتريات', 
-                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A))),
-                const SizedBox(height: 32),
-                _buildPurchaseForm(theme, isDark),
-                const SizedBox(height: 48),
-                if (_purchaseMethods.isEmpty)
-                  _buildEmptyState(isDark)
-                else
-                  ..._purchaseMethods.map((method) {
-                    final items = _groupedPurchases[method.id] ?? [];
-                    Color color = method.type == 'cash' ? Colors.green : Colors.blue;
-                    if (method.name.contains('حمودة')) color = Colors.orange;
-                    
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 32),
-                      child: _buildSection('مشتريات ${method.name}', items, color, isDark),
-                    );
-                  }).toList(),
-              ],
-            ),
+        : Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(32),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('إدارة المشتريات', 
+                        style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A))),
+                      const SizedBox(height: 32),
+                      _buildPurchaseForm(theme, isDark),
+                      const SizedBox(height: 48),
+                      if (_purchaseMethods.isEmpty)
+                        _buildEmptyState(isDark)
+                      else
+                        ..._purchaseMethods.map((method) {
+                          final items = _groupedPurchases[method.id] ?? [];
+                          Color color = method.type == 'cash' ? Colors.green : Colors.blue;
+                          if (method.name.contains('حمودة')) color = Colors.orange;
+                          
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 32),
+                            child: _buildSection('مشتريات ${method.name}', items, color, isDark),
+                          );
+                        }).toList(),
+                    ],
+                  ),
+                ),
+              ),
+              _buildTotalFooter(isDark),
+            ],
           ),
+    );
+  }
+
+  Widget _buildTotalFooter(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0F172A) : Colors.white,
+        border: Border(top: BorderSide(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0))),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))]
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text('إجمالي مشتريات اليوم:', 
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : const Color(0xFF64748B))),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.orange[800]!.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.orange[800]!.withOpacity(0.3))
+            ),
+            child: Text('${_totalPurchases.toStringAsFixed(2)} ₪', 
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.orange[800])),
+          ),
+        ],
+      ),
     );
   }
 
