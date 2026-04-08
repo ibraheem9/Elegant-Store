@@ -21,6 +21,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   double _appDebtRepayment = 0.0;
   double _cashPurchases = 0.0;
   double _appPurchases = 0.0;
+  double _cashWithdrawals = 0.0; // New: For cash withdrawals from sales screen
   
   bool _isLoading = false;
   DailyStatistics? _savedStats;
@@ -50,6 +51,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       _appDebtRepayment = detailedStats['app_debt_repayment'] ?? 0.0;
       _cashPurchases = detailedStats['cash_purchases'] ?? 0.0;
       _appPurchases = detailedStats['app_purchases'] ?? 0.0;
+      _cashWithdrawals = detailedStats['cash_withdrawals'] ?? 0.0;
       _monthlyData = monthly;
 
       if (savedStats != null) {
@@ -80,7 +82,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       todayCashInBox: double.tryParse(_todayCashController.text) ?? 0.0,
       totalCashDebtRepayment: double.tryParse(_cashDebtRepaymentController.text) ?? 0.0,
       totalAppDebtRepayment: _appDebtRepayment,
-      totalCashPurchases: _cashPurchases,
+      totalCashPurchases: _cashPurchases + _cashWithdrawals, // Combine merchant purchases and cash withdrawals
       totalAppPurchases: _appPurchases,
       createdAt: now.toIso8601String(),
     );
@@ -177,7 +179,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         _buildManualInput('صندوق اليوم (كاش)', _todayCashController, Icons.account_balance_wallet_rounded, Colors.green),
         _buildManualInput('سداد ديون - كاش', _cashDebtRepaymentController, Icons.payments_rounded, Colors.orange),
         _buildAutoDisplay('سداد ديون - تطبيق (تلقائي)', _appDebtRepayment, Icons.phonelink_ring_rounded, Colors.purple),
-        _buildAutoDisplay('مشتريات اليوم - كاش (من الشاشة)', _cashPurchases, Icons.shopping_bag_rounded, Colors.redAccent),
+        _buildAutoDisplay('المشتريات + السحب النقدي (كاش)', _cashPurchases + _cashWithdrawals, Icons.shopping_bag_rounded, Colors.redAccent),
         _buildAutoDisplay('مشتريات اليوم - تطبيق (من الشاشة)', _appPurchases, Icons.mobile_friendly_rounded, Colors.indigo),
       ],
     );
@@ -311,7 +313,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           childAspectRatio: 3,
           children: [
             _buildResultCard('دخل اليوم الصافي (كاش)', dailyProfit, Colors.blue),
-            _buildResultCard('إجمالي المشتريات', _savedStats!.totalCashPurchases + _savedStats!.totalAppPurchases, Colors.orange),
+            _buildResultCard('إجمالي المشتريات + السحب', _savedStats!.totalCashPurchases + _savedStats!.totalAppPurchases, Colors.orange),
             _buildResultCard('سداد الديون الكلي', _savedStats!.totalCashDebtRepayment + _savedStats!.totalAppDebtRepayment, Colors.green),
             _buildResultCard('إجمالي حركة الصندوق', _savedStats!.todayCashInBox, Colors.purple),
           ],

@@ -4,7 +4,9 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
+import '../services/theme_service.dart';
 import 'customers_screen.dart';
+import 'recycle_bin_screen.dart';
 
 class SalesScreen extends StatefulWidget {
   const SalesScreen({Key? key}) : super(key: key);
@@ -176,13 +178,23 @@ class _SalesScreenState extends State<SalesScreen> {
                           title: Row(
                             children: [
                               Text(c.name, style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+                              if (c.nickname != null && c.nickname!.isNotEmpty) ...[
+                                const SizedBox(width: 8),
+                                Text('(${c.nickname})', 
+                                  style: TextStyle(
+                                    fontSize: 12, 
+                                    color: isDark ? Colors.white70 : Colors.black54, 
+                                    fontWeight: FontWeight.normal
+                                  )
+                                ),
+                              ],
                               if (c.creditLimit == -1) ...[
                                 const SizedBox(width: 4),
                                 const Icon(Icons.verified, color: Colors.blue, size: 14),
                               ]
                             ],
                           ),
-                          subtitle: Text(c.nickname ?? c.phone ?? 'بدون هاتف', style: TextStyle(color: isDark ? Colors.white60 : Colors.black54)),
+                          subtitle: Text(c.phone ?? 'بدون هاتف', style: TextStyle(color: isDark ? Colors.white60 : Colors.black54)),
                           trailing: Text('${c.balance} ₪',
                             style: TextStyle(
                               color: c.balance >= 0 ? Colors.green : Colors.red,
@@ -482,7 +494,12 @@ class _SalesScreenState extends State<SalesScreen> {
         Row(
           children: [
             ElevatedButton.icon(
-              onPressed: () => _showDeletedInvoicesDialog(isDark),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const RecycleBinScreen()),
+                ).then((_) => _loadData());
+              },
               icon: const Icon(Icons.delete_sweep_rounded),
               label: const Text('سلة المحذوفات'),
               style: ElevatedButton.styleFrom(
@@ -839,98 +856,6 @@ class _SalesScreenState extends State<SalesScreen> {
             child: const Text('نقل للمحذوفات'),
           ),
         ],
-      ),
-    );
-  }
-
-  void _showDeletedInvoicesDialog(bool isDark) async {
-    final db = context.read<DatabaseService>();
-    final deletedInvoices = await db.getInvoices(deleted: true);
-
-    if (!mounted) return;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => Dialog(
-          backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          child: Container(
-            width: 800,
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('سلة المحذوفات (الفواتير)', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                    IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                if (deletedInvoices.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Text('السلة فارغة'),
-                  )
-                else
-                  Flexible(
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: deletedInvoices.length,
-                      separatorBuilder: (context, index) => const Divider(),
-                      itemBuilder: (context, index) {
-                        final inv = deletedInvoices[index];
-                        return ListTile(
-                          title: Text(inv.customerName ?? 'زبون عابر', style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text('${inv.amount} ₪ - ${inv.invoiceDate}\nملاحظات: ${inv.notes ?? '-'}'),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              TextButton.icon(
-                                icon: const Icon(Icons.restore_page_rounded, color: Colors.green),
-                                label: const Text('استعادة', style: TextStyle(color: Colors.green)),
-                                onPressed: () async {
-                                  await db.restoreInvoice(inv);
-                                  Navigator.pop(context);
-                                  _loadData();
-                                  _showSnackBar('تم استعادة الفاتورة وإعادة احتساب الرصيد', Colors.green);
-                                },
-                              ),
-                              const SizedBox(width: 8),
-                              IconButton(
-                                icon: const Icon(Icons.delete_forever, color: Colors.red),
-                                onPressed: () async {
-                                  final confirm = await showDialog<bool>(
-                                    context: context,
-                                    builder: (context) => AlertDialog(
-                                      title: const Text('حذف نهائي'),
-                                      content: const Text('تحذير: الحذف النهائي لا يمكن التراجع عنه. هل أنت متأكد؟'),
-                                      actions: [
-                                        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
-                                        TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('حذف للأبد')),
-                                      ],
-                                    ),
-                                  );
-                                  if (confirm == true) {
-                                    await db.permanentDeleteInvoice(inv.id!);
-                                    Navigator.pop(context);
-                                    _loadData();
-                                    _showSnackBar('تم حذف الفاتورة نهائياً من النظام', Colors.red);
-                                  }
-                                },
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }

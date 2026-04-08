@@ -557,18 +557,20 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     });
   }
 
-  Future<void> _showBulkRepaymentDialog() async {
+  Future<void> _showRepaymentDialog() async {
     final db = context.read<DatabaseService>();
     final methods = await db.getPaymentMethods(category: 'SALE');
-    final unpaidInvoices = _invoices.where((inv) => inv.paymentStatus != 'PAID' && inv.paymentStatus != 'paid').toList();
     
-    if (unpaidInvoices.isEmpty) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا توجد ديون مستحقة للسداد')));
-      return;
-    }
+    // حساب الرصيد من الفواتير (الموجب دين، السالب رصيد مودع)
+    double calculatedBalance = _invoices.fold(0, (sum, item) {
+      if (item.type == 'DEPOSIT') {
+        return sum - item.amount; // الإيداع يقلل الدين (أو يزيد الرصيد)
+      } else {
+        return sum + (item.amount - item.paidAmount); // الفاتورة تزيد الدين
+      }
+    });
 
-    double totalDebt = unpaidInvoices.fold(0, (sum, item) => sum + item.remainingAmount);
-    final amountController = TextEditingController(text: totalDebt.toString());
+    final amountController = TextEditingController(text: calculatedBalance > 0 ? calculatedBalance.toStringAsFixed(2) : '');
     final notesController = TextEditingController();
     PaymentMethod? selectedMethod = methods.isNotEmpty ? methods.first : null;
 
@@ -576,15 +578,22 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('تسديد الديون المتراكمة'),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: const Text('تسجيل دفعة سداد', style: TextStyle(fontWeight: FontWeight.bold)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('إجمالي الدين المطلوب سداده: ${totalDebt.toStringAsFixed(2)} ₪', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.red)),
+              if (calculatedBalance > 0)
+                Text('إجمالي الدين المستحق: ${calculatedBalance.toStringAsFixed(2)} ₪', 
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.red)),
               const SizedBox(height: 16),
               TextField(
                 controller: amountController,
-                decoration: const InputDecoration(labelText: 'المبلغ المدفوع الآن', prefixText: '₪ '),
+                decoration: InputDecoration(
+                  labelText: 'المبلغ المدفوع', 
+                  prefixText: '₪ ',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))
+                ),
                 keyboardType: TextInputType.number,
               ),
               const SizedBox(height: 16),
@@ -592,12 +601,18 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                 value: selectedMethod,
                 items: methods.map((m) => DropdownMenuItem(value: m, child: Text(m.name))).toList(),
                 onChanged: (v) => setDialogState(() => selectedMethod = v),
-                decoration: const InputDecoration(labelText: 'وسيلة الدفع'),
+                decoration: InputDecoration(
+                  labelText: 'وسيلة الدفع',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))
+                ),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: notesController,
-                decoration: const InputDecoration(labelText: 'ملاحظات السداد'),
+                decoration: InputDecoration(
+                  labelText: 'ملاحظات السداد',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))
+                ),
               ),
             ],
           ),
@@ -608,18 +623,20 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                 double amount = double.tryParse(amountController.text) ?? 0;
                 if (amount <= 0 || selectedMethod == null) return;
 
-                await db.processBulkPayment(
+                // تسجيل الدفعة كإيداع (DEPOSIT) لأنها سداد يقلل الدين الإجمالي
+                await db.addCredit(
                   userId: _currentCustomer.id!,
-                  amountPaid: amount,
+                  amount: amount,
                   paymentMethodId: selectedMethod!.id!,
-                  notes: notesController.text,
+                  notes: 'سداد ديون: ${notesController.text}',
                 );
 
                 Navigator.pop(context);
                 _loadData();
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت عملية السداد وتحديث الفواتير بنجاح'), backgroundColor: Colors.green));
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تسجيل دفعة السداد بنجاح'), backgroundColor: Colors.green));
               },
-              child: const Text('تأكيد السداد'),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.green, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              child: const Text('تأكيد السداد', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -645,16 +662,19 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
           ],
         ),
         actions: [
-          if (_currentCustomer.balance < 0)
-            Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: ElevatedButton.icon(
-                onPressed: _showBulkRepaymentDialog,
-                icon: const Icon(Icons.payments_outlined, color: Colors.white),
-                label: const Text('تسديد الديون', style: TextStyle(color: Colors.white)),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+          Padding(
+            padding: const EdgeInsets.only(left: 16.0, top: 8, bottom: 8),
+            child: ElevatedButton.icon(
+              onPressed: _showRepaymentDialog,
+              icon: const Icon(Icons.add_card_rounded, color: Colors.white, size: 20),
+              label: const Text('تسديد الديون', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green[600],
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 0
               ),
             ),
+          ),
         ],
         backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
         elevation: 0,
@@ -677,20 +697,31 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   }
 
   Widget _buildInfoGrid(bool isDark) {
-    double totalDebtRepayment = _invoices
-        .where((inv) => inv.paymentStatus != 'PAID' && inv.paymentStatus != 'paid')
-        .fold(0, (sum, item) => sum + item.remainingAmount);
+    // حساب الرصيد من واقع الفواتير المسجلة
+    // المبلغ المستحق = (إجمالي الفواتير غير المدفوعة) - (إجمالي الإيداعات/الدفعات السابقة)
+    double calculatedBalance = _invoices.fold(0, (sum, item) {
+      if (item.type == 'DEPOSIT') {
+        return sum - item.amount; 
+      } else {
+        return sum + (item.amount - item.paidAmount);
+      }
+    });
 
     return Wrap(
       spacing: 20,
       runSpacing: 20,
       children: [
-        _buildDetailCard('الرصيد الحالي', '${_currentCustomer.balance.toStringAsFixed(2)} ₪', _currentCustomer.balance < 0 ? Colors.red : Colors.green, isDark, width: 250),
-        
-        if (totalDebtRepayment > 0)
-          _buildDetailCard('إجمالي الدين الكلي', '${totalDebtRepayment.toStringAsFixed(2)} ₪', Colors.redAccent, isDark, width: 250),
+        _buildDetailCard(
+          'إجمالي الدين الكلي', 
+          '${calculatedBalance.abs().toStringAsFixed(2)} ₪', 
+          calculatedBalance > 0 ? Colors.red : Colors.green, 
+          isDark, 
+          width: 250,
+          subtitle: calculatedBalance > 0 ? 'مستحق الدفع' : 'رصيد لك لدينا'
+        ),
         
         _buildDetailCard('سقف الدين', _currentCustomer.creditLimit == -1 ? 'غير محدود' : '${_currentCustomer.creditLimit} ₪', Colors.orange, isDark, width: 250),
+        
         if (_currentCustomer.nickname != null && _currentCustomer.nickname!.isNotEmpty) 
           _buildDetailCard('اللقب', _currentCustomer.nickname!, Colors.blue, isDark, width: 250),
         if (_currentCustomer.transferNames != null && _currentCustomer.transferNames!.isNotEmpty) 
@@ -701,7 +732,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     );
   }
 
-  Widget _buildDetailCard(String label, String value, Color color, bool isDark, {double? width}) {
+  Widget _buildDetailCard(String label, String value, Color color, bool isDark, {double? width, String? subtitle}) {
     return Container(
       width: width,
       padding: const EdgeInsets.all(24),
@@ -709,13 +740,18 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         color: isDark ? const Color(0xFF0F172A) : Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+        boxShadow: [BoxShadow(color: color.withOpacity(0.05), blurRadius: 10)]
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label, style: TextStyle(color: isDark ? Colors.white60 : Colors.grey, fontSize: 14)),
           const SizedBox(height: 8),
-          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: color)),
+          Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: color)),
+          if (subtitle != null) ...[
+            const SizedBox(height: 4),
+            Text(subtitle, style: TextStyle(color: color.withOpacity(0.7), fontSize: 12, fontWeight: FontWeight.bold)),
+          ]
         ],
       ),
     );
@@ -723,27 +759,56 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
 
   Widget _buildInvoicesList(bool isDark) {
     if (_invoices.isEmpty) return Center(child: Text('لا توجد فواتير مسجلة', style: TextStyle(color: isDark ? Colors.white30 : Colors.grey)));
+    
+    // ترتيب الفواتير من الأحدث للأقدم
+    final sortedInvoices = List<Invoice>.from(_invoices)..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
     return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: _invoices.length,
+      itemCount: sortedInvoices.length,
       itemBuilder: (context, index) {
-        final inv = _invoices[index];
+        final inv = sortedInvoices[index];
         bool isPaid = inv.paymentStatus == 'PAID' || inv.paymentStatus == 'paid';
         bool isPartial = inv.paymentStatus == 'PARTIAL';
         bool isDeposit = inv.type == 'DEPOSIT';
         
-        Color statusColor = isPaid ? Colors.green : (isPartial ? Colors.orange : Colors.red);
-        String statusLabel = isPaid ? (isDeposit ? 'دفع مقدم' : 'مدفوع') : (isPartial ? 'مدفوع جزئياً' : 'دين قائمة');
-
-        // الألوان للأشرطة السفلية حسب النوع
-        Color bottomBarColor = Colors.orange; // الافتراضي دين
+        // التعديل المطلوب: الفاتورة السداد (DEPOSIT) تظهر بشكل مميز
         if (isDeposit) {
-          bottomBarColor = Colors.green; // إيداع
-        } else if (isPaid) {
-          bottomBarColor = Colors.blue; // مدفوع
+          return Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.green[600]!.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.green[600]!.withOpacity(0.3), width: 2),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: Colors.green[600], borderRadius: BorderRadius.circular(12)),
+                  child: const Icon(Icons.payments_rounded, color: Colors.white),
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('دفعة سداد ديون', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green[800])),
+                      Text('التاريخ: ${inv.invoiceDate}', style: TextStyle(color: Colors.green[800]!.withOpacity(0.7), fontSize: 12)),
+                      if (inv.notes != null) Text(inv.notes!, style: TextStyle(fontSize: 13, color: Colors.green[900])),
+                    ],
+                  ),
+                ),
+                Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 24, color: Colors.green[800])),
+              ],
+            ),
+          );
         }
 
+        Color statusColor = isPaid ? Colors.green : (isPartial ? Colors.orange : Colors.red);
+        
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
@@ -771,18 +836,14 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                     if (inv.notes != null) Text('ملاحظات: ${inv.notes}', style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic)),
                   ],
                 ),
-                trailing: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                  child: Text(statusLabel, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold)),
-                ),
+                // تم إخفاء حالة الدفع (مدفوع/دين) من اليمين حسب الطلب لجعلها بسيطة
               ),
-              // الشريط السفلي الملون
+              // الشريط السفلي الملون (أزرق للمدفوع، برتقالي للدين)
               Container(
                 height: 4,
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  color: bottomBarColor,
+                  color: isPaid ? Colors.blue : Colors.orange,
                   borderRadius: const BorderRadius.only(
                     bottomLeft: Radius.circular(16),
                     bottomRight: Radius.circular(16),

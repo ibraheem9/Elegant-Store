@@ -12,6 +12,7 @@ import 'settings_screen.dart';
 import 'reports_screen.dart';
 import 'payment_methods_screen.dart';
 import 'purchases_methods_screen.dart';
+import 'recycle_bin_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -36,7 +37,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 7: return const ReportsScreen();
       case 8: return const PaymentMethodsScreen();
       case 9: return const PurchasesMethodsScreen();
-      case 10: return const SettingsScreen();
+      case 10: return const RecycleBinScreen();
+      case 11: return const SettingsScreen();
       default: return const DashboardHomeScreen();
     }
   }
@@ -100,7 +102,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _buildSidebarItem(7, 'التقارير التحليلية', Icons.pie_chart_rounded),
                 _buildSidebarItem(8, 'طرق دفع المبيعات', Icons.payment_rounded),
                 _buildSidebarItem(9, 'طرق دفع المشتريات', Icons.account_balance_rounded),
-                _buildSidebarItem(10, 'الإعدادات والسمة', Icons.settings_rounded),
+                _buildSidebarItem(10, 'سلة المحذوفات', Icons.delete_sweep_rounded),
+                _buildSidebarItem(11, 'الإعدادات والسمة', Icons.settings_rounded),
               ],
             ),
           ),
@@ -133,6 +136,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         NavigationRailDestination(icon: Icon(Icons.pie_chart_rounded), label: Text('التقارير')),
         NavigationRailDestination(icon: Icon(Icons.payment_rounded), label: Text('دفع المبيعات')),
         NavigationRailDestination(icon: Icon(Icons.account_balance_rounded), label: Text('دفع المشتريات')),
+        NavigationRailDestination(icon: Icon(Icons.delete_sweep_rounded), label: Text('سلة المحذوفات')),
         NavigationRailDestination(icon: Icon(Icons.settings_rounded), label: Text('الإعدادات')),
       ],
     );

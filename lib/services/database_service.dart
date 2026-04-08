@@ -462,7 +462,14 @@ class DatabaseService {
     final appDebt = await db.rawQuery('SELECT SUM(i.amount) as t FROM invoices i JOIN payment_methods pm ON i.payment_method_id = pm.id WHERE i.updated_at LIKE ? AND i.payment_status = \'paid\' AND pm.type = \'app\'', ['$today%']);
     final cashPurchases = await db.rawQuery('SELECT SUM(amount) as t FROM purchases WHERE created_at LIKE ? AND payment_source = \'CASH\'', ['$today%']);
     final appPurchases = await db.rawQuery('SELECT SUM(amount) as t FROM purchases WHERE created_at LIKE ? AND payment_source = \'APP\'', ['$today%']);
-    return {'app_debt_repayment': (appDebt.first['t'] as num?)?.toDouble() ?? 0.0, 'cash_purchases': (cashPurchases.first['t'] as num?)?.toDouble() ?? 0.0, 'app_purchases': (appPurchases.first['t'] as num?)?.toDouble() ?? 0.0};
+    final cashWithdrawals = await db.rawQuery("SELECT SUM(amount) as t FROM invoices WHERE created_at LIKE ? AND type = 'WITHDRAWAL'", ['$today%']);
+    
+    return {
+      'app_debt_repayment': (appDebt.first['t'] as num?)?.toDouble() ?? 0.0, 
+      'cash_purchases': (cashPurchases.first['t'] as num?)?.toDouble() ?? 0.0, 
+      'app_purchases': (appPurchases.first['t'] as num?)?.toDouble() ?? 0.0,
+      'cash_withdrawals': (cashWithdrawals.first['t'] as num?)?.toDouble() ?? 0.0,
+    };
   }
 
   Future<DailyStatistics?> getTodayStatistics() async {
