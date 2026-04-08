@@ -136,9 +136,10 @@ class Invoice {
   final int userId; // buyer_id
   final String invoiceDate;
   final double amount;
+  final double paidAmount; // المبلغ المدفوع (للتعامل مع السداد الجزئي)
   final int? paymentMethodId;
-  final String paymentStatus; // PAID, UNPAID, DEFERRED
-  final String type; // SALE, WITHDRAWAL
+  final String paymentStatus; // PAID, UNPAID, DEFERRED, PARTIAL
+  final String type; // SALE, WITHDRAWAL, DEPOSIT
   final String? notes;
   final String createdAt;
   final String? updatedAt;
@@ -154,6 +155,7 @@ class Invoice {
     required this.userId,
     required this.invoiceDate,
     required this.amount,
+    this.paidAmount = 0.0,
     this.paymentMethodId,
     required this.paymentStatus,
     this.type = 'SALE',
@@ -166,12 +168,15 @@ class Invoice {
     this.methodName,
   });
 
+  double get remainingAmount => amount - paidAmount;
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'user_id': userId,
       'invoice_date': invoiceDate,
       'amount': amount,
+      'paid_amount': paidAmount,
       'payment_method_id': paymentMethodId,
       'payment_status': paymentStatus,
       'type': type,
@@ -188,6 +193,7 @@ class Invoice {
       userId: map['user_id'] ?? 0,
       invoiceDate: map['invoice_date'] ?? '',
       amount: map['amount']?.toDouble() ?? 0.0,
+      paidAmount: map['paid_amount']?.toDouble() ?? 0.0,
       paymentMethodId: map['payment_method_id'],
       paymentStatus: map['payment_status'] ?? 'UNPAID',
       type: map['type'] ?? 'SALE',

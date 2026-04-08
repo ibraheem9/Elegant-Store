@@ -29,7 +29,7 @@ class DatabaseService {
 
     final db = await openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: (db, version) async {
         await _createTables(db);
       },
@@ -57,6 +57,9 @@ class DatabaseService {
             await txn.execute('DROP TABLE payment_methods_old');
           });
         }
+        if (oldVersion < 7) {
+          try { await db.execute("ALTER TABLE invoices ADD COLUMN paid_amount REAL DEFAULT 0.0"); } catch (e) {}
+        }
       },
     );
 
@@ -78,11 +81,20 @@ class DatabaseService {
   Future<void> _createTables(Database db) async {
     await db.execute('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, email TEXT, name TEXT NOT NULL, nickname TEXT, role TEXT NOT NULL, is_permanent_customer INTEGER DEFAULT 0, credit_limit REAL DEFAULT 0.0, phone TEXT, notes TEXT, transfer_names TEXT, balance REAL DEFAULT 0.0, created_at TEXT NOT NULL, deleted_at TEXT)');
     await db.execute('CREATE TABLE IF NOT EXISTS payment_methods (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, type TEXT NOT NULL, category TEXT DEFAULT \'SALE\', description TEXT, is_active INTEGER DEFAULT 1, sort_order INTEGER DEFAULT 0)');
-    await db.execute('CREATE TABLE IF NOT EXISTS invoices (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, invoice_date TEXT NOT NULL, amount REAL NOT NULL, payment_method_id INTEGER, payment_status TEXT NOT NULL, type TEXT DEFAULT \'SALE\', notes TEXT, created_at TEXT NOT NULL, updated_at TEXT, deleted_at TEXT, FOREIGN KEY(user_id) REFERENCES users(id), FOREIGN KEY(payment_method_id) REFERENCES payment_methods(id))');
+    await db.execute('CREATE TABLE IF NOT EXISTS invoices (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, invoice_date TEXT NOT NULL, amount REAL NOT NULL, paid_amount REAL DEFAULT 0.0, payment_method_id INTEGER, payment_status TEXT NOT NULL, type TEXT DEFAULT \'SALE\', notes TEXT, created_at TEXT NOT NULL, updated_at TEXT, deleted_at TEXT, FOREIGN KEY(user_id) REFERENCES users(id), FOREIGN KEY(payment_method_id) REFERENCES payment_methods(id))');
     await db.execute('CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, buyer_id INTEGER NOT NULL, invoice_id INTEGER, type TEXT NOT NULL, amount REAL NOT NULL, created_at TEXT NOT NULL, FOREIGN KEY(buyer_id) REFERENCES users(id), FOREIGN KEY(invoice_id) REFERENCES invoices(id))');
     await db.execute('CREATE TABLE IF NOT EXISTS purchases (id INTEGER PRIMARY KEY AUTOINCREMENT, merchant_name TEXT NOT NULL, amount REAL NOT NULL, payment_source TEXT NOT NULL, payment_method_id INTEGER, notes TEXT, created_at TEXT NOT NULL, updated_at TEXT, deleted_at TEXT, FOREIGN KEY(payment_method_id) REFERENCES payment_methods(id))');
     await db.execute('CREATE TABLE IF NOT EXISTS daily_statistics (id INTEGER PRIMARY KEY AUTOINCREMENT, statistic_date TEXT UNIQUE NOT NULL, yesterday_cash_in_box REAL NOT NULL, today_cash_in_box REAL NOT NULL, total_cash_debt_repayment REAL NOT NULL, total_app_debt_repayment REAL NOT NULL, total_cash_purchases REAL NOT NULL, total_app_purchases REAL NOT NULL, total_sales_cash REAL NOT NULL, total_sales_credit REAL NOT NULL, created_at TEXT NOT NULL)');
     await db.execute('CREATE TABLE IF NOT EXISTS edit_history (id INTEGER PRIMARY KEY AUTOINCREMENT, target_id INTEGER, target_type TEXT, field_name TEXT, old_value TEXT, new_value TEXT, edit_reason TEXT, created_at TEXT)');
+  }
+
+  // Smart Search Arabic Normalization Utility
+  String normalizeArabic(String text) {
+    String normalized = text;
+    normalized = normalized.replaceAll(RegExp(r'[أإآا]'), 'ا');
+    normalized = normalized.replaceAll(RegExp(r'[ة]'), 'ه');
+    normalized = normalized.replaceAll(RegExp(r'[ىيئ]'), 'ي');
+    return normalized.toLowerCase().trim();
   }
 
   // --- Users/Customers ---
@@ -121,13 +133,9 @@ class DatabaseService {
       final now = DateTime.now().toIso8601String();
       final dateStr = DateFormat('dd-MM-yyyy EEEE', 'ar').format(DateTime.now());
       
-      // تسجيل المعاملة في جدول المعاملات
       await txn.insert('transactions', {'buyer_id': id, 'type': 'DEPOSIT', 'amount': am, 'created_at': now});
-      
-      // تحديث رصيد الزبون
       await txn.rawUpdate('UPDATE users SET balance = balance + ? WHERE id = ?', [am, id]);
 
-      // تسجيل العملية كفاتورة من نوع "إيداع" لتظهر في السجل ولكن لا تحتسب كمبيعات
       await txn.insert('invoices', {
         'user_id': id,
         'invoice_date': dateStr,
@@ -186,7 +194,6 @@ class DatabaseService {
   Future<int> insertInvoice(Invoice inv) async {
     final db = await database;
     return await db.transaction((txn) async {
-      // الحصول على نوع طريقة الدفع
       String methodType = 'unpaid';
       if (inv.paymentMethodId != null) {
         final pm = await txn.query('payment_methods', columns: ['type'], where: 'id = ?', whereArgs: [inv.paymentMethodId]);
@@ -195,7 +202,6 @@ class DatabaseService {
         }
       }
 
-      // تحقق رصيد المحفظة إذا كانت الطريقة هي "رصيد المحفظة"
       if (methodType == 'credit_balance') {
         final userData = await txn.query('users', columns: ['balance'], where: 'id = ?', whereArgs: [inv.userId]);
         if (userData.isNotEmpty) {
@@ -208,8 +214,6 @@ class DatabaseService {
 
       final id = await txn.insert('invoices', inv.toMap());
 
-      // تحديث الرصيد فقط إذا لم تكن العملية كاش أو عبر تطبيق (أي أنها دين أو خصم من رصيد)
-      // الكاش والدفع عبر التطبيق لا يؤثران على رصيد/دين الزبون المسجل
       if (methodType != 'cash' && methodType != 'app') {
         await txn.rawUpdate('UPDATE users SET balance = balance - ? WHERE id = ?', [inv.amount, inv.userId]);
       }
@@ -240,7 +244,6 @@ class DatabaseService {
     await db.transaction((txn) async {
       await txn.update('invoices', {'deleted_at': DateTime.now().toIso8601String()}, where: 'id = ?', whereArgs: [inv.id]);
       
-      // عكس تأثير الفاتورة على رصيد الزبون إذا كانت مؤثرة
       String methodType = 'unpaid';
       if (inv.paymentMethodId != null) {
         final pm = await txn.query('payment_methods', columns: ['type'], where: 'id = ?', whereArgs: [inv.paymentMethodId]);
@@ -251,9 +254,7 @@ class DatabaseService {
         await txn.rawUpdate('UPDATE users SET balance = balance + ? WHERE id = ?', [inv.amount, inv.userId]);
       }
       
-      // إذا كانت سحب نقدي، نحذف أيضاً المشتريات المرتبطة بها (أو نلغي تأثيرها)
       if (inv.type == 'WITHDRAWAL') {
-        // يمكننا البحث عن المشتريات المرتبطة أو حذف آخر سحب
         await txn.update('purchases', {'deleted_at': DateTime.now().toIso8601String()}, where: "merchant_name LIKE ?", whereArgs: ['%سحب نقدي: %']);
       }
     });
@@ -284,9 +285,66 @@ class DatabaseService {
   Future<List<Invoice>> getCustomerInvoices(int id, {bool unpaidOnly = false}) async {
     final db = await database;
     String where = 'i.user_id = ? AND i.deleted_at IS NULL';
-    if (unpaidOnly) where += " AND i.payment_status = 'UNPAID'";
-    final r = await db.rawQuery('SELECT i.*, u.name as customer_name, u.nickname as customer_nickname, u.phone as phone, u.credit_limit as customer_limit, pm.name as method_name FROM invoices i JOIN users u ON i.user_id = u.id LEFT JOIN payment_methods pm ON i.payment_method_id = pm.id WHERE $where ORDER BY i.created_at DESC', [id]);
+    if (unpaidOnly) where += " AND i.payment_status IN ('UNPAID', 'PARTIAL', 'DEFERRED')";
+    final r = await db.rawQuery('SELECT i.*, u.name as customer_name, u.nickname as customer_nickname, u.phone as phone, u.credit_limit as customer_limit, pm.name as method_name FROM invoices i JOIN users u ON i.user_id = u.id LEFT JOIN payment_methods pm ON i.payment_method_id = pm.id WHERE $where ORDER BY i.created_at ASC', [id]);
     return r.map((m) => Invoice.fromMap(m)).toList();
+  }
+
+  // --- Waterfall Bulk Payment Logic ---
+  Future<void> processBulkPayment({required int userId, required double amountPaid, required int paymentMethodId, String? notes}) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      final now = DateTime.now().toIso8601String();
+      
+      // 1. Get all unpaid or partially paid invoices for this user ordered by oldest first
+      final invoices = await txn.rawQuery(
+        "SELECT * FROM invoices WHERE user_id = ? AND deleted_at IS NULL AND payment_status IN ('UNPAID', 'PARTIAL', 'DEFERRED') ORDER BY created_at ASC",
+        [userId]
+      );
+
+      double remainingPayment = amountPaid;
+
+      for (var row in invoices) {
+        if (remainingPayment <= 0) break;
+
+        final inv = Invoice.fromMap(row);
+        double debtRemaining = inv.amount - inv.paidAmount;
+
+        if (remainingPayment >= debtRemaining) {
+          // Complete repayment for this invoice
+          await txn.update('invoices', {
+            'paid_amount': inv.amount,
+            'payment_status': 'PAID',
+            'payment_method_id': paymentMethodId,
+            'updated_at': now,
+            'notes': (inv.notes ?? "") + "\n[سداد كلي: $amountPaid - $notes]"
+          }, where: 'id = ?', whereArgs: [inv.id]);
+          remainingPayment -= debtRemaining;
+        } else {
+          // Partial repayment
+          double newPaidAmount = inv.paidAmount + remainingPayment;
+          await txn.update('invoices', {
+            'paid_amount': newPaidAmount,
+            'payment_status': 'PARTIAL',
+            'payment_method_id': paymentMethodId,
+            'updated_at': now,
+            'notes': (inv.notes ?? "") + "\n[سداد جزئي: $remainingPayment من أصل $debtRemaining - $notes]"
+          }, where: 'id = ?', whereArgs: [inv.id]);
+          remainingPayment = 0;
+        }
+      }
+
+      // 2. Update user balance
+      await txn.rawUpdate('UPDATE users SET balance = balance + ? WHERE id = ?', [amountPaid, userId]);
+
+      // 3. Register a financial transaction for the payment itself
+      await txn.insert('transactions', {
+        'buyer_id': userId,
+        'type': 'DEBT_PAYMENT',
+        'amount': amountPaid,
+        'created_at': now
+      });
+    });
   }
 
   // --- Purchases ---

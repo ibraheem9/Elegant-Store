@@ -63,14 +63,16 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   void _filterCustomers(String query) {
+    final db = context.read<DatabaseService>();
+    final searchNormalized = db.normalizeArabic(query);
+    
     setState(() {
       _filteredCustomers = _customers
           .where((c) =>
-            c.name.toLowerCase().contains(query.toLowerCase()) ||
-            (c.nickname != null && c.nickname!.toLowerCase().contains(query.toLowerCase())) ||
+            db.normalizeArabic(c.name).contains(searchNormalized) ||
+            (c.nickname != null && db.normalizeArabic(c.nickname!).contains(searchNormalized)) ||
             (c.phone != null && c.phone!.contains(query)) ||
-            (c.transferNames != null && c.transferNames!.toLowerCase().contains(query.toLowerCase())) ||
-            (c.notes != null && c.notes!.toLowerCase().contains(query.toLowerCase())))
+            (c.transferNames != null && db.normalizeArabic(c.transferNames!).contains(searchNormalized)))
           .toList();
       _applySort(); 
     });
@@ -139,19 +141,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildDialogField('الاسم الكامل', nameController, Icons.person_outline, onChanged: (val) => setDialogState(() {})),
-                  
-                  if (nameController.text.isNotEmpty && _customers.any((c) => c.name.trim() == nameController.text.trim() && c.id != customer?.id))
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 12, right: 12),
-                      child: Text('⚠️ هذا الاسم موجود مسبقاً لزبون آخر!', style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold)),
-                    ),
-
-                  if (notesController.text.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 16, right: 12),
-                      child: Text('📝 ملاحظة: ${notesController.text}', style: const TextStyle(color: Colors.blueGrey, fontSize: 13, fontStyle: FontStyle.italic)),
-                    ),
-
                   _buildDialogField('اللقب', nicknameController, Icons.badge_outlined),
                   _buildDialogField('رقم الهاتف', phoneController, Icons.phone_android),
                   _buildDialogField('أسماء التحويلات', transferNamesController, Icons.swap_horiz_rounded),
@@ -568,6 +557,76 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     });
   }
 
+  Future<void> _showBulkRepaymentDialog() async {
+    final db = context.read<DatabaseService>();
+    final methods = await db.getPaymentMethods(category: 'SALE');
+    final unpaidInvoices = _invoices.where((inv) => inv.paymentStatus != 'PAID' && inv.paymentStatus != 'paid').toList();
+    
+    if (unpaidInvoices.isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا توجد ديون مستحقة للسداد')));
+      return;
+    }
+
+    double totalDebt = unpaidInvoices.fold(0, (sum, item) => sum + item.remainingAmount);
+    final amountController = TextEditingController(text: totalDebt.toString());
+    final notesController = TextEditingController();
+    PaymentMethod? selectedMethod = methods.isNotEmpty ? methods.first : null;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('تسديد الديون المتراكمة'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('إجمالي الدين: ${totalDebt.toStringAsFixed(2)} ₪', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.red)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: amountController,
+                decoration: const InputDecoration(labelText: 'المبلغ المدفوع الآن', prefixText: '₪ '),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<PaymentMethod>(
+                value: selectedMethod,
+                items: methods.map((m) => DropdownMenuItem(value: m, child: Text(m.name))).toList(),
+                onChanged: (v) => setDialogState(() => selectedMethod = v),
+                decoration: const InputDecoration(labelText: 'وسيلة الدفع'),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: notesController,
+                decoration: const InputDecoration(labelText: 'ملاحظات السداد'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+            ElevatedButton(
+              onPressed: () async {
+                double amount = double.tryParse(amountController.text) ?? 0;
+                if (amount <= 0 || selectedMethod == null) return;
+
+                await db.processBulkPayment(
+                  userId: _currentCustomer.id!,
+                  amountPaid: amount,
+                  paymentMethodId: selectedMethod!.id!,
+                  notes: notesController.text,
+                );
+
+                Navigator.pop(context);
+                _loadData();
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت عملية السداد وتحديث الفواتير بنجاح'), backgroundColor: Colors.green));
+              },
+              child: const Text('تأكيد السداد'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -585,6 +644,18 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
             ],
           ],
         ),
+        actions: [
+          if (_currentCustomer.balance < 0)
+            Padding(
+              padding: const EdgeInsets.only(left: 16.0),
+              child: ElevatedButton.icon(
+                onPressed: _showBulkRepaymentDialog,
+                icon: const Icon(Icons.payments_outlined, color: Colors.white),
+                label: const Text('تسديد الديون', style: TextStyle(color: Colors.white)),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+              ),
+            ),
+        ],
         backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
         elevation: 0,
         iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black),
@@ -596,7 +667,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
           children: [
             _buildInfoGrid(isDark),
             const SizedBox(height: 40),
-            Text('سجل الفواتير', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+            Text('سجل الفواتير والديون', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
             const SizedBox(height: 16),
             _buildInvoicesList(isDark),
           ],
@@ -647,7 +718,12 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       itemCount: _invoices.length,
       itemBuilder: (context, index) {
         final inv = _invoices[index];
-        bool isPaid = inv.paymentStatus == 'paid';
+        bool isPaid = inv.paymentStatus == 'PAID' || inv.paymentStatus == 'paid';
+        bool isPartial = inv.paymentStatus == 'PARTIAL';
+        
+        Color statusColor = isPaid ? Colors.green : (isPartial ? Colors.orange : Colors.red);
+        String statusLabel = isPaid ? 'مدفوع' : (isPartial ? 'مدفوع جزئياً' : 'دين قائمة');
+
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
@@ -657,12 +733,26 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
           ),
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            title: Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: isDark ? Colors.white : Colors.black)),
-            subtitle: Text('التاريخ: ${inv.invoiceDate}', style: const TextStyle(color: Colors.grey)),
+            title: Row(
+              children: [
+                Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: isDark ? Colors.white : Colors.black)),
+                if (isPartial) ...[
+                  const SizedBox(width: 12),
+                  Text('(المدفوع: ${inv.paidAmount} ₪)', style: const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.bold)),
+                ]
+              ],
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('التاريخ: ${inv.invoiceDate}', style: const TextStyle(color: Colors.grey)),
+                if (inv.notes != null) Text('ملاحظات: ${inv.notes}', style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic)),
+              ],
+            ),
             trailing: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(color: isPaid ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-              child: Text(isPaid ? 'مدفوع' : 'دين قائمة', style: TextStyle(color: isPaid ? Colors.green : Colors.red, fontWeight: FontWeight.bold)),
+              decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+              child: Text(statusLabel, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold)),
             ),
           ),
         );
