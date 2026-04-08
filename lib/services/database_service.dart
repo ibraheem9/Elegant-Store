@@ -478,9 +478,21 @@ class DatabaseService {
   }
 
   // --- Purchases ---
-  Future<List<Purchase>> getPurchasesByMethod(int methodId) async {
+  Future<List<Purchase>> getPurchasesByMethod(int methodId, {DateTime? start, DateTime? end}) async {
     final db = await database;
-    final r = await db.query('purchases', where: 'payment_method_id = ? AND deleted_at IS NULL', whereArgs: [methodId]);
+    String where = 'payment_method_id = ? AND deleted_at IS NULL';
+    List<dynamic> args = [methodId];
+    
+    if (start != null) {
+      where += ' AND created_at >= ?';
+      args.add(start.toIso8601String());
+    }
+    if (end != null) {
+      where += ' AND created_at <= ?';
+      args.add(end.toIso8601String());
+    }
+    
+    final r = await db.query('purchases', where: where, whereArgs: args, orderBy: 'created_at DESC');
     return r.map((m) => Purchase.fromMap(m)).toList();
   }
 
