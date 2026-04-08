@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
+import 'customers_screen.dart';
 
 class SalesScreen extends StatefulWidget {
   const SalesScreen({Key? key}) : super(key: key);
@@ -103,8 +104,9 @@ class _SalesScreenState extends State<SalesScreen> {
         dynamic aVal, bVal;
         switch (_sortColumnIndex) {
           case 0: aVal = a.customerName ?? ''; bVal = b.customerName ?? ''; break;
-          case 1: aVal = a.amount; bVal = b.amount; break;
-          case 2: aVal = a.methodName ?? ''; bVal = b.methodName ?? ''; break;
+          case 1: aVal = a.createdAt; bVal = b.createdAt; break; // Time sort
+          case 2: aVal = a.amount; bVal = b.amount; break;
+          case 4: aVal = a.methodName ?? ''; bVal = b.methodName ?? ''; break;
           default: return 0;
         }
         return _isAscending ? Comparable.compare(aVal, bVal) : Comparable.compare(bVal, aVal);
@@ -685,6 +687,7 @@ class _SalesScreenState extends State<SalesScreen> {
               headingRowHeight: 60,
               columns: [
                 DataColumn(label: Text('المشتري', style: const TextStyle(fontWeight: FontWeight.bold)), onSort: _onSort),
+                DataColumn(label: Text('الوقت والتاريخ', style: const TextStyle(fontWeight: FontWeight.bold)), onSort: _onSort),
                 DataColumn(label: Text('المبلغ', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true, onSort: _onSort),
                 DataColumn(label: Text('النوع', style: const TextStyle(fontWeight: FontWeight.bold))),
                 DataColumn(label: Text('طريقة الدفع', style: const TextStyle(fontWeight: FontWeight.bold)), onSort: _onSort),
@@ -701,8 +704,45 @@ class _SalesScreenState extends State<SalesScreen> {
                   typeLabel = 'إيداع رصيد';
                 }
 
+                // Format created_at to show time and date
+                DateTime dt = DateTime.parse(inv.createdAt);
+                String formattedTime = DateFormat('HH:mm').format(dt);
+                String formattedDate = DateFormat('yyyy-MM-dd').format(dt);
+
                 return DataRow(cells: [
-                  DataCell(Text(inv.customerName ?? 'عابر', style: const TextStyle(fontWeight: FontWeight.bold))),
+                  DataCell(
+                    InkWell(
+                      onTap: () {
+                        try {
+                          final customer = _allCustomers.firstWhere((c) => c.id == inv.userId);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => CustomerDetailsScreen(customer: customer),
+                            ),
+                          ).then((_) => _loadData());
+                        } catch (e) {
+                          _showSnackBar('تعذر العثور على بيانات الزبون (ربما زبون عابر)', Colors.orange);
+                        }
+                      },
+                      child: Text(
+                        inv.customerName ?? 'عابر',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ),
+                  DataCell(Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(formattedTime, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      Text(formattedDate, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                    ],
+                  )),
                   DataCell(Text('${inv.amount} ₪', style: TextStyle(color: typeColor, fontWeight: FontWeight.w900))),
                   DataCell(Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

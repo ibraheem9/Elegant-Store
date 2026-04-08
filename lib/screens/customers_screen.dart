@@ -580,7 +580,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('إجمالي الدين: ${totalDebt.toStringAsFixed(2)} ₪', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.red)),
+              Text('إجمالي الدين المطلوب سداده: ${totalDebt.toStringAsFixed(2)} ₪', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.red)),
               const SizedBox(height: 16),
               TextField(
                 controller: amountController,
@@ -677,15 +677,28 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   }
 
   Widget _buildInfoGrid(bool isDark) {
+    // حساب إجمالي الدين المطلوب سداده (مجموع المبالغ المتبقية من الفواتير غير المدفوعة)
+    double totalDebtRepayment = _invoices
+        .where((inv) => inv.paymentStatus != 'PAID' && inv.paymentStatus != 'paid')
+        .fold(0, (sum, item) => sum + item.remainingAmount);
+
     return Wrap(
       spacing: 20,
       runSpacing: 20,
       children: [
         _buildDetailCard('الرصيد الحالي', '${_currentCustomer.balance.toStringAsFixed(2)} ₪', _currentCustomer.balance < 0 ? Colors.red : Colors.green, isDark, width: 250),
+        
+        // بطاقة إجمالي الدين المطلوب سداده (جديد)
+        if (totalDebtRepayment > 0)
+          _buildDetailCard('إجمالي الدين الكلي', '${totalDebtRepayment.toStringAsFixed(2)} ₪', Colors.redAccent, isDark, width: 250),
+        
         _buildDetailCard('سقف الدين', _currentCustomer.creditLimit == -1 ? 'غير محدود' : '${_currentCustomer.creditLimit} ₪', Colors.orange, isDark, width: 250),
-        if (_currentCustomer.nickname != null) _buildDetailCard('اللقب', _currentCustomer.nickname!, Colors.blue, isDark, width: 250),
-        if (_currentCustomer.transferNames != null) _buildDetailCard('أسماء التحويل', _currentCustomer.transferNames!, Colors.purple, isDark, width: 250),
-        if (_currentCustomer.notes != null) _buildDetailCard('ملاحظات', _currentCustomer.notes!, Colors.blueGrey, isDark, width: 520),
+        if (_currentCustomer.nickname != null && _currentCustomer.nickname!.isNotEmpty) 
+          _buildDetailCard('اللقب', _currentCustomer.nickname!, Colors.blue, isDark, width: 250),
+        if (_currentCustomer.transferNames != null && _currentCustomer.transferNames!.isNotEmpty) 
+          _buildDetailCard('أسماء التحويل', _currentCustomer.transferNames!, Colors.purple, isDark, width: 250),
+        if (_currentCustomer.notes != null && _currentCustomer.notes!.isNotEmpty) 
+          _buildDetailCard('ملاحظات', _currentCustomer.notes!, Colors.blueGrey, isDark, width: 520),
       ],
     );
   }
