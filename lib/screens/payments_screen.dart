@@ -45,16 +45,12 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
 
     setState(() {
       _saleMethods = methods;
-      
-      // فلترة الفواتير:
-      // 1. فقط الزبائن غير الدائمين (is_permanent_customer == 0) أو الفواتير غير المسواة
-      // 2. تقسيمها لمدفوع وغير مدفوع
       _unpaidInvoices = allInvoices.where((inv) => 
         (inv.paymentStatus == 'UNPAID' || inv.paymentStatus == 'pending')
       ).toList();
 
       _paidInvoices = allInvoices.where((inv) => 
-        inv.paymentStatus == 'PAID' || inv.paymentStatus == 'paid'
+        inv.paymentStatus == 'PAID' || inv.paymentStatus == 'paid' || inv.paymentStatus == 'PARTIAL'
       ).toList();
 
       _isLoading = false;
@@ -150,7 +146,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
                 children: [
                   Text('تسوية ومعالجة المدفوعات', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A))),
                   const SizedBox(height: 4),
-                  const Text('متابعة الفواتير المعلقة للزبائن غير الدائمين', style: TextStyle(color: Colors.grey)),
+                  const Text('متابعة الفواتير المعلقة للزبائن عبر الدائمين', style: TextStyle(color: Colors.grey)),
                 ],
               ),
               _buildDateFilter(isDark),
@@ -266,64 +262,90 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
     } catch (_) {}
 
     Color typeColor = inv.type == 'WITHDRAWAL' ? Colors.orange : (inv.type == 'DEPOSIT' ? Colors.green : Colors.blue);
-    String typeLabel = inv.type == 'WITHDRAWAL' ? 'سحب نقدي' : (inv.type == 'DEPOSIT' ? 'إيداع رصيد' : 'بيع');
+    String typeLabel = inv.type == 'WITHDRAWAL' ? 'سحب نقدي' : (inv.type == 'DEPOSIT' ? 'دفع مقدم (إيداع رصيد)' : 'بيع');
+    
+    // الألوان للأشرطة السفلية
+    Color bottomBarColor = Colors.orange; // الافتراضي دين
+    if (inv.type == 'DEPOSIT') {
+      bottomBarColor = Colors.green; // إيداع
+    } else if (inv.paymentStatus == 'PAID' || inv.paymentStatus == 'paid') {
+      bottomBarColor = Colors.blue; // مدفوع
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF0F172A) : Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Expanded(
-            flex: 3,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Text(inv.customerName ?? 'زبون عابر', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(color: typeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
-                      child: Text(typeLabel, style: TextStyle(color: typeColor, fontSize: 11, fontWeight: FontWeight.bold)),
-                    ),
-                  ],
+                Expanded(
+                  flex: 3,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(inv.customerName ?? 'زبون عابر', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(color: typeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+                            child: Text(typeLabel, style: TextStyle(color: typeColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                      Text('التاريخ: ${inv.invoiceDate}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                      if (inv.notes != null) Text('ملاحظات: ${inv.notes}', style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
+                    ],
+                  ),
                 ),
-                Text('التاريخ: ${inv.invoiceDate}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
-                if (inv.notes != null) Text('ملاحظات: ${inv.notes}', style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
+                Expanded(
+                  flex: 1,
+                  child: Text('${inv.amount} ₪', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: typeColor)),
+                ),
+                if (isUnpaidTab) ...[
+                  Expanded(
+                    flex: 2,
+                    child: DropdownButtonFormField<PaymentMethod>(
+                      value: localSelectedMethod,
+                      isExpanded: true,
+                      dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                      style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                      decoration: const InputDecoration(labelText: 'وسيلة الدفع', border: OutlineInputBorder()),
+                      items: _saleMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name))).toList(),
+                      onChanged: (val) => localSelectedMethod = val,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  ElevatedButton(
+                    onPressed: () => _confirmPayment(inv, localSelectedMethod!),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, padding: const EdgeInsets.all(20)),
+                    child: const Text('تسوية الآن', style: TextStyle(color: Colors.white)),
+                  ),
+                ] else
+                  Text(inv.methodName ?? 'كاش', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
               ],
             ),
           ),
-          Expanded(
-            flex: 1,
-            child: Text('${inv.amount} ₪', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: typeColor)),
-          ),
-          if (isUnpaidTab) ...[
-            Expanded(
-              flex: 2,
-              child: DropdownButtonFormField<PaymentMethod>(
-                value: localSelectedMethod,
-                isExpanded: true,
-                dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-                style: TextStyle(color: isDark ? Colors.white : Colors.black),
-                decoration: const InputDecoration(labelText: 'وسيلة الدفع', border: OutlineInputBorder()),
-                items: _saleMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name))).toList(),
-                onChanged: (val) => localSelectedMethod = val,
+          // الشريط السفلي الملون
+          Container(
+            height: 6,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: bottomBarColor,
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(20),
+                bottomRight: Radius.circular(20),
               ),
             ),
-            const SizedBox(width: 16),
-            ElevatedButton(
-              onPressed: () => _confirmPayment(inv, localSelectedMethod!),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, padding: const EdgeInsets.all(20)),
-              child: const Text('تسوية الآن', style: TextStyle(color: Colors.white)),
-            ),
-          ] else
-            Text(inv.methodName ?? 'كاش', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+          ),
         ],
       ),
     );

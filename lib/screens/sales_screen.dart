@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -347,28 +348,82 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Future<void> _handleAddCredit() async {
-    if (_amountController.text.isEmpty) {
-      _showSnackBar('يرجى إدخال مبلغ الرصيد المضاف', Colors.redAccent);
-      return;
-    }
     if (_selectedCustomer == null) {
-      _showSnackBar('يرجى اختيار زبون مسجل لإضافة رصيد', Colors.orange);
+      _showSnackBar('يرجى اختيار زبون مسجل أولاً لإضافة رصيد', Colors.orange);
       return;
     }
-    
-    final amount = double.tryParse(_amountController.text) ?? 0;
-    final db = context.read<DatabaseService>();
-    setState(() => _isLoading = true);
 
-    try {
-      await db.addCredit(_selectedCustomer!.id!, amount, _notesController.text);
-      _clearFields();
-      await _loadData();
-      _showSnackBar('تم إضافة الرصيد بنجاح لمحفظة الزبون', Colors.green);
-    } catch (e) {
-      _showSnackBar('خطأ أثناء الحفظ: $e', Colors.red);
-    } finally {
-      setState(() => _isLoading = false);
+    final db = context.read<DatabaseService>();
+    final creditMethods = _paymentMethods.where((m) => m.type == 'cash' || m.type == 'app').toList();
+    
+    PaymentMethod? localMethod = creditMethods.isNotEmpty ? creditMethods.first : null;
+    final creditAmountController = TextEditingController(text: _amountController.text);
+    final creditNotesController = TextEditingController(text: _notesController.text);
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => Directionality(
+          textDirection: ui.TextDirection.rtl,
+          child: AlertDialog(
+            title: const Text('إيداع رصيد (دفع مقدم)'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('الزبون: ${_selectedCustomer!.name}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: creditAmountController,
+                  decoration: const InputDecoration(labelText: 'المبلغ المودع (₪)', border: OutlineInputBorder()),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<PaymentMethod>(
+                  value: localMethod,
+                  items: creditMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name))).toList(),
+                  onChanged: (v) => setDialogState(() => localMethod = v),
+                  decoration: const InputDecoration(labelText: 'طريقة الإيداع (أساسي)', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: creditNotesController,
+                  decoration: const InputDecoration(labelText: 'ملاحظات الإيداع', border: OutlineInputBorder()),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+              ElevatedButton(
+                onPressed: () {
+                  if (creditAmountController.text.isEmpty || localMethod == null) return;
+                  Navigator.pop(context, true);
+                },
+                child: const Text('تأكيد الإيداع'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    
+    if (result == true && localMethod != null) {
+      final amount = double.tryParse(creditAmountController.text) ?? 0;
+      setState(() => _isLoading = true);
+      try {
+        await db.addCredit(
+          userId: _selectedCustomer!.id!, 
+          amount: amount, 
+          notes: creditNotesController.text,
+          paymentMethodId: localMethod!.id!
+        );
+        _clearFields();
+        await _loadData();
+        _showSnackBar('تم إيداع الرصيد بنجاح لمحفظة الزبون', Colors.green);
+      } catch (e) {
+        _showSnackBar('خطأ أثناء الحفظ: $e', Colors.red);
+      } finally {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -701,7 +756,7 @@ class _SalesScreenState extends State<SalesScreen> {
                   typeLabel = 'سحب نقدي';
                 } else if (inv.type == 'DEPOSIT') {
                   typeColor = Colors.green;
-                  typeLabel = 'إيداع رصيد';
+                  typeLabel = 'دفع مقدم';
                 }
 
                 // Format created_at to show time and date

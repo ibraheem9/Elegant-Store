@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:path_provider/path_provider.dart';
@@ -87,6 +88,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _clearAllTransactions() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => Directionality(
+        textDirection: ui.TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('تأكيد الحذف الشامل'),
+          content: const Text('هل أنت متأكد من حذف كافة الفواتير والمشتريات؟\n\n'
+              '- سيتم تصفير أرصدة الزبائن لمطابقة السجل الفارغ.\n'
+              '- سيتم حذف سجل العمليات والإحصائيات بالكامل.\n'
+              '- سيتم الحفاظ على بيانات الزبائن وطرق الدفع.\n\n'
+              'لا يمكن التراجع عن هذه العملية!'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('إلغاء'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('نعم، قم بالتفريغ'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await context.read<DatabaseService>().resetAllTransactions();
+        _showSnackBar('تم تفريغ كافة الفواتير والعمليات بنجاح', Colors.green);
+      } catch (e) {
+        _showSnackBar('حدث خطأ أثناء عملية التفريغ: $e', Colors.red);
+      }
+    }
+  }
+
   void _showSnackBar(String msg, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: color));
   }
@@ -159,11 +200,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const Divider(),
               ListTile(
                 title: Text(
-                  'تصدير البيانات (Backup)', 
+                  'تصدير نسخة احتياطية (Backup)', 
                   style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)
                 ),
                 leading: const Icon(Icons.download, color: Color(0xFF0B74FF)),
                 onTap: _exportData,
+              ),
+            ]),
+
+            const SizedBox(height: 32),
+            _buildSection('إدارة قاعدة البيانات (منطقة خطر)', isDark, [
+              ListTile(
+                title: const Text(
+                  'تفريغ كافة الفواتير والعمليات', 
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)
+                ),
+                subtitle: const Text('سيتم حذف الفواتير والمشتريات وتصفير أرصدة الزبائن مع الحفاظ على بياناتهم وطرق الدفع'),
+                leading: const Icon(Icons.delete_sweep_rounded, color: Colors.red),
+                onTap: _clearAllTransactions,
               ),
             ]),
           ],

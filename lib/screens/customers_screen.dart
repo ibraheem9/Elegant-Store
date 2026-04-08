@@ -434,7 +434,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
     bool isCompact = size.width < 1000;
 
     return SingleChildScrollView(
-      scrollDirection: Axis.vertical, // Added vertical scrolling
+      scrollDirection: Axis.vertical, 
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -677,7 +677,6 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   }
 
   Widget _buildInfoGrid(bool isDark) {
-    // حساب إجمالي الدين المطلوب سداده (مجموع المبالغ المتبقية من الفواتير غير المدفوعة)
     double totalDebtRepayment = _invoices
         .where((inv) => inv.paymentStatus != 'PAID' && inv.paymentStatus != 'paid')
         .fold(0, (sum, item) => sum + item.remainingAmount);
@@ -688,7 +687,6 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       children: [
         _buildDetailCard('الرصيد الحالي', '${_currentCustomer.balance.toStringAsFixed(2)} ₪', _currentCustomer.balance < 0 ? Colors.red : Colors.green, isDark, width: 250),
         
-        // بطاقة إجمالي الدين المطلوب سداده (جديد)
         if (totalDebtRepayment > 0)
           _buildDetailCard('إجمالي الدين الكلي', '${totalDebtRepayment.toStringAsFixed(2)} ₪', Colors.redAccent, isDark, width: 250),
         
@@ -733,9 +731,18 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         final inv = _invoices[index];
         bool isPaid = inv.paymentStatus == 'PAID' || inv.paymentStatus == 'paid';
         bool isPartial = inv.paymentStatus == 'PARTIAL';
+        bool isDeposit = inv.type == 'DEPOSIT';
         
         Color statusColor = isPaid ? Colors.green : (isPartial ? Colors.orange : Colors.red);
-        String statusLabel = isPaid ? 'مدفوع' : (isPartial ? 'مدفوع جزئياً' : 'دين قائمة');
+        String statusLabel = isPaid ? (isDeposit ? 'دفع مقدم' : 'مدفوع') : (isPartial ? 'مدفوع جزئياً' : 'دين قائمة');
+
+        // الألوان للأشرطة السفلية حسب النوع
+        Color bottomBarColor = Colors.orange; // الافتراضي دين
+        if (isDeposit) {
+          bottomBarColor = Colors.green; // إيداع
+        } else if (isPaid) {
+          bottomBarColor = Colors.blue; // مدفوع
+        }
 
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
@@ -744,29 +751,45 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
           ),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            title: Row(
-              children: [
-                Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: isDark ? Colors.white : Colors.black)),
-                if (isPartial) ...[
-                  const SizedBox(width: 12),
-                  Text('(المدفوع: ${inv.paidAmount} ₪)', style: const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.bold)),
-                ]
-              ],
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('التاريخ: ${inv.invoiceDate}', style: const TextStyle(color: Colors.grey)),
-                if (inv.notes != null) Text('ملاحظات: ${inv.notes}', style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic)),
-              ],
-            ),
-            trailing: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-              child: Text(statusLabel, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold)),
-            ),
+          child: Column(
+            children: [
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                title: Row(
+                  children: [
+                    Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: isDark ? Colors.white : Colors.black)),
+                    if (isPartial) ...[
+                      const SizedBox(width: 12),
+                      Text('(المدفوع: ${inv.paidAmount} ₪)', style: const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.bold)),
+                    ]
+                  ],
+                ),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('التاريخ: ${inv.invoiceDate}', style: const TextStyle(color: Colors.grey)),
+                    if (inv.notes != null) Text('ملاحظات: ${inv.notes}', style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic)),
+                  ],
+                ),
+                trailing: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                  child: Text(statusLabel, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold)),
+                ),
+              ),
+              // الشريط السفلي الملون
+              Container(
+                height: 4,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: bottomBarColor,
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(16),
+                    bottomRight: Radius.circular(16),
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       },

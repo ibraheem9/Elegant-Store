@@ -136,7 +136,7 @@ class Invoice {
   final int userId; // buyer_id
   final String invoiceDate;
   final double amount;
-  final double paidAmount; // المبلغ المدفوع (للتعامل مع السداد الجزئي)
+  final double paidAmount; 
   final int? paymentMethodId;
   final String paymentStatus; // PAID, UNPAID, DEFERRED, PARTIAL
   final String type; // SALE, WITHDRAWAL, DEPOSIT
@@ -149,6 +149,7 @@ class Invoice {
   final String? customerName;
   final String? customerPhone;
   final String? methodName;
+  List<FinancialTransaction>? payments; // New: To track multiple payments
 
   Invoice({
     this.id,
@@ -166,6 +167,7 @@ class Invoice {
     this.customerName,
     this.customerPhone,
     this.methodName,
+    this.payments,
   });
 
   double get remainingAmount => amount - paidAmount;
@@ -215,7 +217,13 @@ class FinancialTransaction {
   final int? invoiceId;
   final String type; // INVOICE_CHARGE, DEBT_PAYMENT, DEPOSIT
   final double amount;
+  final double usedAmount; // New: For tracking unspent deposits
+  final int? paymentMethodId; // New: Source of money
+  final String? notes; // New
   final String createdAt;
+
+  // Virtual field
+  final String? methodName;
 
   FinancialTransaction({
     this.id,
@@ -223,7 +231,11 @@ class FinancialTransaction {
     this.invoiceId,
     required this.type,
     required this.amount,
+    this.usedAmount = 0.0,
+    this.paymentMethodId,
+    this.notes,
     required this.createdAt,
+    this.methodName,
   });
 
   Map<String, dynamic> toMap() {
@@ -233,6 +245,9 @@ class FinancialTransaction {
       'invoice_id': invoiceId,
       'type': type,
       'amount': amount,
+      'used_amount': usedAmount,
+      'payment_method_id': paymentMethodId,
+      'notes': notes,
       'created_at': createdAt,
     };
   }
@@ -244,7 +259,11 @@ class FinancialTransaction {
       invoiceId: map['invoice_id'],
       type: map['type'] ?? '',
       amount: map['amount']?.toDouble() ?? 0.0,
+      usedAmount: map['used_amount']?.toDouble() ?? 0.0,
+      paymentMethodId: map['payment_method_id'],
+      notes: map['notes'],
       createdAt: map['created_at'] ?? '',
+      methodName: map['method_name'],
     );
   }
 }

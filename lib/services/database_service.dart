@@ -29,7 +29,7 @@ class DatabaseService {
 
     final db = await openDatabase(
       path,
-      version: 7,
+      version: 8,
       onCreate: (db, version) async {
         await _createTables(db);
       },
@@ -60,6 +60,11 @@ class DatabaseService {
         if (oldVersion < 7) {
           try { await db.execute("ALTER TABLE invoices ADD COLUMN paid_amount REAL DEFAULT 0.0"); } catch (e) {}
         }
+        if (oldVersion < 8) {
+          try { await db.execute("ALTER TABLE transactions ADD COLUMN used_amount REAL DEFAULT 0.0"); } catch (e) {}
+          try { await db.execute("ALTER TABLE transactions ADD COLUMN payment_method_id INTEGER"); } catch (e) {}
+          try { await db.execute("ALTER TABLE transactions ADD COLUMN notes TEXT"); } catch (e) {}
+        }
       },
     );
 
@@ -82,13 +87,12 @@ class DatabaseService {
     await db.execute('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, email TEXT, name TEXT NOT NULL, nickname TEXT, role TEXT NOT NULL, is_permanent_customer INTEGER DEFAULT 0, credit_limit REAL DEFAULT 0.0, phone TEXT, notes TEXT, transfer_names TEXT, balance REAL DEFAULT 0.0, created_at TEXT NOT NULL, deleted_at TEXT)');
     await db.execute('CREATE TABLE IF NOT EXISTS payment_methods (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, type TEXT NOT NULL, category TEXT DEFAULT \'SALE\', description TEXT, is_active INTEGER DEFAULT 1, sort_order INTEGER DEFAULT 0)');
     await db.execute('CREATE TABLE IF NOT EXISTS invoices (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, invoice_date TEXT NOT NULL, amount REAL NOT NULL, paid_amount REAL DEFAULT 0.0, payment_method_id INTEGER, payment_status TEXT NOT NULL, type TEXT DEFAULT \'SALE\', notes TEXT, created_at TEXT NOT NULL, updated_at TEXT, deleted_at TEXT, FOREIGN KEY(user_id) REFERENCES users(id), FOREIGN KEY(payment_method_id) REFERENCES payment_methods(id))');
-    await db.execute('CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, buyer_id INTEGER NOT NULL, invoice_id INTEGER, type TEXT NOT NULL, amount REAL NOT NULL, created_at TEXT NOT NULL, FOREIGN KEY(buyer_id) REFERENCES users(id), FOREIGN KEY(invoice_id) REFERENCES invoices(id))');
+    await db.execute('CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, buyer_id INTEGER NOT NULL, invoice_id INTEGER, type TEXT NOT NULL, amount REAL NOT NULL, used_amount REAL DEFAULT 0.0, payment_method_id INTEGER, notes TEXT, created_at TEXT NOT NULL, FOREIGN KEY(buyer_id) REFERENCES users(id), FOREIGN KEY(invoice_id) REFERENCES invoices(id), FOREIGN KEY(payment_method_id) REFERENCES payment_methods(id))');
     await db.execute('CREATE TABLE IF NOT EXISTS purchases (id INTEGER PRIMARY KEY AUTOINCREMENT, merchant_name TEXT NOT NULL, amount REAL NOT NULL, payment_source TEXT NOT NULL, payment_method_id INTEGER, notes TEXT, created_at TEXT NOT NULL, updated_at TEXT, deleted_at TEXT, FOREIGN KEY(payment_method_id) REFERENCES payment_methods(id))');
     await db.execute('CREATE TABLE IF NOT EXISTS daily_statistics (id INTEGER PRIMARY KEY AUTOINCREMENT, statistic_date TEXT UNIQUE NOT NULL, yesterday_cash_in_box REAL NOT NULL, today_cash_in_box REAL NOT NULL, total_cash_debt_repayment REAL NOT NULL, total_app_debt_repayment REAL NOT NULL, total_cash_purchases REAL NOT NULL, total_app_purchases REAL NOT NULL, total_sales_cash REAL NOT NULL, total_sales_credit REAL NOT NULL, created_at TEXT NOT NULL)');
     await db.execute('CREATE TABLE IF NOT EXISTS edit_history (id INTEGER PRIMARY KEY AUTOINCREMENT, target_id INTEGER, target_type TEXT, field_name TEXT, old_value TEXT, new_value TEXT, edit_reason TEXT, created_at TEXT)');
   }
 
-  // Smart Search Arabic Normalization Utility
   String normalizeArabic(String text) {
     String normalized = text;
     normalized = normalized.replaceAll(RegExp(r'[أإآا]'), 'ا');
@@ -97,12 +101,15 @@ class DatabaseService {
     return normalized.toLowerCase().trim();
   }
 
-  // --- Users/Customers ---
-  Future<User?> authenticate(String u, String p) async {
+  // --- Auth ---
+  Future<User?> authenticate(String username, String password) async {
     final db = await database;
-    final r = await db.query('users', where: 'username = ? AND password = ? AND deleted_at IS NULL', whereArgs: [u, p]);
-    return r.isNotEmpty ? User.fromMap(r.first) : null;
+    final r = await db.query('users', where: 'username = ? AND password = ?', whereArgs: [username, password]);
+    if (r.isNotEmpty) return User.fromMap(r.first);
+    return null;
   }
+
+  // --- Users ---
   Future<List<User>> getCustomers() async {
     final db = await database;
     final r = await db.query('users', where: "role = 'customer' COLLATE NOCASE AND deleted_at IS NULL");
@@ -115,34 +122,204 @@ class DatabaseService {
   }
   Future<void> updateUser(User newUser, User oldUser) async {
     final db = await database;
-    if (newUser.name != oldUser.name) await logEdit(newUser.id!, 'USER', 'الاسم', oldUser.name, newUser.name);
     await db.update('users', {'name': newUser.name, 'nickname': newUser.nickname, 'phone': newUser.phone, 'is_permanent_customer': newUser.isPermanentCustomer, 'credit_limit': newUser.creditLimit, 'balance': newUser.balance, 'notes': newUser.notes, 'transfer_names': newUser.transferNames}, where: 'id = ?', whereArgs: [newUser.id]);
+  }
+  Future<void> softDeleteUser(int id) async {
+    final db = await database;
+    await db.update('users', {'deleted_at': DateTime.now().toIso8601String()}, where: 'id = ?', whereArgs: [id]);
   }
   Future<bool> hasInvoices(int customerId) async {
     final db = await database;
     final count = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM invoices WHERE user_id = ? AND deleted_at IS NULL', [customerId])) ?? 0;
     return count > 0;
   }
-  Future<void> softDeleteUser(int id) async {
-    final db = await database;
-    await db.update('users', {'deleted_at': DateTime.now().toIso8601String()}, where: 'id = ?', whereArgs: [id]);
-  }
-  Future<void> addCredit(int id, double am, String n) async {
+
+  // --- Credits & Deposits ---
+  Future<void> addCredit({required int userId, required double amount, String? notes, required int paymentMethodId}) async {
     final db = await database;
     await db.transaction((txn) async {
       final now = DateTime.now().toIso8601String();
       final dateStr = DateFormat('dd-MM-yyyy EEEE', 'ar').format(DateTime.now());
       
-      await txn.insert('transactions', {'buyer_id': id, 'type': 'DEPOSIT', 'amount': am, 'created_at': now});
-      await txn.rawUpdate('UPDATE users SET balance = balance + ? WHERE id = ?', [am, id]);
-
-      await txn.insert('invoices', {
-        'user_id': id,
-        'invoice_date': dateStr,
-        'amount': am,
-        'payment_status': 'PAID',
+      // 1. Create a DEPOSIT transaction (source of money)
+      await txn.insert('transactions', {
+        'buyer_id': userId,
         'type': 'DEPOSIT',
-        'notes': 'إيداع رصيد للمحفظة: ${n ?? ""}',
+        'amount': amount,
+        'used_amount': 0.0,
+        'payment_method_id': paymentMethodId,
+        'notes': notes,
+        'created_at': now
+      });
+      
+      // 2. Update user balance
+      await txn.rawUpdate('UPDATE users SET balance = balance + ? WHERE id = ?', [amount, userId]);
+
+      // 3. Create a descriptive invoice for the log
+      await txn.insert('invoices', {
+        'user_id': userId,
+        'invoice_date': dateStr,
+        'amount': amount,
+        'paid_amount': amount,
+        'payment_status': 'PAID',
+        'payment_method_id': paymentMethodId,
+        'type': 'DEPOSIT',
+        'notes': 'دفع مقدم (إيداع رصيد): ${notes ?? ""}',
+        'created_at': now
+      });
+    });
+  }
+
+  // --- Invoices ---
+  Future<int> insertInvoice(Invoice inv) async {
+    final db = await database;
+    return await db.transaction((txn) async {
+      final now = DateTime.now().toIso8601String();
+      
+      // 1. Get method type
+      String methodType = 'unpaid';
+      if (inv.paymentMethodId != null) {
+        final pm = await txn.query('payment_methods', columns: ['type'], where: 'id = ?', whereArgs: [inv.paymentMethodId]);
+        if (pm.isNotEmpty) methodType = pm.first['type'] as String;
+      }
+
+      double totalToPay = inv.amount;
+      double amountFromBalance = 0;
+      List<String> paymentSources = [];
+
+      // Logic: If user has balance, we use it first (Waterfall from oldest deposits)
+      final user = await txn.query('users', columns: ['balance'], where: 'id = ?', whereArgs: [inv.userId]);
+      double currentBalance = (user.first['balance'] as num).toDouble();
+
+      if (currentBalance > 0 && inv.type == 'SALE') {
+        // Find unused deposits for this user
+        final deposits = await txn.query(
+          'transactions', 
+          where: "buyer_id = ? AND type = 'DEPOSIT' AND amount > used_amount",
+          whereArgs: [inv.userId],
+          orderBy: 'created_at ASC'
+        );
+
+        for (var d in deposits) {
+          if (totalToPay <= 0) break;
+          
+          double depositId = (d['id'] as num).toDouble();
+          double depositTotal = (d['amount'] as num).toDouble();
+          double depositUsed = (d['used_amount'] as num).toDouble();
+          double availableInThisDeposit = depositTotal - depositUsed;
+          int? sourceMethodId = d['payment_method_id'] as int?;
+
+          double deduction = (totalToPay > availableInThisDeposit) ? availableInThisDeposit : totalToPay;
+          
+          // Update the specific deposit as used
+          await txn.rawUpdate('UPDATE transactions SET used_amount = used_amount + ? WHERE id = ?', [deduction, depositId]);
+          
+          amountFromBalance += deduction;
+          totalToPay -= deduction;
+
+          // Record source for notes
+          if (sourceMethodId != null) {
+            final sm = await txn.query('payment_methods', columns: ['name'], where: 'id = ?', whereArgs: [sourceMethodId]);
+            if (sm.isNotEmpty) paymentSources.add("${sm.first['name']} ($deduction ₪)");
+          } else {
+            paymentSources.add("رصيد سابق ($deduction ₪)");
+          }
+        }
+        
+        // Update global user balance
+        await txn.rawUpdate('UPDATE users SET balance = balance - ? WHERE id = ?', [amountFromBalance, inv.userId]);
+      }
+
+      // 2. Prepare the invoice data
+      String finalNotes = inv.notes ?? "";
+      if (amountFromBalance > 0) {
+        finalNotes += "\n[مدفوع من الرصيد: $amountFromBalance ₪ | المصادر: ${paymentSources.join(' + ')}]";
+      }
+
+      String finalStatus = inv.paymentStatus;
+      double finalPaidAmount = amountFromBalance;
+
+      // If it was supposed to be Cash/App but we already paid from balance, adjust
+      if (methodType == 'cash' || methodType == 'app') {
+        finalPaidAmount = inv.amount; // It's fully paid (part balance, part current cash/app)
+        finalStatus = 'PAID';
+      } else {
+        // It's a debt/deferred type
+        if (totalToPay <= 0) {
+          finalStatus = 'PAID';
+          finalPaidAmount = inv.amount;
+        } else if (amountFromBalance > 0) {
+          finalStatus = 'PARTIAL';
+        }
+      }
+
+      final id = await txn.insert('invoices', {
+        ...inv.toMap(),
+        'paid_amount': finalPaidAmount,
+        'payment_status': finalStatus,
+        'notes': finalNotes,
+        'updated_at': now
+      });
+
+      // 3. Handle remaining debt (if any and not cash/app)
+      if (methodType != 'cash' && methodType != 'app' && totalToPay > 0) {
+        // The remaining part is debt
+        await txn.rawUpdate('UPDATE users SET balance = balance - ? WHERE id = ?', [totalToPay, inv.userId]);
+      }
+
+      return id;
+    });
+  }
+
+  Future<void> updateInvoice(Invoice inv) async {
+    final db = await database;
+    await db.update('invoices', inv.toMap(), where: 'id = ?', whereArgs: [inv.id]);
+  }
+
+  // --- Bulk Payments ---
+  Future<void> processBulkPayment({required int userId, required double amountPaid, required int paymentMethodId, String? notes}) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      final now = DateTime.now().toIso8601String();
+      final unpaidInvoices = await txn.rawQuery(
+        "SELECT * FROM invoices WHERE user_id = ? AND deleted_at IS NULL AND payment_status IN ('UNPAID', 'PARTIAL', 'DEFERRED') ORDER BY created_at ASC",
+        [userId]
+      );
+
+      double remainingPayment = amountPaid;
+      for (var row in unpaidInvoices) {
+        if (remainingPayment <= 0) break;
+        final inv = Invoice.fromMap(row);
+        double debtRemaining = inv.amount - inv.paidAmount;
+
+        if (remainingPayment >= debtRemaining) {
+          await txn.update('invoices', {
+            'paid_amount': inv.amount,
+            'payment_status': 'PAID',
+            'payment_method_id': paymentMethodId,
+            'updated_at': now,
+            'notes': (inv.notes ?? "") + "\n[سداد كلي: $debtRemaining ₪ عبر ${paymentMethodId}]"
+          }, where: 'id = ?', whereArgs: [inv.id]);
+          remainingPayment -= debtRemaining;
+        } else {
+          await txn.update('invoices', {
+            'paid_amount': inv.paidAmount + remainingPayment,
+            'payment_status': 'PARTIAL',
+            'payment_method_id': paymentMethodId,
+            'updated_at': now,
+            'notes': (inv.notes ?? "") + "\n[سداد جزئي: $remainingPayment ₪ عبر ${paymentMethodId}]"
+          }, where: 'id = ?', whereArgs: [inv.id]);
+          remainingPayment = 0;
+        }
+      }
+
+      await txn.rawUpdate('UPDATE users SET balance = balance + ? WHERE id = ?', [amountPaid, userId]);
+      await txn.insert('transactions', {
+        'buyer_id': userId,
+        'type': 'DEBT_PAYMENT',
+        'amount': amountPaid,
+        'payment_method_id': paymentMethodId,
+        'notes': notes,
         'created_at': now
       });
     });
@@ -156,31 +333,22 @@ class DatabaseService {
     final r = await db.query('payment_methods', where: where, whereArgs: args, orderBy: 'sort_order ASC');
     return r.map((m) => PaymentMethod.fromMap(m)).toList();
   }
-  Future<int> insertPaymentMethod(PaymentMethod m) async { 
-    final db = await database; 
-    final existing = await db.query('payment_methods', where: 'name = ? AND category = ?', whereArgs: [m.name, m.category]);
-    if (existing.isNotEmpty) {
-      final id = existing.first['id'] as int;
-      var map = m.toMap(); map.remove('id');
-      await db.update('payment_methods', {...map, 'is_active': 1}, where: 'id = ?', whereArgs: [id]);
-      return id;
-    }
-    var map = m.toMap();
-    if (m.sortOrder == 0) {
-      final maxSort = Sqflite.firstIntValue(await db.rawQuery('SELECT MAX(sort_order) FROM payment_methods WHERE category = ?', [m.category])) ?? 0;
-      map['sort_order'] = maxSort + 1;
-    }
-    return await db.insert('payment_methods', map); 
+
+  Future<int> insertPaymentMethod(PaymentMethod m) async {
+    final db = await database;
+    return await db.insert('payment_methods', m.toMap());
   }
-  Future<void> updatePaymentMethod(PaymentMethod m) async { 
-    final db = await database; 
-    var map = m.toMap(); map.remove('id');
-    await db.update('payment_methods', map, where: 'id = ?', whereArgs: [m.id]); 
+
+  Future<int> updatePaymentMethod(PaymentMethod m) async {
+    final db = await database;
+    return await db.update('payment_methods', m.toMap(), where: 'id = ?', whereArgs: [m.id]);
   }
-  Future<void> deletePaymentMethod(int id) async { 
-    final db = await database; 
-    await db.update('payment_methods', {'is_active': 0}, where: 'id = ?', whereArgs: [id]); 
+
+  Future<int> deletePaymentMethod(int id) async {
+    final db = await database;
+    return await db.update('payment_methods', {'is_active': 0}, where: 'id = ?', whereArgs: [id]);
   }
+
   Future<void> updatePaymentMethodsOrder(List<PaymentMethod> methods) async {
     final db = await database;
     await db.transaction((txn) async {
@@ -190,39 +358,7 @@ class DatabaseService {
     });
   }
 
-  // --- Invoices ---
-  Future<int> insertInvoice(Invoice inv) async {
-    final db = await database;
-    return await db.transaction((txn) async {
-      String methodType = 'unpaid';
-      if (inv.paymentMethodId != null) {
-        final pm = await txn.query('payment_methods', columns: ['type'], where: 'id = ?', whereArgs: [inv.paymentMethodId]);
-        if (pm.isNotEmpty) {
-          methodType = pm.first['type'] as String;
-        }
-      }
-
-      if (methodType == 'credit_balance') {
-        final userData = await txn.query('users', columns: ['balance'], where: 'id = ?', whereArgs: [inv.userId]);
-        if (userData.isNotEmpty) {
-          double currentBalance = (userData.first['balance'] as num).toDouble();
-          if (currentBalance < inv.amount) {
-            throw Exception('رصيد المحفظة غير كافٍ للزبون. الرصيد الحالي: $currentBalance ₪');
-          }
-        }
-      }
-
-      final id = await txn.insert('invoices', inv.toMap());
-
-      if (methodType != 'cash' && methodType != 'app') {
-        await txn.rawUpdate('UPDATE users SET balance = balance - ? WHERE id = ?', [inv.amount, inv.userId]);
-      }
-      return id;
-    });
-  }
-  Future<void> updateInvoice(Invoice i) async { 
-    final db = await database; await db.update('invoices', i.toMap(), where: 'id = ?', whereArgs: [i.id]);
-  }
+  // --- Other Methods (Invoices, Stats, etc.) ---
   Future<List<Invoice>> getInvoices({DateTime? start, DateTime? end, String? query, bool deleted = false}) async {
     final db = await database;
     String where = deleted ? 'i.deleted_at IS NOT NULL' : 'i.deleted_at IS NULL';
@@ -232,30 +368,18 @@ class DatabaseService {
     final r = await db.rawQuery('SELECT i.*, u.name as customer_name, u.nickname as customer_nickname, u.credit_limit as customer_limit, pm.name as method_name FROM invoices i JOIN users u ON i.user_id = u.id LEFT JOIN payment_methods pm ON i.payment_method_id = pm.id WHERE $where ORDER BY i.created_at DESC', args);
     return r.map((m) => Invoice.fromMap(m)).toList();
   }
-  Future<List<Invoice>> getTodayInvoices() async {
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    final db = await database;
-    final r = await db.rawQuery('SELECT i.*, u.name as customer_name, u.nickname as customer_nickname, u.credit_limit as customer_limit, pm.name as method_name FROM invoices i JOIN users u ON i.user_id = u.id LEFT JOIN payment_methods pm ON i.payment_method_id = pm.id WHERE i.created_at LIKE ? AND i.deleted_at IS NULL ORDER BY i.created_at DESC', ['$today%']);
-    return r.map((m) => Invoice.fromMap(m)).toList();
-  }
 
   Future<void> softDeleteInvoice(Invoice inv) async {
     final db = await database;
     await db.transaction((txn) async {
       await txn.update('invoices', {'deleted_at': DateTime.now().toIso8601String()}, where: 'id = ?', whereArgs: [inv.id]);
-      
       String methodType = 'unpaid';
       if (inv.paymentMethodId != null) {
         final pm = await txn.query('payment_methods', columns: ['type'], where: 'id = ?', whereArgs: [inv.paymentMethodId]);
         if (pm.isNotEmpty) methodType = pm.first['type'] as String;
       }
-
       if (methodType != 'cash' && methodType != 'app') {
         await txn.rawUpdate('UPDATE users SET balance = balance + ? WHERE id = ?', [inv.amount, inv.userId]);
-      }
-      
-      if (inv.type == 'WITHDRAWAL') {
-        await txn.update('purchases', {'deleted_at': DateTime.now().toIso8601String()}, where: "merchant_name LIKE ?", whereArgs: ['%سحب نقدي: %']);
       }
     });
   }
@@ -264,13 +388,11 @@ class DatabaseService {
     final db = await database;
     await db.transaction((txn) async {
       await txn.update('invoices', {'deleted_at': null}, where: 'id = ?', whereArgs: [inv.id]);
-      
       String methodType = 'unpaid';
       if (inv.paymentMethodId != null) {
         final pm = await txn.query('payment_methods', columns: ['type'], where: 'id = ?', whereArgs: [inv.paymentMethodId]);
         if (pm.isNotEmpty) methodType = pm.first['type'] as String;
       }
-
       if (methodType != 'cash' && methodType != 'app') {
         await txn.rawUpdate('UPDATE users SET balance = balance - ? WHERE id = ?', [inv.amount, inv.userId]);
       }
@@ -290,82 +412,6 @@ class DatabaseService {
     return r.map((m) => Invoice.fromMap(m)).toList();
   }
 
-  // --- Waterfall Bulk Payment Logic ---
-  Future<void> processBulkPayment({required int userId, required double amountPaid, required int paymentMethodId, String? notes}) async {
-    final db = await database;
-    await db.transaction((txn) async {
-      final now = DateTime.now().toIso8601String();
-      
-      // 1. Get all unpaid or partially paid invoices for this user ordered by oldest first
-      final invoices = await txn.rawQuery(
-        "SELECT * FROM invoices WHERE user_id = ? AND deleted_at IS NULL AND payment_status IN ('UNPAID', 'PARTIAL', 'DEFERRED') ORDER BY created_at ASC",
-        [userId]
-      );
-
-      double remainingPayment = amountPaid;
-
-      for (var row in invoices) {
-        if (remainingPayment <= 0) break;
-
-        final inv = Invoice.fromMap(row);
-        double debtRemaining = inv.amount - inv.paidAmount;
-
-        if (remainingPayment >= debtRemaining) {
-          // Complete repayment for this invoice
-          await txn.update('invoices', {
-            'paid_amount': inv.amount,
-            'payment_status': 'PAID',
-            'payment_method_id': paymentMethodId,
-            'updated_at': now,
-            'notes': (inv.notes ?? "") + "\n[سداد كلي: $amountPaid - $notes]"
-          }, where: 'id = ?', whereArgs: [inv.id]);
-          remainingPayment -= debtRemaining;
-        } else {
-          // Partial repayment
-          double newPaidAmount = inv.paidAmount + remainingPayment;
-          await txn.update('invoices', {
-            'paid_amount': newPaidAmount,
-            'payment_status': 'PARTIAL',
-            'payment_method_id': paymentMethodId,
-            'updated_at': now,
-            'notes': (inv.notes ?? "") + "\n[سداد جزئي: $remainingPayment من أصل $debtRemaining - $notes]"
-          }, where: 'id = ?', whereArgs: [inv.id]);
-          remainingPayment = 0;
-        }
-      }
-
-      // 2. Update user balance
-      await txn.rawUpdate('UPDATE users SET balance = balance + ? WHERE id = ?', [amountPaid, userId]);
-
-      // 3. Register a financial transaction for the payment itself
-      await txn.insert('transactions', {
-        'buyer_id': userId,
-        'type': 'DEBT_PAYMENT',
-        'amount': amountPaid,
-        'created_at': now
-      });
-    });
-  }
-
-  // --- Purchases ---
-  Future<int> insertPurchase(Purchase p) async {
-    final db = await database;
-    return await db.insert('purchases', p.toMap());
-  }
-  Future<List<Purchase>> getTodayPurchases() async {
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    final db = await database;
-    final r = await db.rawQuery('SELECT p.*, pm.name as method_name FROM purchases p LEFT JOIN payment_methods pm ON p.payment_method_id = pm.id WHERE p.created_at LIKE ? AND p.deleted_at IS NULL ORDER BY p.created_at DESC', ['$today%']);
-    return r.map((m) => Purchase.fromMap(m)).toList();
-  }
-  Future<List<Purchase>> getPurchasesByMethod(int methodId) async {
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    final db = await database;
-    final r = await db.rawQuery('SELECT p.*, pm.name as method_name FROM purchases p LEFT JOIN payment_methods pm ON p.payment_method_id = pm.id WHERE p.payment_method_id = ? AND p.created_at LIKE ? AND p.deleted_at IS NULL ORDER BY p.created_at DESC', [methodId, '$today%']);
-    return r.map((m) => Purchase.fromMap(m)).toList();
-  }
-
-  // --- Stats ---
   Future<Map<String, dynamic>> getSalesStats({DateTime? start, DateTime? end}) async {
     final db = await database;
     String where = "deleted_at IS NULL AND type = 'SALE'";
@@ -373,15 +419,41 @@ class DatabaseService {
     if (start != null) { where += ' AND created_at >= ?'; args.add(start.toIso8601String()); }
     if (end != null) { where += ' AND created_at <= ?'; args.add(end.toIso8601String()); }
     
-    final s = await db.rawQuery("SELECT SUM(amount) as t FROM invoices WHERE $where", args);
-    return {'total_sales': (s.first['t'] as num?)?.toDouble() ?? 0.0, 'total_debt': 0.0, 'buyers_count': 0};
+    final salesResult = await db.rawQuery("SELECT SUM(amount) as t FROM invoices WHERE $where", args);
+    final debtResult = await db.rawQuery("SELECT SUM(amount - paid_amount) as t FROM invoices WHERE $where AND payment_status != 'PAID'", args);
+    final buyersResult = await db.rawQuery("SELECT COUNT(DISTINCT user_id) as t FROM invoices WHERE $where", args);
+    
+    return {
+      'total_sales': (salesResult.first['t'] as num?)?.toDouble() ?? 0.0,
+      'total_debt': (debtResult.first['t'] as num?)?.toDouble() ?? 0.0,
+      'buyers_count': buyersResult.first['t'] ?? 0
+    };
   }
 
-  Future<Map<String, dynamic>> getSalesStatsToday() async {
-    final now = DateTime.now();
-    final start = DateTime(now.year, now.month, now.day);
-    final end = DateTime(now.year, now.month, now.day, 23, 59, 59);
-    return await getSalesStats(start: start, end: end);
+  Future<Map<String, dynamic>> getGlobalStats() async {
+    final db = await database;
+    final customers = await db.rawQuery("SELECT COUNT(*) as count FROM users WHERE role = 'customer' AND deleted_at IS NULL");
+    final permanent = await db.rawQuery("SELECT COUNT(*) as count FROM users WHERE role = 'customer' AND is_permanent_customer = 1 AND deleted_at IS NULL");
+    final balances = await db.rawQuery("SELECT SUM(CASE WHEN balance < 0 THEN balance ELSE 0 END) as debts, SUM(CASE WHEN balance > 0 THEN balance ELSE 0 END) as deposits FROM users WHERE role = 'customer' AND deleted_at IS NULL");
+    final unpaidNonPermanent = await db.rawQuery("SELECT COUNT(DISTINCT u.id) as count FROM users u JOIN invoices i ON u.id = i.user_id WHERE u.is_permanent_customer = 0 AND i.payment_status IN ('UNPAID', 'PARTIAL') AND i.deleted_at IS NULL");
+
+    return {
+      'total_customers': customers.first['count'] ?? 0,
+      'permanent_count': permanent.first['count'] ?? 0,
+      'total_debts': (balances.first['debts'] as num?)?.toDouble().abs() ?? 0.0,
+      'total_balances': (balances.first['deposits'] as num?)?.toDouble() ?? 0.0,
+      'unpaid_non_permanent_count': unpaidNonPermanent.first['count'] ?? 0,
+    };
+  }
+
+  Future<Map<String, double>> getMonthlySales(int year, int month) async {
+    final db = await database;
+    final start = DateTime(year, month, 1).toIso8601String();
+    final end = DateTime(year, month + 1, 0, 23, 59, 59).toIso8601String();
+    final r = await db.rawQuery("SELECT SUBSTR(created_at, 1, 10) as day, SUM(amount) as total FROM invoices WHERE type = 'SALE' AND deleted_at IS NULL AND created_at BETWEEN ? AND ? GROUP BY day", [start, end]);
+    Map<String, double> result = {};
+    for (var row in r) { result[row['day'] as String] = (row['total'] as num).toDouble(); }
+    return result;
   }
 
   Future<Map<String, double>> getDetailedTodayStats() async {
@@ -392,48 +464,51 @@ class DatabaseService {
     final appPurchases = await db.rawQuery('SELECT SUM(amount) as t FROM purchases WHERE created_at LIKE ? AND payment_source = \'APP\'', ['$today%']);
     return {'app_debt_repayment': (appDebt.first['t'] as num?)?.toDouble() ?? 0.0, 'cash_purchases': (cashPurchases.first['t'] as num?)?.toDouble() ?? 0.0, 'app_purchases': (appPurchases.first['t'] as num?)?.toDouble() ?? 0.0};
   }
-  Future<Map<String, dynamic>> getGlobalStats() async {
-    final customers = await getCustomers();
-    double totalDebts = 0, totalBalances = 0; int permanentCount = 0;
-    for (var c in customers) { if (c.balance < 0) totalDebts += c.balance.abs(); else totalBalances += c.balance; if (c.isPermanentCustomer == 1) permanentCount++; }
-    return {'total_customers': customers.length, 'total_debts': totalDebts, 'total_balances': totalBalances, 'permanent_count': permanentCount, 'unpaid_non_permanent_count': 0};
-  }
+
   Future<DailyStatistics?> getTodayStatistics() async {
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     final db = await database;
     final r = await db.query('daily_statistics', where: 'statistic_date = ?', whereArgs: [today]);
     return r.isNotEmpty ? DailyStatistics.fromMap(r.first) : null;
   }
-  Future<int> insertDailyStatistics(DailyStatistics s) async {
+
+  Future<int> insertDailyStatistics(DailyStatistics stats) async {
     final db = await database;
-    return await db.insert('daily_statistics', s.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
-  }
-  Future<Map<String, double>> getMonthlySales(int y, int m) async {
-    final db = await database;
-    final monthStr = '${y.toString()}-${m.toString().padLeft(2, '0')}';
-    final r = await db.rawQuery('SELECT SUBSTR(created_at, 1, 10) as day, SUM(amount) as total FROM invoices WHERE created_at LIKE ? AND deleted_at IS NULL AND type = \'SALE\' GROUP BY day', ['$monthStr%']);
-    Map<String, double> result = {};
-    for (var row in r) { result[row['day'] as String] = (row['total'] as num).toDouble(); }
-    return result;
+    return await db.insert('daily_statistics', stats.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  // --- Actions ---
+  // --- Purchases ---
+  Future<List<Purchase>> getPurchasesByMethod(int methodId) async {
+    final db = await database;
+    final r = await db.query('purchases', where: 'payment_method_id = ? AND deleted_at IS NULL', whereArgs: [methodId]);
+    return r.map((m) => Purchase.fromMap(m)).toList();
+  }
+
+  Future<int> insertPurchase(Purchase p) async {
+    final db = await database;
+    return await db.insert('purchases', p.toMap());
+  }
+
+  Future<List<Purchase>> getTodayPurchases() async {
+    final db = await database;
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final r = await db.query('purchases', where: "created_at LIKE ? AND deleted_at IS NULL", whereArgs: ["$today%"]);
+    return r.map((m) => Purchase.fromMap(m)).toList();
+  }
+
   Future<void> recordCashWithdrawal({required User customer, required double amount, String? notes, int? paymentMethodId}) async {
     final db = await database;
     await db.transaction((txn) async {
       final now = DateTime.now().toIso8601String();
       final dateStr = DateFormat('dd-MM-yyyy EEEE', 'ar').format(DateTime.now());
-      await txn.insert('invoices', {'user_id': customer.id, 'invoice_date': dateStr, 'amount': amount, 'payment_method_id': paymentMethodId, 'payment_status': 'UNPAID', 'type': 'WITHDRAWAL', 'notes': 'سحب نقدي: ${notes ?? ""}', 'created_at': now});
+      await txn.insert('invoices', {'user_id': customer.id, 'invoice_date': dateStr, 'amount': amount, 'paid_amount': 0.0, 'payment_method_id': paymentMethodId, 'payment_status': 'UNPAID', 'type': 'WITHDRAWAL', 'notes': 'سحب نقدي: ${notes ?? ""}', 'created_at': now});
       await txn.rawUpdate('UPDATE users SET balance = balance - ? WHERE id = ?', [amount, customer.id!]);
       await txn.insert('purchases', {'merchant_name': 'سحب نقدي: ${customer.name}', 'amount': amount, 'payment_source': 'CASH', 'notes': 'سحب نقدي كدين للمشتري - ${notes ?? ""}', 'created_at': now});
     });
   }
+
   Future<void> logEdit(int targetId, String type, String field, String oldVal, String newVal) async {
     final db = await database;
     await db.insert('edit_history', {'target_id': targetId, 'target_type': type, 'field_name': field, 'old_value': oldVal, 'new_value': newVal, 'created_at': DateTime.now().toIso8601String()});
-  }
-  Future<List<Map<String, dynamic>>> getEditHistory(int targetId, String type) async {
-    final db = await database;
-    return await db.query('edit_history', where: 'target_id = ? AND target_type = ?', whereArgs: [targetId, type], orderBy: 'created_at DESC');
   }
 }
