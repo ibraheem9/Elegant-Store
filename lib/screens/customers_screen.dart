@@ -796,6 +796,8 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('دفعة سداد ديون', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green[800])),
+                      if (inv.methodName != null) 
+                        Text('عبر: ${inv.methodName}', style: TextStyle(color: Colors.green[700], fontWeight: FontWeight.bold, fontSize: 13)),
                       Text('التاريخ: ${inv.invoiceDate}', style: TextStyle(color: Colors.green[800]!.withOpacity(0.7), fontSize: 12)),
                       if (inv.notes != null) Text(inv.notes!, style: TextStyle(fontSize: 13, color: Colors.green[900])),
                     ],
@@ -807,7 +809,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
           );
         }
 
-        Color statusColor = isPaid ? Colors.green : (isPartial ? Colors.orange : Colors.red);
+        // Color statusColor = isPaid ? Colors.green : (isPartial ? Colors.orange : Colors.red);
         
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
@@ -832,11 +834,13 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // تم التعديل: إظهار وسيلة الدفع فقط إذا كانت الفاتورة مدفوعة بالكامل
+                    if (isPaid && inv.methodName != null) 
+                       Text('وسيلة الدفع: ${inv.methodName}', style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12)),
                     Text('التاريخ: ${inv.invoiceDate}', style: const TextStyle(color: Colors.grey)),
                     if (inv.notes != null) Text('ملاحظات: ${inv.notes}', style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic)),
                   ],
                 ),
-                // تم إخفاء حالة الدفع (مدفوع/دين) من اليمين حسب الطلب لجعلها بسيطة
               ),
               // الشريط السفلي الملون (أزرق للمدفوع، برتقالي للدين)
               Container(

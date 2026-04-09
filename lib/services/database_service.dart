@@ -450,9 +450,39 @@ class DatabaseService {
     final db = await database;
     final start = DateTime(year, month, 1).toIso8601String();
     final end = DateTime(year, month + 1, 0, 23, 59, 59).toIso8601String();
-    final r = await db.rawQuery("SELECT SUBSTR(created_at, 1, 10) as day, SUM(amount) as total FROM invoices WHERE type = 'SALE' AND deleted_at IS NULL AND created_at BETWEEN ? AND ? GROUP BY day", [start, end]);
+    
+    // Updated Logic: Only include ACTUAL money flow (Sales Cash + Paid App Invoices + Paid App Debt Repayments)
+    // Formula for a specific day: 
+    // 1. Invoices (SALE) that are PAID and method type is 'cash' or 'app'
+    // 2. Transactions (DEBT_PAYMENT/DEPOSIT) where method type is 'app' or 'cash'
+    
+    final r = await db.rawQuery('''
+      SELECT day, SUM(total) as daily_total FROM (
+        -- 1. PAID SALES (Cash/App)
+        SELECT SUBSTR(i.created_at, 1, 10) as day, SUM(i.amount) as total 
+        FROM invoices i 
+        JOIN payment_methods pm ON i.payment_method_id = pm.id 
+        WHERE i.type = 'SALE' AND i.deleted_at IS NULL AND i.payment_status = 'PAID' 
+        AND pm.type IN ('cash', 'app') AND i.created_at BETWEEN ? AND ?
+        GROUP BY day
+        
+        UNION ALL
+        
+        -- 2. APP/CASH DEBT REPAYMENTS (Transactions not linked to a specific new sale)
+        -- We filter by DEPOSIT/DEBT_PAYMENT which represent money coming in
+        SELECT SUBSTR(t.created_at, 1, 10) as day, SUM(t.amount) as total
+        FROM transactions t
+        JOIN payment_methods pm ON t.payment_method_id = pm.id
+        WHERE t.type IN ('DEBT_PAYMENT', 'DEPOSIT') 
+        AND pm.type IN ('cash', 'app') AND t.created_at BETWEEN ? AND ?
+        GROUP BY day
+      ) GROUP BY day
+    ''', [start, end, start, end]);
+
     Map<String, double> result = {};
-    for (var row in r) { result[row['day'] as String] = (row['total'] as num).toDouble(); }
+    for (var row in r) { 
+      result[row['day'] as String] = (row['daily_total'] as num).toDouble(); 
+    }
     return result;
   }
 

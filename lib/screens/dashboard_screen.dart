@@ -9,7 +9,6 @@ import 'customers_screen.dart';
 import 'payments_screen.dart';
 import 'calendar_screen.dart';
 import 'settings_screen.dart';
-import 'reports_screen.dart';
 import 'payment_methods_screen.dart';
 import 'purchases_methods_screen.dart';
 import 'recycle_bin_screen.dart';
@@ -34,11 +33,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 4: return const CustomersScreen();
       case 5: return const PaymentsScreen();
       case 6: return const CalendarScreen();
-      case 7: return const ReportsScreen();
-      case 8: return const PaymentMethodsScreen();
-      case 9: return const PurchasesMethodsScreen();
-      case 10: return const RecycleBinScreen();
-      case 11: return const SettingsScreen();
+      case 7: return const PaymentMethodsScreen();
+      case 8: return const PurchasesMethodsScreen();
+      case 9: return const RecycleBinScreen();
+      case 10: return const SettingsScreen();
       default: return const DashboardHomeScreen();
     }
   }
@@ -99,11 +97,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _buildSidebarItem(4, 'إدارة الزبائن', Icons.people_alt_rounded),
                 _buildSidebarItem(5, 'مراجعة المدفوعات', Icons.payments_rounded),
                 _buildSidebarItem(6, 'التقويم المالي', Icons.calendar_month_rounded),
-                _buildSidebarItem(7, 'التقارير التحليلية', Icons.pie_chart_rounded),
-                _buildSidebarItem(8, 'طرق دفع المبيعات', Icons.payment_rounded),
-                _buildSidebarItem(9, 'طرق دفع المشتريات', Icons.account_balance_rounded),
-                _buildSidebarItem(10, 'سلة المحذوفات', Icons.delete_sweep_rounded),
-                _buildSidebarItem(11, 'الإعدادات والسمة', Icons.settings_rounded),
+                _buildSidebarItem(7, 'طرق دفع المبيعات', Icons.payment_rounded),
+                _buildSidebarItem(8, 'طرق دفع المشتريات', Icons.account_balance_rounded),
+                _buildSidebarItem(9, 'سلة المحذوفات', Icons.delete_sweep_rounded),
+                _buildSidebarItem(10, 'الإعدادات والسمة', Icons.settings_rounded),
               ],
             ),
           ),
@@ -133,7 +130,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         NavigationRailDestination(icon: Icon(Icons.people_alt_rounded), label: Text('الزبائن')),
         NavigationRailDestination(icon: Icon(Icons.payments_rounded), label: Text('المدفوعات')),
         NavigationRailDestination(icon: Icon(Icons.calendar_month_rounded), label: Text('التقويم')),
-        NavigationRailDestination(icon: Icon(Icons.pie_chart_rounded), label: Text('التقارير')),
         NavigationRailDestination(icon: Icon(Icons.payment_rounded), label: Text('دفع المبيعات')),
         NavigationRailDestination(icon: Icon(Icons.account_balance_rounded), label: Text('دفع المشتريات')),
         NavigationRailDestination(icon: Icon(Icons.delete_sweep_rounded), label: Text('سلة المحذوفات')),
@@ -144,7 +140,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildBottomNav(ThemeData theme) {
     return BottomNavigationBar(
-      currentIndex: _selectedIndex > 4 ? 0 : _selectedIndex,
+      currentIndex: _selectedIndex > 3 ? 0 : _selectedIndex,
       onTap: (index) => setState(() => _selectedIndex = index),
       type: BottomNavigationBarType.fixed,
       selectedItemColor: Colors.blue[700],
@@ -154,7 +150,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         BottomNavigationBarItem(icon: Icon(Icons.receipt_long_rounded), label: 'البيع'),
         BottomNavigationBarItem(icon: Icon(Icons.bar_chart_rounded), label: 'إحصائيات'),
         BottomNavigationBarItem(icon: Icon(Icons.shopping_cart_rounded), label: 'المشتريات'),
-        BottomNavigationBarItem(icon: Icon(Icons.pie_chart_rounded), label: 'التقارير'),
       ],
     );
   }
