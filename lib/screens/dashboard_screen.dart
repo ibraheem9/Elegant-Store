@@ -22,8 +22,8 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  // Function to return the screen based on index - this ensures fresh state
   Widget _getScreen(int index) {
     switch (index) {
       case 0: return const DashboardHomeScreen();
@@ -41,6 +41,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  String _getScreenTitle(int index) {
+    switch (index) {
+      case 0: return 'لوحة التحكم';
+      case 1: return 'شاشة البيع';
+      case 2: return 'إحصائيات اليوم';
+      case 3: return 'المشتريات';
+      case 4: return 'إدارة الزبائن';
+      case 5: return 'مراجعة المدفوعات';
+      case 6: return 'التقويم المالي';
+      case 7: return 'طرق دفع المبيعات';
+      case 8: return 'طرق دفع المشتريات';
+      case 9: return 'سلة المحذوفات';
+      case 10: return 'الإعدادات والسمة';
+      default: return 'Elegant Store';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -52,7 +69,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final bool isDesktop = width >= 1100;
 
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: theme.scaffoldBackgroundColor,
+      drawer: isMobile ? _buildMobileDrawer(isDark) : null,
       body: Row(
         children: [
           if (isDesktop) _buildFullSidebar(theme, isDark),
@@ -79,10 +98,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Widget _buildMobileDrawer(bool isDark) {
+    return Drawer(
+      backgroundColor: const Color(0xFF0F172A),
+      child: Column(
+        children: [
+          _buildSidebarHeader(),
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                _buildSidebarItem(0, 'لوحة التحكم', Icons.dashboard_rounded),
+                _buildSidebarItem(1, 'شاشة البيع', Icons.receipt_long_rounded),
+                _buildSidebarItem(2, 'إحصائيات اليوم', Icons.bar_chart_rounded),
+                _buildSidebarItem(3, 'المشتريات', Icons.shopping_cart_rounded),
+                _buildSidebarItem(4, 'إدارة الزبائن', Icons.people_alt_rounded),
+                _buildSidebarItem(5, 'مراجعة المدفوعات', Icons.payments_rounded),
+                _buildSidebarItem(6, 'التقويم المالي', Icons.calendar_month_rounded),
+                const Divider(color: Colors.white10, indent: 20, endIndent: 20),
+                _buildSidebarItem(7, 'طرق دفع المبيعات', Icons.payment_rounded),
+                _buildSidebarItem(8, 'طرق دفع المشتريات', Icons.account_balance_rounded),
+                _buildSidebarItem(9, 'سلة المحذوفات', Icons.delete_sweep_rounded),
+                _buildSidebarItem(10, 'الإعدادات والسمة', Icons.settings_rounded),
+              ],
+            ),
+          ),
+          _buildUserCard(true, isDark),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFullSidebar(ThemeData theme, bool isDark) {
     return Container(
       width: 280,
-      color: isDark ? const Color(0xFF0F172A) : const Color(0xFF0F172A),
+      color: const Color(0xFF0F172A),
       child: Column(
         children: [
           _buildSidebarHeader(),
@@ -140,7 +190,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildBottomNav(ThemeData theme) {
     return BottomNavigationBar(
-      currentIndex: _selectedIndex > 3 ? 0 : _selectedIndex,
+      currentIndex: _selectedIndex > 4 ? 0 : _selectedIndex,
       onTap: (index) => setState(() => _selectedIndex = index),
       type: BottomNavigationBarType.fixed,
       selectedItemColor: Colors.blue[700],
@@ -150,21 +200,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
         BottomNavigationBarItem(icon: Icon(Icons.receipt_long_rounded), label: 'البيع'),
         BottomNavigationBarItem(icon: Icon(Icons.bar_chart_rounded), label: 'إحصائيات'),
         BottomNavigationBarItem(icon: Icon(Icons.shopping_cart_rounded), label: 'المشتريات'),
+        BottomNavigationBarItem(icon: Icon(Icons.people_alt_rounded), label: 'الزبائن'),
       ],
     );
   }
 
   Widget _buildSidebarHeader() {
-    return Container(
-      padding: const EdgeInsets.only(top: 40, bottom: 10, left: 24, right: 24),
-      child: Center(
-        child: Image.asset(
-          'assets/logo.png',
-          height: 100,
-          errorBuilder: (context, error, stackTrace) => Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: Colors.blue.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
-            child: const Icon(Icons.storefront_rounded, color: Colors.blue, size: 28),
+    return SafeArea(
+      bottom: false,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
+        child: Center(
+          child: Image.asset(
+            'assets/logo.png',
+            height: 80,
+            errorBuilder: (context, error, stackTrace) => Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: Colors.blue.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+              child: const Icon(Icons.storefront_rounded, color: Colors.blue, size: 32),
+            ),
           ),
         ),
       ),
@@ -176,16 +230,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       child: InkWell(
-        onTap: () => setState(() => _selectedIndex = index),
+        onTap: () {
+          setState(() => _selectedIndex = index);
+          if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
+            Navigator.pop(context);
+          }
+        },
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           decoration: BoxDecoration(color: isSelected ? Colors.blue.withOpacity(0.1) : Colors.transparent, borderRadius: BorderRadius.circular(12)),
           child: Row(
             children: [
               Icon(icon, color: isSelected ? Colors.blue : const Color(0xFF94A3B8), size: 22),
               const SizedBox(width: 16),
-              Text(title, style: TextStyle(color: isSelected ? Colors.white : const Color(0xFF94A3B8), fontWeight: isSelected ? FontWeight.bold : FontWeight.w500, fontSize: 14)),
+              Expanded(child: Text(title, style: TextStyle(color: isSelected ? Colors.white : const Color(0xFF94A3B8), fontWeight: isSelected ? FontWeight.bold : FontWeight.w500, fontSize: 14))),
             ],
           ),
         ),
@@ -194,24 +253,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildUserCard(bool isFull, bool isDark) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Consumer<AuthService>(
-        builder: (context, auth, _) => Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(16)),
-          child: Row(
-            children: [
-              const CircleAvatar(backgroundColor: Colors.blue, radius: 16, child: Icon(Icons.person, color: Colors.white, size: 18)),
-              if (isFull) ...[
-                const SizedBox(width: 12),
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(auth.currentUser?.name ?? '', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
-                  Text(auth.isManager() ? 'مدير' : 'محاسب', style: TextStyle(color: Colors.grey[500], fontSize: 10)),
-                ])),
-                IconButton(icon: const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 18), onPressed: () => auth.logout()),
-              ]
-            ],
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Consumer<AuthService>(
+          builder: (context, auth, _) => Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(16)),
+            child: Row(
+              children: [
+                const CircleAvatar(backgroundColor: Colors.blue, radius: 16, child: Icon(Icons.person, color: Colors.white, size: 18)),
+                if (isFull) ...[
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(auth.currentUser?.name ?? '', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
+                    Text(auth.isManager() ? 'مدير' : 'محاسب', style: TextStyle(color: Colors.grey[500], fontSize: 10)),
+                  ])),
+                  IconButton(icon: const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 18), onPressed: () => auth.logout()),
+                ]
+              ],
+            ),
           ),
         ),
       ),
@@ -219,20 +281,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildAdaptiveAppBar(ThemeData theme, double width, bool isMobile, bool isDark) {
-    return Container(
-      height: 70,
-      padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 24),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF071028) : Colors.white, 
-        border: Border(bottom: BorderSide(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)))
-      ),
-      child: Row(
-        children: [
-          if (width < 1100 && !isMobile) Text('Elegant Store', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: isDark ? const Color(0xFFDCEFFF) : const Color(0xFF0F172A))),
-          if (isMobile) Image.asset('assets/logo.png', height: 35, errorBuilder: (context, error, stackTrace) => const Icon(Icons.storefront_rounded, color: Colors.blue, size: 28)),
-          const Spacer(),
-          _buildNotificationIcon(isDark),
-        ],
+    return SafeArea(
+      bottom: false,
+      child: Container(
+        height: 85,
+        padding: EdgeInsets.only(
+          left: isMobile ? 8 : 24, 
+          right: isMobile ? 8 : 24,
+          top: 15, // Margin top to push logo below status bar
+        ),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF071028) : Colors.white, 
+          border: Border(bottom: BorderSide(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)))
+        ),
+        child: Row(
+          children: [
+            if (isMobile) 
+              IconButton(
+                icon: Icon(Icons.menu_rounded, color: isDark ? Colors.white : Colors.black87),
+                onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+              ),
+            const SizedBox(width: 8),
+            if (isMobile)
+              Image.asset(
+                'assets/logo.png',
+                height: 45,
+                errorBuilder: (context, error, stackTrace) => Text(
+                  _getScreenTitle(_selectedIndex),
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: isDark ? const Color(0xFFDCEFFF) : const Color(0xFF0F172A))
+                ),
+              )
+            else
+              Text('Elegant Store', 
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: isDark ? const Color(0xFFDCEFFF) : const Color(0xFF0F172A))),
+            const Spacer(),
+            _buildNotificationIcon(isDark),
+          ],
+        ),
       ),
     );
   }

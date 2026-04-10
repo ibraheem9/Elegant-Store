@@ -29,11 +29,14 @@ void main() async {
   // Initialize Notifications
   await NotificationService.init();
 
+  final authService = AuthService(dbService);
+  await authService.initSession(); // Restore session before UI loads
+
   runApp(
     MultiProvider(
       providers: [
         Provider<DatabaseService>(create: (_) => dbService),
-        ChangeNotifierProvider<AuthService>(create: (_) => AuthService(dbService)),
+        ChangeNotifierProvider<AuthService>(create: (_) => authService),
         ChangeNotifierProvider<ThemeNotifier>(create: (_) => ThemeNotifier()),
       ],
       child: const ElegantStoreApp(),

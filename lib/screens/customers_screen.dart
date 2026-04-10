@@ -561,12 +561,11 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     final db = context.read<DatabaseService>();
     final methods = await db.getPaymentMethods(category: 'SALE');
     
-    // حساب الرصيد من الفواتير (الموجب دين، السالب رصيد مودع)
     double calculatedBalance = _invoices.fold(0, (sum, item) {
       if (item.type == 'DEPOSIT') {
-        return sum - item.amount; // الإيداع يقلل الدين (أو يزيد الرصيد)
+        return sum - item.amount; 
       } else {
-        return sum + (item.amount - item.paidAmount); // الفاتورة تزيد الدين
+        return sum + (item.amount - item.paidAmount);
       }
     });
 
@@ -580,41 +579,43 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         builder: (context, setDialogState) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           title: const Text('تسجيل دفعة سداد', style: TextStyle(fontWeight: FontWeight.bold)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (calculatedBalance > 0)
-                Text('إجمالي الدين المستحق: ${calculatedBalance.toStringAsFixed(2)} ₪', 
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.red)),
-              const SizedBox(height: 16),
-              TextField(
-                controller: amountController,
-                decoration: InputDecoration(
-                  labelText: 'المبلغ المدفوع', 
-                  prefixText: '₪ ',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (calculatedBalance > 0)
+                  Text('إجمالي الدين المستحق: ${calculatedBalance.toStringAsFixed(2)} ₪', 
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.red)),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: amountController,
+                  decoration: InputDecoration(
+                    labelText: 'المبلغ المدفوع', 
+                    prefixText: '₪ ',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))
+                  ),
+                  keyboardType: TextInputType.number,
                 ),
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<PaymentMethod>(
-                value: selectedMethod,
-                items: methods.map((m) => DropdownMenuItem(value: m, child: Text(m.name))).toList(),
-                onChanged: (v) => setDialogState(() => selectedMethod = v),
-                decoration: InputDecoration(
-                  labelText: 'وسيلة الدفع',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))
+                const SizedBox(height: 16),
+                DropdownButtonFormField<PaymentMethod>(
+                  value: selectedMethod,
+                  items: methods.map((m) => DropdownMenuItem(value: m, child: Text(m.name))).toList(),
+                  onChanged: (v) => setDialogState(() => selectedMethod = v),
+                  decoration: InputDecoration(
+                    labelText: 'وسيلة الدفع',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: notesController,
-                decoration: InputDecoration(
-                  labelText: 'ملاحظات السداد',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))
+                const SizedBox(height: 16),
+                TextField(
+                  controller: notesController,
+                  decoration: InputDecoration(
+                    labelText: 'ملاحظات السداد',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
@@ -623,7 +624,6 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                 double amount = double.tryParse(amountController.text) ?? 0;
                 if (amount <= 0 || selectedMethod == null) return;
 
-                // تسجيل الدفعة كإيداع (DEPOSIT) لأنها سداد يقلل الدين الإجمالي
                 await db.addCredit(
                   userId: _currentCustomer.id!,
                   amount: amount,
@@ -648,13 +648,15 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final size = MediaQuery.of(context).size;
+    final bool isMobile = size.width < 700;
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF071028) : const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: Row(
           children: [
-            Text(_currentCustomer.name, style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+            Expanded(child: Text(_currentCustomer.name, style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black, fontSize: isMobile ? 16 : 20), overflow: TextOverflow.ellipsis)),
             if (_currentCustomer.creditLimit == -1) ...[
               const SizedBox(width: 8),
               const Icon(Icons.verified, color: Colors.blue, size: 24),
@@ -663,11 +665,11 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         ),
         actions: [
           Padding(
-            padding: const EdgeInsets.only(left: 16.0, top: 8, bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8),
             child: ElevatedButton.icon(
               onPressed: _showRepaymentDialog,
-              icon: const Icon(Icons.add_card_rounded, color: Colors.white, size: 20),
-              label: const Text('تسديد الديون', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              icon: const Icon(Icons.add_card_rounded, color: Colors.white, size: 18),
+              label: Text(isMobile ? 'سداد' : 'تسديد الديون', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green[600],
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -681,24 +683,22 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black),
       ),
       body: _isLoading ? const Center(child: CircularProgressIndicator()) : SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
+        padding: EdgeInsets.all(isMobile ? 16 : 32),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildInfoGrid(isDark),
+            _buildInfoGrid(isDark, size),
             const SizedBox(height: 40),
             Text('سجل الفواتير والديون', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
             const SizedBox(height: 16),
-            _buildInvoicesList(isDark),
+            _buildInvoicesList(isDark, isMobile),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildInfoGrid(bool isDark) {
-    // حساب الرصيد من واقع الفواتير المسجلة
-    // المبلغ المستحق = (إجمالي الفواتير غير المدفوعة) - (إجمالي الإيداعات/الدفعات السابقة)
+  Widget _buildInfoGrid(bool isDark, Size size) {
     double calculatedBalance = _invoices.fold(0, (sum, item) {
       if (item.type == 'DEPOSIT') {
         return sum - item.amount; 
@@ -706,6 +706,9 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         return sum + (item.amount - item.paidAmount);
       }
     });
+
+    final bool isMobile = size.width < 700;
+    final double cardWidth = isMobile ? (size.width - 48) : 250;
 
     return Wrap(
       spacing: 20,
@@ -716,23 +719,23 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
           '${calculatedBalance.abs().toStringAsFixed(2)} ₪', 
           calculatedBalance > 0 ? Colors.red : Colors.green, 
           isDark, 
-          width: 250,
+          width: cardWidth,
           subtitle: calculatedBalance > 0 ? 'مستحق الدفع' : 'رصيد لك لدينا'
         ),
         
-        _buildDetailCard('سقف الدين', _currentCustomer.creditLimit == -1 ? 'غير محدود' : '${_currentCustomer.creditLimit} ₪', Colors.orange, isDark, width: 250),
+        _buildDetailCard('سقف الدين', _currentCustomer.creditLimit == -1 ? 'غير محدود' : '${_currentCustomer.creditLimit} ₪', Colors.orange, isDark, width: cardWidth),
         
         if (_currentCustomer.nickname != null && _currentCustomer.nickname!.isNotEmpty) 
-          _buildDetailCard('اللقب', _currentCustomer.nickname!, Colors.blue, isDark, width: 250),
+          _buildDetailCard('اللقب', _currentCustomer.nickname!, Colors.blue, isDark, width: cardWidth),
         if (_currentCustomer.transferNames != null && _currentCustomer.transferNames!.isNotEmpty) 
-          _buildDetailCard('أسماء التحويل', _currentCustomer.transferNames!, Colors.purple, isDark, width: 250),
+          _buildDetailCard('أسماء التحويل', _currentCustomer.transferNames!, Colors.purple, isDark, width: cardWidth),
         if (_currentCustomer.notes != null && _currentCustomer.notes!.isNotEmpty) 
-          _buildDetailCard('ملاحظات', _currentCustomer.notes!, Colors.blueGrey, isDark, width: 520),
+          _buildDetailCard('ملاحظات', _currentCustomer.notes!, Colors.blueGrey, isDark, width: isMobile ? cardWidth : (cardWidth * 2 + 20)),
       ],
     );
   }
 
-  Widget _buildDetailCard(String label, String value, Color color, bool isDark, {double? width, String? subtitle}) {
+  Widget _buildDetailCard(String label, String value, Color color, bool isDark, {required double width, String? subtitle}) {
     return Container(
       width: width,
       padding: const EdgeInsets.all(24),
@@ -747,7 +750,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         children: [
           Text(label, style: TextStyle(color: isDark ? Colors.white60 : Colors.grey, fontSize: 14)),
           const SizedBox(height: 8),
-          Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: color)),
+          Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: color)),
           if (subtitle != null) ...[
             const SizedBox(height: 4),
             Text(subtitle, style: TextStyle(color: color.withOpacity(0.7), fontSize: 12, fontWeight: FontWeight.bold)),
@@ -757,10 +760,9 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     );
   }
 
-  Widget _buildInvoicesList(bool isDark) {
+  Widget _buildInvoicesList(bool isDark, bool isMobile) {
     if (_invoices.isEmpty) return Center(child: Text('لا توجد فواتير مسجلة', style: TextStyle(color: isDark ? Colors.white30 : Colors.grey)));
     
-    // ترتيب الفواتير من الأحدث للأقدم
     final sortedInvoices = List<Invoice>.from(_invoices)..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
     return ListView.builder(
@@ -773,11 +775,10 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         bool isPartial = inv.paymentStatus == 'PARTIAL';
         bool isDeposit = inv.type == 'DEPOSIT';
         
-        // التعديل المطلوب: الفاتورة السداد (DEPOSIT) تظهر بشكل مميز
         if (isDeposit) {
           return Container(
             margin: const EdgeInsets.only(bottom: 16),
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.all(isMobile ? 16 : 20),
             decoration: BoxDecoration(
               color: Colors.green[600]!.withOpacity(0.1),
               borderRadius: BorderRadius.circular(16),
@@ -786,31 +787,29 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(color: Colors.green[600], borderRadius: BorderRadius.circular(12)),
-                  child: const Icon(Icons.payments_rounded, color: Colors.white),
+                  child: const Icon(Icons.payments_rounded, color: Colors.white, size: 20),
                 ),
-                const SizedBox(width: 20),
+                const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('دفعة سداد ديون', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green[800])),
+                      Text('دفعة سداد ديون', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.green[800])),
                       if (inv.methodName != null) 
-                        Text('عبر: ${inv.methodName}', style: TextStyle(color: Colors.green[700], fontWeight: FontWeight.bold, fontSize: 13)),
-                      Text('التاريخ: ${inv.invoiceDate}', style: TextStyle(color: Colors.green[800]!.withOpacity(0.7), fontSize: 12)),
-                      if (inv.notes != null) Text(inv.notes!, style: TextStyle(fontSize: 13, color: Colors.green[900])),
+                        Text('عبر: ${inv.methodName}', style: TextStyle(color: Colors.green[700], fontWeight: FontWeight.bold, fontSize: 12)),
+                      Text('التاريخ: ${inv.invoiceDate}', style: TextStyle(color: Colors.green[800]!.withOpacity(0.7), fontSize: 11)),
+                      if (inv.notes != null) Text(inv.notes!, style: TextStyle(fontSize: 12, color: Colors.green[900])),
                     ],
                   ),
                 ),
-                Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 24, color: Colors.green[800])),
+                Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(fontWeight: FontWeight.w900, fontSize: isMobile ? 18 : 24, color: Colors.green[800])),
               ],
             ),
           );
         }
 
-        // Color statusColor = isPaid ? Colors.green : (isPartial ? Colors.orange : Colors.red);
-        
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
@@ -821,28 +820,26 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
           child: Column(
             children: [
               ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                contentPadding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 20, vertical: 10),
                 title: Row(
                   children: [
                     Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: isDark ? Colors.white : Colors.black)),
                     if (isPartial) ...[
                       const SizedBox(width: 12),
-                      Text('(المدفوع: ${inv.paidAmount} ₪)', style: const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.bold)),
+                      Text('(المدفوع: ${inv.paidAmount} ₪)', style: const TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold)),
                     ]
                   ],
                 ),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // تم التعديل: إظهار وسيلة الدفع فقط إذا كانت الفاتورة مدفوعة بالكامل
                     if (isPaid && inv.methodName != null) 
                        Text('وسيلة الدفع: ${inv.methodName}', style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12)),
-                    Text('التاريخ: ${inv.invoiceDate}', style: const TextStyle(color: Colors.grey)),
+                    Text('التاريخ: ${inv.invoiceDate}', style: const TextStyle(color: Colors.grey, fontSize: 11)),
                     if (inv.notes != null) Text('ملاحظات: ${inv.notes}', style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic)),
                   ],
                 ),
               ),
-              // الشريط السفلي الملون (أزرق للمدفوع، برتقالي للدين)
               Container(
                 height: 4,
                 width: double.infinity,

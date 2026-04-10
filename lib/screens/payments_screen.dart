@@ -63,33 +63,38 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-    final db = context.read<DatabaseService>();
-    final methods = await db.getPaymentMethods(category: 'SALE');
-    final allInvoices = await db.getInvoices(start: _startDate, end: _endDate);
+    try {
+      final db = context.read<DatabaseService>();
+      final methods = await db.getPaymentMethods(category: 'SALE');
+      final allInvoices = await db.getInvoices(start: _startDate, end: _endDate);
 
-    Map<int, double> totals = {};
-    for (var m in methods) {
-      if (m.type == 'app') {
-        double sum = allInvoices
-            .where((inv) => inv.paymentMethodId == m.id && (inv.paymentStatus == 'PAID' || inv.paymentStatus == 'paid'))
-            .fold(0, (prev, element) => prev + element.amount);
-        totals[m.id!] = sum;
+      Map<int, double> totals = {};
+      for (var m in methods) {
+        if (m.type == 'app') {
+          double sum = allInvoices
+              .where((inv) => inv.paymentMethodId == m.id && (inv.paymentStatus == 'PAID' || inv.paymentStatus == 'paid'))
+              .fold(0, (prev, element) => prev + element.amount);
+          totals[m.id!] = sum;
+        }
       }
+
+      setState(() {
+        _saleMethods = methods;
+        _methodTotals = totals;
+        _unpaidInvoices = allInvoices.where((inv) => 
+          (inv.paymentStatus == 'UNPAID' || inv.paymentStatus == 'pending')
+        ).toList();
+
+        _paidInvoices = allInvoices.where((inv) => 
+          inv.paymentStatus == 'PAID' || inv.paymentStatus == 'paid' || inv.paymentStatus == 'PARTIAL'
+        ).toList();
+
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint("Error loading payments data: $e");
+      setState(() => _isLoading = false);
     }
-
-    setState(() {
-      _saleMethods = methods;
-      _methodTotals = totals;
-      _unpaidInvoices = allInvoices.where((inv) => 
-        (inv.paymentStatus == 'UNPAID' || inv.paymentStatus == 'pending')
-      ).toList();
-
-      _paidInvoices = allInvoices.where((inv) => 
-        inv.paymentStatus == 'PAID' || inv.paymentStatus == 'paid' || inv.paymentStatus == 'PARTIAL'
-      ).toList();
-
-      _isLoading = false;
-    });
   }
 
   List<Invoice> _processList(List<Invoice> list) {
@@ -161,21 +166,23 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final size = MediaQuery.of(context).size;
+    final bool isMobile = size.width < 700;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Column(
         children: [
-          _buildTopBar(isDark),
-          _buildTabBar(isDark),
+          _buildTopBar(isDark, isMobile),
+          _buildTabBar(isDark, isMobile),
           Expanded(
             child: _isLoading
                ? const Center(child: CircularProgressIndicator())
                : TabBarView(
                    controller: _tabController,
                    children: [
-                     _buildUnpaidTab(isDark),
-                     _buildPaidTab(isDark),
+                     _buildUnpaidTab(isDark, isMobile),
+                     _buildPaidTab(isDark, isMobile),
                    ],
                  ),
           ),
@@ -184,41 +191,37 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
     );
   }
 
-  Widget _buildTopBar(bool isDark) {
-    return LayoutBuilder(builder: (context, constraints) {
-      bool isMobile = constraints.maxWidth < 600;
-      return Padding(
-        padding: EdgeInsets.all(isMobile ? 16 : 32),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (isMobile) ...[
-              Text('تسوية ومعالجة المدفوعات', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A))),
-              const SizedBox(height: 4),
-              const Text('متابعة الفواتير وسجل المدفوعات المكتملة', style: TextStyle(color: Colors.grey, fontSize: 12)),
-              const SizedBox(height: 16),
-              _buildFilterBar(isDark),
-            ] else 
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('تسوية ومعالجة المدفوعات', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A))),
-                      const SizedBox(height: 4),
-                      const Text('متابعة الفواتير المعلقة للزبائن وسجل المدفوعات المكتملة', style: TextStyle(color: Colors.grey)),
-                    ],
-                  ),
-                  _buildFilterBar(isDark),
-                ],
+  Widget _buildTopBar(bool isDark, bool isMobile) {
+    return Padding(
+      padding: EdgeInsets.all(isMobile ? 16 : 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('تسوية ومعالجة المدفوعات', style: TextStyle(fontSize: isMobile ? 22 : 32, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A))),
+                    const SizedBox(height: 4),
+                    if (!isMobile) const Text('متابعة الفواتير المعلقة للزبائن وسجل المدفوعات المكتملة', style: TextStyle(color: Colors.grey)),
+                  ],
+                ),
               ),
-            const SizedBox(height: 24),
-            _buildSearchBar(isDark),
+              if (!isMobile) _buildFilterBar(isDark),
+            ],
+          ),
+          if (isMobile) ...[
+            const SizedBox(height: 16),
+            _buildFilterBar(isDark),
           ],
-        ),
-      );
-    });
+          const SizedBox(height: 24),
+          _buildSearchBar(isDark, isMobile),
+        ],
+      ),
+    );
   }
 
   Widget _buildFilterBar(bool isDark) {
@@ -234,9 +237,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
         child: Row(
           children: [
             _filterBtn('اليوم', 'today', isDark),
-            _filterBtn('هذا الأسبوع', 'week', isDark),
-            _filterBtn('هذا الشهر', 'month', isDark),
-            _filterBtn('تاريخ مخصص', 'custom', isDark, icon: Icons.calendar_today),
+            _filterBtn('أسبوع', 'week', isDark),
+            _filterBtn('شهر', 'month', isDark),
+            _filterBtn('تاريخ', 'custom', isDark, icon: Icons.calendar_today),
           ],
         ),
       ),
@@ -267,22 +270,22 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
         }
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: active ? Colors.blue : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
           children: [
-            if (icon != null) ...[Icon(icon, size: 16, color: active ? Colors.white : (isDark ? Colors.white70 : Colors.black54)), const SizedBox(width: 8)],
-            Text(label, style: TextStyle(color: active ? Colors.white : (isDark ? Colors.white70 : Colors.black54), fontWeight: active ? FontWeight.bold : FontWeight.normal)),
+            if (icon != null) ...[Icon(icon, size: 14, color: active ? Colors.white : (isDark ? Colors.white70 : Colors.black54)), const SizedBox(width: 4)],
+            Text(label, style: TextStyle(fontSize: 12, color: active ? Colors.white : (isDark ? Colors.white70 : Colors.black54), fontWeight: active ? FontWeight.bold : FontWeight.normal)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSearchBar(bool isDark) {
+  Widget _buildSearchBar(bool isDark, bool isMobile) {
     return Row(
       children: [
         Expanded(
@@ -296,7 +299,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
               onChanged: (val) => setState(() => _searchQuery = val),
               style: TextStyle(color: isDark ? Colors.white : Colors.black),
               decoration: InputDecoration(
-                hintText: 'بحث باسم الزبون أو اللقب أو المبلغ...',
+                hintText: isMobile ? 'بحث...' : 'بحث باسم الزبون أو اللقب أو المبلغ...',
                 prefixIcon: const Icon(Icons.search, color: Colors.blue),
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
@@ -339,9 +342,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
     );
   }
 
-  Widget _buildTabBar(bool isDark) {
+  Widget _buildTabBar(bool isDark, bool isMobile) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 32),
+      margin: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 32),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF0F172A) : Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -353,19 +356,19 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
         indicatorColor: Colors.blue,
         indicatorWeight: 3,
         tabs: const [
-          Tab(text: 'فواتير بحاجة لتسوية'),
-          Tab(text: 'سجل المدفوعات المكتملة'),
+          Tab(text: 'بحاجة لتسوية'),
+          Tab(text: 'سجل المدفوعات'),
         ],
       ),
     );
   }
 
-  Widget _buildUnpaidTab(bool isDark) {
+  Widget _buildUnpaidTab(bool isDark, bool isMobile) {
     final list = _processList(_unpaidInvoices);
-    return _buildList(list, isDark, true);
+    return _buildList(list, isDark, true, isMobile);
   }
 
-  Widget _buildPaidTab(bool isDark) {
+  Widget _buildPaidTab(bool isDark, bool isMobile) {
     final list = _processList(_paidInvoices);
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -397,7 +400,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
               ),
               const VerticalDivider(width: 1, thickness: 1, indent: 32, endIndent: 32),
               Expanded(
-                child: _buildList(list, isDark, false),
+                child: _buildList(list, isDark, false, false),
               ),
             ],
           );
@@ -406,7 +409,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
         return Column(
           children: [
             _buildAppMethodsSummary(isDark, vertical: false),
-            Expanded(child: _buildList(list, isDark, false)),
+            Expanded(child: _buildList(list, isDark, false, isMobile)),
           ],
         );
       },
@@ -499,17 +502,17 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
     );
   }
 
-  Widget _buildList(List<Invoice> invoices, bool isDark, bool isUnpaidTab) {
+  Widget _buildList(List<Invoice> invoices, bool isDark, bool isUnpaidTab, bool isMobile) {
     if (invoices.isEmpty) {
       return Center(child: Text(isUnpaidTab ? 'لا توجد فواتير معلقة' : 'لا توجد فواتير مدفوعة في هذه الفترة'));
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.all(32),
+      padding: EdgeInsets.all(isMobile ? 16 : 32),
       itemCount: invoices.length,
       itemBuilder: (context, index) {
         final inv = invoices[index];
-        return _buildInvoiceCard(inv, isDark, isUnpaidTab);
+        return _buildInvoiceCard(inv, isDark, isUnpaidTab, isMobile);
       },
     );
   }
@@ -525,7 +528,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
     }
   }
 
-  Widget _buildInvoiceCard(Invoice inv, bool isDark, bool isUnpaidTab) {
+  Widget _buildInvoiceCard(Invoice inv, bool isDark, bool isUnpaidTab, bool isMobile) {
     PaymentMethod? localSelectedMethod;
     try {
       if (inv.paymentMethodId != null) {
@@ -534,13 +537,13 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
     } catch (_) {}
 
     Color typeColor = inv.type == 'WITHDRAWAL' ? Colors.orange : (inv.type == 'DEPOSIT' ? Colors.green : Colors.blue);
-    String typeLabel = inv.type == 'WITHDRAWAL' ? 'سحب نقدي' : (inv.type == 'DEPOSIT' ? 'دفع مقدم (إيداع رصيد)' : 'بيع');
+    String typeLabel = inv.type == 'WITHDRAWAL' ? 'سحب نقدي' : (inv.type == 'DEPOSIT' ? 'دفع مقدم' : 'بيع');
     
-    Color bottomBarColor = Colors.orange; // الافتراضي دين
+    Color bottomBarColor = Colors.orange;
     if (inv.type == 'DEPOSIT') {
-      bottomBarColor = Colors.green; // إيداع
+      bottomBarColor = Colors.green;
     } else if (inv.paymentStatus == 'PAID' || inv.paymentStatus == 'paid') {
-      bottomBarColor = Colors.blue; // مدفوع
+      bottomBarColor = Colors.blue;
     }
 
     return Container(
@@ -550,11 +553,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          )
+          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))
         ],
       ),
       child: Column(
@@ -563,90 +562,8 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
             onTap: () => _navigateToCustomerDetails(inv.userId),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
             child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Row(
-                children: [
-                  Expanded(
-                    flex: 3,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(inv.customerName ?? 'زبون عابر', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(color: typeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
-                              child: Text(typeLabel, style: TextStyle(color: typeColor, fontSize: 11, fontWeight: FontWeight.bold)),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Icon(Icons.access_time, size: 14, color: Colors.grey[400]),
-                            const SizedBox(width: 4),
-                            Text('${inv.invoiceDate}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
-                          ],
-                        ),
-                        if (inv.notes != null && inv.notes!.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Text('ملاحظات: ${inv.notes}', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey[600])),
-                        ],
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    flex: 1,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: typeColor)),
-                        if (!isUnpaidTab) Text(inv.methodName ?? 'كاش', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 14)),
-                      ],
-                    ),
-                  ),
-                  if (isUnpaidTab) ...[
-                    const SizedBox(width: 24),
-                    Expanded(
-                      flex: 2,
-                      child: DropdownButtonFormField<PaymentMethod>(
-                        value: localSelectedMethod,
-                        isExpanded: true,
-                        dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-                        style: TextStyle(color: isDark ? Colors.white : Colors.black),
-                        decoration: InputDecoration(
-                          labelText: 'وسيلة الدفع',
-                          labelStyle: const TextStyle(fontSize: 12),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        items: _saleMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name, style: const TextStyle(fontSize: 14)))).toList(),
-                        onChanged: (val) => localSelectedMethod = val,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    ElevatedButton(
-                      onPressed: () {
-                        if (localSelectedMethod != null) {
-                          _confirmPayment(inv, localSelectedMethod!);
-                        } else {
-                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('يرجى اختيار وسيلة الدفع أولاً')));
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        elevation: 0,
-                      ),
-                      child: const Text('تسوية الآن', style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                  ],
-                ],
-              ),
+              padding: EdgeInsets.all(isMobile ? 16 : 24),
+              child: isMobile ? _buildMobileCardContent(inv, typeColor, typeLabel, isUnpaidTab, isDark) : _buildDesktopCardContent(inv, typeColor, typeLabel, isUnpaidTab, isDark),
             ),
           ),
           Container(
@@ -654,14 +571,169 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
             width: double.infinity,
             decoration: BoxDecoration(
               color: bottomBarColor,
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(20),
-                bottomRight: Radius.circular(20),
-              ),
+              borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(20), bottomRight: Radius.circular(20)),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDesktopCardContent(Invoice inv, Color typeColor, String typeLabel, bool isUnpaidTab, bool isDark) {
+    PaymentMethod? localSelectedMethod;
+    try { if (inv.paymentMethodId != null) localSelectedMethod = _saleMethods.firstWhere((m) => m.id == inv.paymentMethodId); } catch (_) {}
+    
+    return Row(
+      children: [
+        Expanded(
+          flex: 3,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(inv.customerName ?? 'زبون عابر', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(color: typeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+                    child: Text(typeLabel, style: TextStyle(color: typeColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(Icons.access_time, size: 14, color: Colors.grey[400]),
+                  const SizedBox(width: 4),
+                  Text('${inv.invoiceDate}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                ],
+              ),
+              if (inv.notes != null && inv.notes!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text('ملاحظات: ${inv.notes}', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey[600])),
+              ],
+            ],
+          ),
+        ),
+        Expanded(
+          flex: 1,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: typeColor)),
+              if (!isUnpaidTab) Text(inv.methodName ?? 'كاش', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 14)),
+            ],
+          ),
+        ),
+        if (isUnpaidTab) ...[
+          const SizedBox(width: 24),
+          Expanded(
+            flex: 2,
+            child: DropdownButtonFormField<PaymentMethod>(
+              value: localSelectedMethod,
+              isExpanded: true,
+              dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+              decoration: InputDecoration(
+                labelText: 'وسيلة الدفع',
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              items: _saleMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name, style: const TextStyle(fontSize: 14)))).toList(),
+              onChanged: (val) => localSelectedMethod = val,
+            ),
+          ),
+          const SizedBox(width: 16),
+          ElevatedButton(
+            onPressed: () {
+              if (localSelectedMethod != null) _confirmPayment(inv, localSelectedMethod!);
+              else ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('يرجى اختيار وسيلة الدفع أولاً')));
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue, foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              elevation: 0,
+            ),
+            child: const Text('تسوية الآن', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildMobileCardContent(Invoice inv, Color typeColor, String typeLabel, bool isUnpaidTab, bool isDark) {
+    PaymentMethod? localSelectedMethod;
+    try { if (inv.paymentMethodId != null) localSelectedMethod = _saleMethods.firstWhere((m) => m.id == inv.paymentMethodId); } catch (_) {}
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(child: Text(inv.customerName ?? 'زبون عابر', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+            Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: typeColor)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(color: typeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+              child: Text(typeLabel, style: TextStyle(color: typeColor, fontSize: 10, fontWeight: FontWeight.bold)),
+            ),
+            const SizedBox(width: 12),
+            Icon(Icons.access_time, size: 12, color: Colors.grey[400]),
+            const SizedBox(width: 4),
+            Text('${inv.invoiceDate}', style: const TextStyle(color: Colors.grey, fontSize: 11)),
+          ],
+        ),
+        if (inv.notes != null && inv.notes!.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text('ملاحظات: ${inv.notes}', style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey[600])),
+        ],
+        if (!isUnpaidTab) ...[
+           const SizedBox(height: 8),
+           Text(inv.methodName ?? 'كاش', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 12)),
+        ],
+        if (isUnpaidTab) ...[
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<PaymentMethod>(
+                  value: localSelectedMethod,
+                  isExpanded: true,
+                  dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                  decoration: InputDecoration(
+                    labelText: 'وسيلة الدفع',
+                    labelStyle: const TextStyle(fontSize: 10),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  items: _saleMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name, style: const TextStyle(fontSize: 12)))).toList(),
+                  onChanged: (val) => localSelectedMethod = val,
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: () {
+                  if (localSelectedMethod != null) _confirmPayment(inv, localSelectedMethod!);
+                  else ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('يرجى اختيار وسيلة الدفع')));
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue, foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: const Text('تسوية', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ],
+      ],
     );
   }
 }

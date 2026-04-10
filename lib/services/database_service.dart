@@ -29,9 +29,10 @@ class DatabaseService {
 
     final db = await openDatabase(
       path,
-      version: 8,
+      version: 9,
       onCreate: (db, version) async {
         await _createTables(db);
+        await _seedInitialData(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -65,10 +66,93 @@ class DatabaseService {
           try { await db.execute("ALTER TABLE transactions ADD COLUMN payment_method_id INTEGER"); } catch (e) {}
           try { await db.execute("ALTER TABLE transactions ADD COLUMN notes TEXT"); } catch (e) {}
         }
+        if (oldVersion < 9) {
+          await _seedInitialData(db);
+        }
       },
     );
 
     return db;
+  }
+
+  Future<void> _seedInitialData(Database db) async {
+    final now = DateTime.now().toIso8601String();
+    
+    // Seed Admin & Accountant
+    final users = await db.query('users', where: 'username = ?', whereArgs: ['admin']);
+    if (users.isEmpty) {
+      await db.insert('users', {
+        'username': 'admin',
+        'password': '123',
+        'name': 'المدير العام',
+        'role': 'SUPER_ADMIN',
+        'created_at': now,
+        'balance': 0.0
+      });
+    }
+
+    final accountants = await db.query('users', where: 'username = ?', whereArgs: ['accountant']);
+    if (accountants.isEmpty) {
+      await db.insert('users', {
+        'username': 'accountant',
+        'password': '123',
+        'name': 'المحاسب',
+        'role': 'ACCOUNTANT',
+        'created_at': now,
+        'balance': 0.0
+      });
+    }
+
+    final developers = await db.query('users', where: 'username = ?', whereArgs: ['dev']);
+    if (developers.isEmpty) {
+      await db.insert('users', {
+        'username': 'dev',
+        'password': 'dev',
+        'name': 'Developer (Reset)',
+        'role': 'DEVELOPER', // New role for resetting app
+        'created_at': now,
+        'balance': 0.0
+      });
+    }
+
+    // Seed Initial Payment Methods for SALE if empty
+    final saleMethods = await db.query('payment_methods', where: 'category = ?', whereArgs: ['SALE']);
+    if (saleMethods.isEmpty) {
+      final initialSaleMethods = [
+        {'name': 'نقدي (كاش)', 'type': 'cash', 'sort_order': 1},
+        {'name': 'تطبيق بنكي', 'type': 'app', 'sort_order': 2},
+        {'name': 'دين (أجل)', 'type': 'deferred', 'sort_order': 3},
+        {'name': 'غير مدفوع', 'type': 'unpaid', 'sort_order': 4},
+        {'name': 'رصيد المحفظة', 'type': 'credit_balance', 'sort_order': 5},
+      ];
+      for (var m in initialSaleMethods) {
+        await db.insert('payment_methods', {
+          'name': m['name'],
+          'type': m['type'],
+          'category': 'SALE',
+          'sort_order': m['sort_order'],
+          'is_active': 1
+        });
+      }
+    }
+
+    // Seed Initial Payment Methods for PURCHASE if empty
+    final purchaseMethods = await db.query('payment_methods', where: 'category = ?', whereArgs: ['PURCHASE']);
+    if (purchaseMethods.isEmpty) {
+      final initialPurchaseMethods = [
+        {'name': 'كاش من الصندوق', 'type': 'cash', 'sort_order': 1},
+        {'name': 'دفع عبر التطبيق', 'type': 'app', 'sort_order': 2},
+      ];
+      for (var m in initialPurchaseMethods) {
+        await db.insert('payment_methods', {
+          'name': m['name'],
+          'type': m['type'],
+          'category': 'PURCHASE',
+          'sort_order': m['sort_order'],
+          'is_active': 1
+        });
+      }
+    }
   }
 
   Future<void> resetAllTransactions([Database? dbInstance]) async {
@@ -81,6 +165,22 @@ class DatabaseService {
       await txn.delete('edit_history');
       await txn.rawUpdate('UPDATE users SET balance = 0.0');
     });
+  }
+
+  // New method for developer to completely reset everything except accounts
+  Future<void> factoryReset() async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('invoices');
+      await txn.delete('transactions');
+      await txn.delete('purchases');
+      await txn.delete('daily_statistics');
+      await txn.delete('edit_history');
+      await txn.delete('payment_methods');
+      await txn.delete('users', where: "role = 'customer'");
+      await txn.rawUpdate('UPDATE users SET balance = 0.0');
+    });
+    await _seedInitialData(db);
   }
 
   Future<void> _createTables(Database db) async {

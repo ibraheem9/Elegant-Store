@@ -128,6 +128,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _handleFactoryReset() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => Directionality(
+        textDirection: ui.TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('تصفير كامل للنظام (Factory Reset)'),
+          content: const Text('سيتم حذف كل شيء (زبائن، فواتير، طرق دفع، مشتريات).\n'
+              'سيبقى فقط حساب المدير والمحاسب.\n\n'
+              'هل أنت متأكد تماماً؟'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+              child: const Text('نعم، تصفير شامل'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await context.read<DatabaseService>().factoryReset();
+        _showSnackBar('تم تصفير النظام بالكامل بنجاح', Colors.orange);
+      } catch (e) {
+        _showSnackBar('فشل التصفير: $e', Colors.red);
+      }
+    }
+  }
+
   void _showSnackBar(String msg, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: color));
   }
@@ -136,6 +168,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final themeNotifier = context.watch<ThemeNotifier>();
     final isDark = themeNotifier.themeMode == ThemeMode.dark;
+    final auth = context.read<AuthService>();
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -219,6 +252,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 leading: const Icon(Icons.delete_sweep_rounded, color: Colors.red),
                 onTap: _clearAllTransactions,
               ),
+              if (auth.isDeveloper()) ...[
+                const Divider(),
+                ListTile(
+                  title: const Text(
+                    'تصفير شامل للنظام (Developer Reset)', 
+                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange)
+                  ),
+                  subtitle: const Text('تحذير: هذا الخيار متاح فقط للمطور. سيقوم بحذف كل شيء بما في ذلك الزبائن وطرق الدفع.'),
+                  leading: const Icon(Icons.phonelink_erase_rounded, color: Colors.deepOrange),
+                  onTap: _handleFactoryReset,
+                ),
+              ],
             ]),
           ],
         ),

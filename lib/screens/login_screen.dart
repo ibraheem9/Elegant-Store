@@ -15,6 +15,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _focusNodePassword = FocusNode();
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _keepMeLoggedIn = false;
 
   @override
   void dispose() {
@@ -43,6 +44,7 @@ class _LoginScreenState extends State<LoginScreen> {
       bool success = await authService.login(
         _usernameController.text,
         _passwordController.text,
+        saveSession: _keepMeLoggedIn,
       );
 
       if (!success) {
@@ -128,7 +130,25 @@ class _LoginScreenState extends State<LoginScreen> {
                           textInputAction: TextInputAction.done,
                           onSubmitted: (_) => _login(),
                         ),
-                        const SizedBox(height: 40),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Checkbox(
+                              value: _keepMeLoggedIn,
+                              onChanged: (value) {
+                                setState(() {
+                                  _keepMeLoggedIn = value ?? false;
+                                });
+                              },
+                              activeColor: const Color(0xFF1E3A8A),
+                            ),
+                            const Text(
+                              'تذكرني (البقاء متصلاً لمدة شهر)',
+                              style: TextStyle(fontSize: 14, color: Color(0xFF475569)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
                         SizedBox(
                           width: double.infinity,
                           height: 60,
