@@ -469,9 +469,33 @@ class _SalesScreenState extends State<SalesScreen> {
                 },
               ),
             ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('إغلاق'))],
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء'))],
       ),
     );
+  }
+
+  Future<void> _deleteInvoice(Invoice inv) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('تأكيد الحذف'),
+        content: Text('هل أنت متأكد من نقل الفاتورة (مبلغ: ${inv.amount} ₪) إلى سلة المحذوفات؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true), 
+            child: const Text('حذف', style: TextStyle(color: Colors.red))
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      final db = context.read<DatabaseService>();
+      await db.softDeleteInvoice(inv);
+      await _loadData();
+      _showSnackBar('تم نقل الفاتورة لسلة المحذوفات', Colors.redAccent);
+    }
   }
 
   @override
@@ -619,6 +643,7 @@ class _SalesScreenState extends State<SalesScreen> {
                   children: [
                     IconButton(icon: const Icon(Icons.history, color: Colors.grey, size: 18), onPressed: () => _showEditHistory(inv.id!)),
                     IconButton(icon: const Icon(Icons.edit, color: Colors.orange, size: 18), onPressed: () => _showEditInvoiceDialog(inv)),
+                    IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18), onPressed: () => _deleteInvoice(inv)),
                   ],
                 )),
               ]);

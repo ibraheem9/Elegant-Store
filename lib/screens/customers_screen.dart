@@ -317,7 +317,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
   Widget _buildCustomerGrid(Size size, bool isDark) {
     int crossAxisCount = (size.width > 1400) ? 4 : (size.width > 1000 ? 3 : (size.width > 650 ? 2 : 1));
     return GridView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: crossAxisCount,
         crossAxisSpacing: 16,
@@ -441,7 +441,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
     return SingleChildScrollView(
       scrollDirection: Axis.vertical, 
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Container(
