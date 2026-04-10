@@ -456,6 +456,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
             sortAscending: _isAscending,
             columnSpacing: isCompact ? 12 : 24,
             horizontalMargin: 16,
+            dataRowMaxHeight: 80, 
+            dataRowMinHeight: 60,
             headingRowColor: MaterialStateProperty.all(isDark ? const Color(0xFF1E293B) : Colors.grey[50]),
             columns: [
               DataColumn(
@@ -475,11 +477,19 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Row(children: [
-                      Text(c.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      if (c.creditLimit == -1) ...[const SizedBox(width: 4), const Icon(Icons.verified, color: Colors.blue, size: 14)]
-                    ]),
-                    Text(c.nickname ?? c.phone ?? 'لا توجد بيانات إضافية', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(child: Text(c.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis)),
+                        if (c.creditLimit == -1) ...[const SizedBox(width: 4), const Icon(Icons.verified, color: Colors.blue, size: 14)]
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(c.nickname ?? c.phone ?? 'لا توجد بيانات إضافية', 
+                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
                 ),
               )),
@@ -487,8 +497,14 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text('${c.balance.abs()} ₪', style: TextStyle(color: c.balance > 0 ? Colors.red : (c.balance < 0 ? Colors.green : Colors.grey), fontWeight: FontWeight.bold, fontSize: 13)),
-                  Text(c.creditLimit == -1 ? 'دين مفتوح' : 'سقف: ${c.creditLimit}₪', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                  Text('${c.balance.abs().toStringAsFixed(1)} ₪', 
+                    style: TextStyle(color: c.balance > 0 ? Colors.red : (c.balance < 0 ? Colors.green : Colors.grey), fontWeight: FontWeight.bold, fontSize: 13)),
+                  const SizedBox(height: 4),
+                  Text(c.creditLimit == -1 ? 'دين مفتوح' : 'سقف: ${c.creditLimit}₪', 
+                    style: const TextStyle(fontSize: 10, color: Colors.grey),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ],
               )),
               DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
@@ -542,6 +558,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   List<Invoice> _invoices = [];
   bool _isLoading = true;
   late User _currentCustomer;
+  double _calculatedBalance = 0.0;
 
   @override
   void initState() {
@@ -556,9 +573,27 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     final customers = await db.getCustomers();
     final fresh = customers.firstWhere((c) => c.id == _currentCustomer.id);
     final invoices = await db.getCustomerInvoices(fresh.id!);
+    
+    // Logic: Calculate balance from scratch for UI to be accurate based on rules
+    // Rule: Unpaid Invoices (+) minus Deposits (-)
+    double totalUnpaid = 0.0;
+    double totalDeposits = 0.0;
+    
+    for (var inv in invoices) {
+      if (inv.type == 'DEPOSIT') {
+        totalDeposits += inv.amount;
+      } else {
+        // Only include unpaid, partial or deferred parts
+        if (inv.paymentStatus != 'PAID') {
+          totalUnpaid += (inv.amount - inv.paidAmount);
+        }
+      }
+    }
+    
     setState(() {
       _currentCustomer = fresh;
       _invoices = invoices;
+      _calculatedBalance = totalUnpaid - totalDeposits;
       _isLoading = false;
     });
   }
@@ -567,8 +602,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     final db = context.read<DatabaseService>();
     final methods = await db.getPaymentMethods(category: 'SALE');
     
-    // Balance > 0 is Debt
-    double calculatedDebt = _currentCustomer.balance > 0 ? _currentCustomer.balance : 0;
+    double calculatedDebt = _calculatedBalance > 0 ? _calculatedBalance : 0;
 
     final amountController = TextEditingController(text: calculatedDebt > 0 ? calculatedDebt.toStringAsFixed(2) : '');
     final notesController = TextEditingController();
@@ -700,8 +734,8 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   }
 
   Widget _buildInfoGrid(bool isDark, Size size) {
-    final bool isDebt = _currentCustomer.balance > 0;
-    final bool isCredit = _currentCustomer.balance < 0;
+    final bool isDebt = _calculatedBalance > 0;
+    final bool isCredit = _calculatedBalance < 0;
 
     final bool isMobile = size.width < 700;
     final double cardWidth = isMobile ? (size.width - 48) : 250;
@@ -712,7 +746,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       children: [
         _buildDetailCard(
           isDebt ? 'إجمالي الدين الكلي' : 'إجمالي الرصيد الدائن', 
-          '${_currentCustomer.balance.abs().toStringAsFixed(2)} ₪', 
+          '${_calculatedBalance.abs().toStringAsFixed(2)} ₪',
           isDebt ? Colors.red : (isCredit ? Colors.green : Colors.grey), 
           isDark, 
           width: cardWidth,

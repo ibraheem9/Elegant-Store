@@ -80,9 +80,19 @@ class _SalesScreenState extends State<SalesScreen> {
           _invoices = invoices;
           _todayStats = stats;
           
-          if (methods.isNotEmpty && _selectedPaymentMethod == null) {
-            _selectedPaymentMethod = methods.first;
+          if (methods.isNotEmpty) {
+            if (_selectedPaymentMethod != null) {
+               bool exists = methods.any((m) => m.id == _selectedPaymentMethod!.id);
+               if (!exists) {
+                 _selectedPaymentMethod = methods.first;
+               } else {
+                 _selectedPaymentMethod = methods.firstWhere((m) => m.id == _selectedPaymentMethod!.id);
+               }
+            } else {
+              _selectedPaymentMethod = methods.first;
+            }
           }
+          
           _applyClientSideFilters();
           _isDataLoading = false;
         });
@@ -224,10 +234,21 @@ class _SalesScreenState extends State<SalesScreen> {
       _selectedCustomer = customer;
       _customerSearchController.text = customer.name;
       _phoneController.text = customer.phone ?? '';
-      if (customer.isPermanentCustomer == 1) {
-        try { _selectedPaymentMethod = _paymentMethods.firstWhere((m) => m.type == 'deferred'); } catch (_) {}
-      } else {
-        try { _selectedPaymentMethod = _paymentMethods.firstWhere((m) => m.type == 'unpaid'); } catch (_) {}
+      
+      if (_paymentMethods.isNotEmpty) {
+        if (customer.isPermanentCustomer == 1) {
+          try { 
+            _selectedPaymentMethod = _paymentMethods.firstWhere((m) => m.type == 'deferred'); 
+          } catch (_) {
+            _selectedPaymentMethod = _paymentMethods.first;
+          }
+        } else {
+          try { 
+            _selectedPaymentMethod = _paymentMethods.firstWhere((m) => m.type == 'unpaid'); 
+          } catch (_) {
+            _selectedPaymentMethod = _paymentMethods.first;
+          }
+        }
       }
     });
   }
@@ -326,8 +347,132 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
-  void _clearFields() { _amountController.clear(); _notesController.clear(); _customerSearchController.clear(); _phoneController.clear(); _selectedCustomer = null; }
+  void _clearFields() { 
+    _amountController.clear(); 
+    _notesController.clear(); 
+    _customerSearchController.clear(); 
+    _phoneController.clear(); 
+    _selectedCustomer = null; 
+    if (_paymentMethods.isNotEmpty) {
+      _selectedPaymentMethod = _paymentMethods.first;
+    }
+  }
   void _showSnackBar(String msg, Color color) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: color)); }
+
+  void _navigateToCustomerDetails(int customerId) async {
+    final db = context.read<DatabaseService>();
+    final customers = await db.getCustomers();
+    try {
+      final customer = customers.firstWhere((c) => c.id == customerId);
+      if (!mounted) return;
+      Navigator.push(context, MaterialPageRoute(builder: (_) => CustomerDetailsScreen(customer: customer))).then((_) => _loadData());
+    } catch (e) {
+      debugPrint('Customer not found: $e');
+    }
+  }
+
+  Future<void> _showEditInvoiceDialog(Invoice inv) async {
+    final amountController = TextEditingController(text: inv.amount.toString());
+    final notesController = TextEditingController(text: inv.notes);
+    final reasonController = TextEditingController();
+    PaymentMethod? selectedMethod = _paymentMethods.firstWhere((m) => m.id == inv.paymentMethodId, orElse: () => _paymentMethods.first);
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('تعديل الفاتورة'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(controller: amountController, decoration: const InputDecoration(labelText: 'المبلغ الجديد'), keyboardType: TextInputType.number),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<PaymentMethod>(
+                value: selectedMethod,
+                items: _paymentMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name))).toList(),
+                onChanged: (v) => setDialogState(() => selectedMethod = v),
+                decoration: const InputDecoration(labelText: 'طريقة الدفع'),
+              ),
+              const SizedBox(height: 12),
+              TextField(controller: notesController, decoration: const InputDecoration(labelText: 'ملاحظات')),
+              const SizedBox(height: 12),
+              TextField(controller: reasonController, decoration: const InputDecoration(labelText: 'سبب التعديل (إجباري)', hintText: 'مثلاً: خطأ في إدخال المبلغ')),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+            ElevatedButton(
+              onPressed: () {
+                if (reasonController.text.trim().isEmpty) {
+                  _showSnackBar('يرجى ذكر سبب التعديل', Colors.orange);
+                  return;
+                }
+                Navigator.pop(context, true);
+              },
+              child: const Text('حفظ التعديلات')
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result == true) {
+      final db = context.read<DatabaseService>();
+      final newAmount = double.tryParse(amountController.text) ?? inv.amount;
+      final newInv = Invoice(
+        id: inv.id,
+        userId: inv.userId,
+        invoiceDate: inv.invoiceDate,
+        amount: newAmount,
+        paidAmount: inv.paidAmount,
+        paymentStatus: inv.paymentStatus,
+        paymentMethodId: selectedMethod?.id,
+        createdAt: inv.createdAt,
+        notes: notesController.text,
+        type: inv.type
+      );
+
+      await db.updateInvoiceWithLog(oldInv: inv, newInv: newInv, reason: reasonController.text);
+      await _loadData();
+      _showSnackBar('تم تعديل الفاتورة وتسجيل التغيير', Colors.blue);
+    }
+  }
+
+  Future<void> _showEditHistory(int invoiceId) async {
+    final db = context.read<DatabaseService>();
+    final history = await db.getEditHistory(invoiceId, 'INVOICE');
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('تاريخ تعديلات الفاتورة'),
+        content: history.isEmpty 
+          ? const Text('لا يوجد تعديلات سابقة لهذه الفاتورة')
+          : SizedBox(
+              width: double.maxFinite,
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: history.length,
+                separatorBuilder: (_, __) => const Divider(),
+                itemBuilder: (context, index) {
+                  final item = history[index];
+                  return ListTile(
+                    title: Text('تغيير ${item['field_name'] == 'amount' ? 'المبلغ' : item['field_name']}'),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('من: ${item['old_value']} إلى: ${item['new_value']}'),
+                        Text('السبب: ${item['edit_reason']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        Text('التاريخ: ${item['created_at']}', style: const TextStyle(fontSize: 10)),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('إغلاق'))],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -415,7 +560,13 @@ class _SalesScreenState extends State<SalesScreen> {
         const SizedBox(height: 16),
         TextField(controller: _amountController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'المبلغ (₪)', prefixIcon: Icon(Icons.payments))),
         const SizedBox(height: 16),
-        DropdownButtonFormField<PaymentMethod>(value: _selectedPaymentMethod, items: _paymentMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name))).toList(), onChanged: (v) => setState(() => _selectedPaymentMethod = v), decoration: const InputDecoration(labelText: 'طريقة الدفع', prefixIcon: Icon(Icons.wallet))),
+        DropdownButtonFormField<PaymentMethod>(
+          value: (_paymentMethods.contains(_selectedPaymentMethod)) ? _selectedPaymentMethod : null, 
+          items: _paymentMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name))).toList(), 
+          onChanged: (v) => setState(() => _selectedPaymentMethod = v), 
+          decoration: const InputDecoration(labelText: 'طريقة الدفع', prefixIcon: Icon(Icons.wallet)),
+          validator: (value) => value == null ? 'يرجى اختيار طريقة دفع' : null,
+        ),
         const SizedBox(height: 16),
         TextField(controller: _notesController, decoration: const InputDecoration(labelText: 'ملاحظات', prefixIcon: Icon(Icons.note))),
         const SizedBox(height: 32),
@@ -450,13 +601,26 @@ class _SalesScreenState extends State<SalesScreen> {
               DataColumn(label: Text('المبلغ')),
               DataColumn(label: Text('النوع')),
               DataColumn(label: Text('طريقة الدفع')),
+              DataColumn(label: Text('الإجراءات')),
             ],
             rows: _invoices.map((inv) {
               return DataRow(cells: [
-                DataCell(Text(inv.customerName ?? 'عابر')),
+                DataCell(
+                  InkWell(
+                    onTap: () => _navigateToCustomerDetails(inv.userId),
+                    child: Text(inv.customerName ?? 'عابر', style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
+                  )
+                ),
                 DataCell(Text('${inv.amount} ₪')),
                 DataCell(Text(inv.type == 'SALE' ? 'بيع' : 'سحب')),
                 DataCell(Text(inv.methodName ?? '-')),
+                DataCell(Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(icon: const Icon(Icons.history, color: Colors.grey, size: 18), onPressed: () => _showEditHistory(inv.id!)),
+                    IconButton(icon: const Icon(Icons.edit, color: Colors.orange, size: 18), onPressed: () => _showEditInvoiceDialog(inv)),
+                  ],
+                )),
               ]);
             }).toList(),
           ),

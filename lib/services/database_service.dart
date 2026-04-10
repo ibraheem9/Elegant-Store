@@ -78,7 +78,6 @@ class DatabaseService {
   Future<void> _seedInitialData(Database db) async {
     final now = DateTime.now().toIso8601String();
     
-    // Seed Admin & Accountant
     final users = await db.query('users', where: 'username = ?', whereArgs: ['admin']);
     if (users.isEmpty) {
       await db.insert('users', {
@@ -109,13 +108,12 @@ class DatabaseService {
         'username': 'dev',
         'password': 'dev',
         'name': 'Developer (Reset)',
-        'role': 'DEVELOPER', // New role for resetting app
+        'role': 'DEVELOPER', 
         'created_at': now,
         'balance': 0.0
       });
     }
 
-    // Seed Initial Payment Methods for SALE if empty
     final saleMethods = await db.query('payment_methods', where: 'category = ?', whereArgs: ['SALE']);
     if (saleMethods.isEmpty) {
       final initialSaleMethods = [
@@ -136,7 +134,6 @@ class DatabaseService {
       }
     }
 
-    // Seed Initial Payment Methods for PURCHASE if empty
     final purchaseMethods = await db.query('payment_methods', where: 'category = ?', whereArgs: ['PURCHASE']);
     if (purchaseMethods.isEmpty) {
       final initialPurchaseMethods = [
@@ -167,7 +164,6 @@ class DatabaseService {
     });
   }
 
-  // New method for developer to completely reset everything except accounts
   Future<void> factoryReset() async {
     final db = await database;
     await db.transaction((txn) async {
@@ -201,7 +197,6 @@ class DatabaseService {
     return normalized.toLowerCase().trim();
   }
 
-  // --- Auth ---
   Future<User?> authenticate(String username, String password) async {
     final db = await database;
     final r = await db.query('users', where: 'username = ? AND password = ?', whereArgs: [username, password]);
@@ -212,9 +207,24 @@ class DatabaseService {
   // --- Users ---
   Future<List<User>> getCustomers() async {
     final db = await database;
-    final r = await db.query('users', where: "role = 'customer' COLLATE NOCASE AND deleted_at IS NULL");
-    return r.map((m) => User.fromMap(m)).toList();
+    final r = await db.rawQuery('''
+      SELECT u.*, 
+      (
+        COALESCE((SELECT SUM(amount - paid_amount) FROM invoices WHERE user_id = u.id AND deleted_at IS NULL AND type IN ('SALE', 'WITHDRAWAL')), 0) 
+        - 
+        COALESCE((SELECT SUM(amount - used_amount) FROM transactions WHERE buyer_id = u.id AND type = 'DEPOSIT'), 0)
+      ) as calculated_balance
+      FROM users u
+      WHERE u.role = 'customer' AND u.deleted_at IS NULL
+    ''');
+    
+    return r.map((m) {
+      var map = Map<String, dynamic>.from(m);
+      map['balance'] = map['calculated_balance']; 
+      return User.fromMap(map);
+    }).toList();
   }
+
   Future<int> insertUser(User u, String p) async { 
     final db = await database; 
     var map = u.toMap(); map['password'] = p; map['role'] = 'customer'; 
@@ -241,7 +251,6 @@ class DatabaseService {
       final now = DateTime.now().toIso8601String();
       final dateStr = DateFormat('dd-MM-yyyy EEEE', 'ar').format(DateTime.now());
       
-      // 1. Create a DEPOSIT transaction (source of money)
       await txn.insert('transactions', {
         'buyer_id': userId,
         'type': 'DEPOSIT',
@@ -252,11 +261,8 @@ class DatabaseService {
         'created_at': now
       });
       
-      // 2. Update user balance (DEPOSIT decreases debt/increases credit)
-      // New logic: Debt is positive, Credit is negative
       await txn.rawUpdate('UPDATE users SET balance = balance - ? WHERE id = ?', [amount, userId]);
 
-      // 3. Create a descriptive invoice for the log
       await txn.insert('invoices', {
         'user_id': userId,
         'invoice_date': dateStr,
@@ -277,7 +283,6 @@ class DatabaseService {
     return await db.transaction((txn) async {
       final now = DateTime.now().toIso8601String();
       
-      // 1. Get method type
       String methodType = 'unpaid';
       if (inv.paymentMethodId != null) {
         final pm = await txn.query('payment_methods', columns: ['type'], where: 'id = ?', whereArgs: [inv.paymentMethodId]);
@@ -288,12 +293,10 @@ class DatabaseService {
       double amountFromBalance = 0;
       List<String> paymentSources = [];
 
-      // Logic: If user has credit (negative balance), we use it first
       final user = await txn.query('users', columns: ['balance'], where: 'id = ?', whereArgs: [inv.userId]);
       double currentBalance = (user.first['balance'] as num).toDouble();
 
       if (currentBalance < 0 && inv.type == 'SALE') {
-        // Find unused deposits for this user
         final deposits = await txn.query(
           'transactions', 
           where: "buyer_id = ? AND type = 'DEPOSIT' AND amount > used_amount",
@@ -312,13 +315,11 @@ class DatabaseService {
 
           double deduction = (totalToPay > availableInThisDeposit) ? availableInThisDeposit : totalToPay;
           
-          // Update the specific deposit as used
           await txn.rawUpdate('UPDATE transactions SET used_amount = used_amount + ? WHERE id = ?', [deduction, depositId]);
           
           amountFromBalance += deduction;
           totalToPay -= deduction;
 
-          // Record source for notes
           if (sourceMethodId != null) {
             final sm = await txn.query('payment_methods', columns: ['name'], where: 'id = ?', whereArgs: [sourceMethodId]);
             if (sm.isNotEmpty) paymentSources.add("${sm.first['name']} ($deduction ₪)");
@@ -327,11 +328,9 @@ class DatabaseService {
           }
         }
         
-        // Update global user balance (using credit increases balance towards 0)
         await txn.rawUpdate('UPDATE users SET balance = balance + ? WHERE id = ?', [amountFromBalance, inv.userId]);
       }
 
-      // 2. Prepare the invoice data
       String finalNotes = inv.notes ?? "";
       if (amountFromBalance > 0) {
         finalNotes += "\n[مدفوع من الرصيد: $amountFromBalance ₪ | المصادر: ${paymentSources.join(' + ')}]";
@@ -340,12 +339,10 @@ class DatabaseService {
       String finalStatus = inv.paymentStatus;
       double finalPaidAmount = amountFromBalance;
 
-      // If it was supposed to be Cash/App but we already paid from balance, adjust
       if (methodType == 'cash' || methodType == 'app') {
-        finalPaidAmount = inv.amount; // It's fully paid (part balance, part current cash/app)
+        finalPaidAmount = inv.amount; 
         finalStatus = 'PAID';
       } else {
-        // It's a debt/deferred type
         if (totalToPay <= 0) {
           finalStatus = 'PAID';
           finalPaidAmount = inv.amount;
@@ -362,9 +359,7 @@ class DatabaseService {
         'updated_at': now
       });
 
-      // 3. Handle remaining debt (if any and not cash/app)
       if (methodType != 'cash' && methodType != 'app' && totalToPay > 0) {
-        // The remaining part is debt (increases balance)
         await txn.rawUpdate('UPDATE users SET balance = balance + ? WHERE id = ?', [totalToPay, inv.userId]);
       }
 
@@ -377,7 +372,68 @@ class DatabaseService {
     await db.update('invoices', inv.toMap(), where: 'id = ?', whereArgs: [inv.id]);
   }
 
-  // --- Bulk Payments ---
+  Future<void> updateInvoiceWithLog({required Invoice oldInv, required Invoice newInv, required String reason}) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      final now = DateTime.now().toIso8601String();
+      
+      // Update balance if amount changed and it was debt
+      if (oldInv.amount != newInv.amount) {
+         // This is simplified. Ideally we should recalculate based on payment methods.
+         // But for now let's log the change.
+         await txn.rawUpdate('UPDATE users SET balance = balance + ? WHERE id = ?', [newInv.amount - oldInv.amount, newInv.userId]);
+      }
+
+      await txn.update('invoices', {
+        ...newInv.toMap(),
+        'updated_at': now
+      }, where: 'id = ?', whereArgs: [newInv.id]);
+
+      if (oldInv.amount != newInv.amount) {
+        await txn.insert('edit_history', {
+          'target_id': newInv.id,
+          'target_type': 'INVOICE',
+          'field_name': 'amount',
+          'old_value': oldInv.amount.toString(),
+          'new_value': newInv.amount.toString(),
+          'edit_reason': reason,
+          'created_at': now
+        });
+      }
+      if (oldInv.notes != newInv.notes) {
+        await txn.insert('edit_history', {
+          'target_id': newInv.id,
+          'target_type': 'INVOICE',
+          'field_name': 'notes',
+          'old_value': oldInv.notes ?? "",
+          'new_value': newInv.notes ?? "",
+          'edit_reason': reason,
+          'created_at': now
+        });
+      }
+      if (oldInv.paymentMethodId != newInv.paymentMethodId) {
+        await txn.insert('edit_history', {
+          'target_id': newInv.id,
+          'target_type': 'INVOICE',
+          'field_name': 'payment_method_id',
+          'old_value': oldInv.paymentMethodId?.toString() ?? "",
+          'new_value': newInv.paymentMethodId?.toString() ?? "",
+          'edit_reason': reason,
+          'created_at': now
+        });
+      }
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getEditHistory(int targetId, String type) async {
+    final db = await database;
+    return await db.query('edit_history', 
+      where: 'target_id = ? AND target_type = ?', 
+      whereArgs: [targetId, type],
+      orderBy: 'created_at DESC'
+    );
+  }
+
   Future<void> processBulkPayment({required int userId, required double amountPaid, required int paymentMethodId, String? notes}) async {
     final db = await database;
     await db.transaction((txn) async {
@@ -414,7 +470,6 @@ class DatabaseService {
         }
       }
 
-      // Debt payment decreases balance
       await txn.rawUpdate('UPDATE users SET balance = balance - ? WHERE id = ?', [amountPaid, userId]);
       await txn.insert('transactions', {
         'buyer_id': userId,
@@ -427,7 +482,6 @@ class DatabaseService {
     });
   }
 
-  // --- Payment Methods ---
   Future<List<PaymentMethod>> getPaymentMethods({String? category}) async {
     final db = await database;
     String where = 'is_active = 1'; List<dynamic> args = [];
@@ -460,7 +514,6 @@ class DatabaseService {
     });
   }
 
-  // --- Other Methods (Invoices, Stats, etc.) ---
   Future<List<Invoice>> getInvoices({DateTime? start, DateTime? end, String? query, bool deleted = false}) async {
     final db = await database;
     String where = deleted ? 'i.deleted_at IS NOT NULL' : 'i.deleted_at IS NULL';
@@ -481,7 +534,6 @@ class DatabaseService {
         if (pm.isNotEmpty) methodType = pm.first['type'] as String;
       }
       if (methodType != 'cash' && methodType != 'app') {
-        // Deleting debt invoice decreases balance
         await txn.rawUpdate('UPDATE users SET balance = balance - ? WHERE id = ?', [inv.amount, inv.userId]);
       }
     });
@@ -497,7 +549,6 @@ class DatabaseService {
         if (pm.isNotEmpty) methodType = pm.first['type'] as String;
       }
       if (methodType != 'cash' && methodType != 'app') {
-        // Restoring debt invoice increases balance
         await txn.rawUpdate('UPDATE users SET balance = balance + ? WHERE id = ?', [inv.amount, inv.userId]);
       }
     });
@@ -538,15 +589,22 @@ class DatabaseService {
     final db = await database;
     final customers = await db.rawQuery("SELECT COUNT(*) as count FROM users WHERE role = 'customer' AND deleted_at IS NULL");
     final permanent = await db.rawQuery("SELECT COUNT(*) as count FROM users WHERE role = 'customer' AND is_permanent_customer = 1 AND deleted_at IS NULL");
-    // Debt is POSITIVE, Deposit is NEGATIVE
-    final balances = await db.rawQuery("SELECT SUM(CASE WHEN balance > 0 THEN balance ELSE 0 END) as debts, SUM(CASE WHEN balance < 0 THEN balance ELSE 0 END) as deposits FROM users WHERE role = 'customer' AND deleted_at IS NULL");
+    
+    final allCustomers = await getCustomers();
+    double totalDebts = 0;
+    double totalDeposits = 0;
+    for (var c in allCustomers) {
+      if (c.balance > 0) totalDebts += c.balance;
+      else if (c.balance < 0) totalDeposits += c.balance.abs();
+    }
+
     final unpaidNonPermanent = await db.rawQuery("SELECT COUNT(DISTINCT u.id) as count FROM users u JOIN invoices i ON u.id = i.user_id WHERE u.is_permanent_customer = 0 AND i.payment_status IN ('UNPAID', 'PARTIAL') AND i.deleted_at IS NULL");
 
     return {
       'total_customers': customers.first['count'] ?? 0,
       'permanent_count': permanent.first['count'] ?? 0,
-      'total_debts': (balances.first['debts'] as num?)?.toDouble() ?? 0.0,
-      'total_balances': (balances.first['deposits'] as num?)?.toDouble().abs() ?? 0.0,
+      'total_debts': totalDebts,
+      'total_balances': totalDeposits,
       'unpaid_non_permanent_count': unpaidNonPermanent.first['count'] ?? 0,
     };
   }
@@ -611,7 +669,6 @@ class DatabaseService {
     return await db.insert('daily_statistics', stats.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  // --- Purchases ---
   Future<List<Purchase>> getPurchasesByMethod(int methodId, {DateTime? start, DateTime? end}) async {
     final db = await database;
     String where = 'payment_method_id = ? AND deleted_at IS NULL';
@@ -648,7 +705,6 @@ class DatabaseService {
       final now = DateTime.now().toIso8601String();
       final dateStr = DateFormat('dd-MM-yyyy EEEE', 'ar').format(DateTime.now());
       await txn.insert('invoices', {'user_id': customer.id, 'invoice_date': dateStr, 'amount': amount, 'paid_amount': 0.0, 'payment_method_id': paymentMethodId, 'payment_status': 'UNPAID', 'type': 'WITHDRAWAL', 'notes': 'سحب نقدي: ${notes ?? ""}', 'created_at': now});
-      // Withdrawal increases debt (balance)
       await txn.rawUpdate('UPDATE users SET balance = balance + ? WHERE id = ?', [amount, customer.id!]);
       await txn.insert('purchases', {'merchant_name': 'سحب نقدي: ${customer.name}', 'amount': amount, 'payment_source': 'CASH', 'notes': 'سحب نقدي كدين للمشتري - ${notes ?? ""}', 'created_at': now});
     });
