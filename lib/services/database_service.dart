@@ -252,8 +252,9 @@ class DatabaseService {
         'created_at': now
       });
       
-      // 2. Update user balance
-      await txn.rawUpdate('UPDATE users SET balance = balance + ? WHERE id = ?', [amount, userId]);
+      // 2. Update user balance (DEPOSIT decreases debt/increases credit)
+      // New logic: Debt is positive, Credit is negative
+      await txn.rawUpdate('UPDATE users SET balance = balance - ? WHERE id = ?', [amount, userId]);
 
       // 3. Create a descriptive invoice for the log
       await txn.insert('invoices', {
@@ -287,11 +288,11 @@ class DatabaseService {
       double amountFromBalance = 0;
       List<String> paymentSources = [];
 
-      // Logic: If user has balance, we use it first (Waterfall from oldest deposits)
+      // Logic: If user has credit (negative balance), we use it first
       final user = await txn.query('users', columns: ['balance'], where: 'id = ?', whereArgs: [inv.userId]);
       double currentBalance = (user.first['balance'] as num).toDouble();
 
-      if (currentBalance > 0 && inv.type == 'SALE') {
+      if (currentBalance < 0 && inv.type == 'SALE') {
         // Find unused deposits for this user
         final deposits = await txn.query(
           'transactions', 
@@ -326,8 +327,8 @@ class DatabaseService {
           }
         }
         
-        // Update global user balance
-        await txn.rawUpdate('UPDATE users SET balance = balance - ? WHERE id = ?', [amountFromBalance, inv.userId]);
+        // Update global user balance (using credit increases balance towards 0)
+        await txn.rawUpdate('UPDATE users SET balance = balance + ? WHERE id = ?', [amountFromBalance, inv.userId]);
       }
 
       // 2. Prepare the invoice data
@@ -363,8 +364,8 @@ class DatabaseService {
 
       // 3. Handle remaining debt (if any and not cash/app)
       if (methodType != 'cash' && methodType != 'app' && totalToPay > 0) {
-        // The remaining part is debt
-        await txn.rawUpdate('UPDATE users SET balance = balance - ? WHERE id = ?', [totalToPay, inv.userId]);
+        // The remaining part is debt (increases balance)
+        await txn.rawUpdate('UPDATE users SET balance = balance + ? WHERE id = ?', [totalToPay, inv.userId]);
       }
 
       return id;
@@ -413,7 +414,8 @@ class DatabaseService {
         }
       }
 
-      await txn.rawUpdate('UPDATE users SET balance = balance + ? WHERE id = ?', [amountPaid, userId]);
+      // Debt payment decreases balance
+      await txn.rawUpdate('UPDATE users SET balance = balance - ? WHERE id = ?', [amountPaid, userId]);
       await txn.insert('transactions', {
         'buyer_id': userId,
         'type': 'DEBT_PAYMENT',
@@ -479,7 +481,8 @@ class DatabaseService {
         if (pm.isNotEmpty) methodType = pm.first['type'] as String;
       }
       if (methodType != 'cash' && methodType != 'app') {
-        await txn.rawUpdate('UPDATE users SET balance = balance + ? WHERE id = ?', [inv.amount, inv.userId]);
+        // Deleting debt invoice decreases balance
+        await txn.rawUpdate('UPDATE users SET balance = balance - ? WHERE id = ?', [inv.amount, inv.userId]);
       }
     });
   }
@@ -494,7 +497,8 @@ class DatabaseService {
         if (pm.isNotEmpty) methodType = pm.first['type'] as String;
       }
       if (methodType != 'cash' && methodType != 'app') {
-        await txn.rawUpdate('UPDATE users SET balance = balance - ? WHERE id = ?', [inv.amount, inv.userId]);
+        // Restoring debt invoice increases balance
+        await txn.rawUpdate('UPDATE users SET balance = balance + ? WHERE id = ?', [inv.amount, inv.userId]);
       }
     });
   }
@@ -534,14 +538,15 @@ class DatabaseService {
     final db = await database;
     final customers = await db.rawQuery("SELECT COUNT(*) as count FROM users WHERE role = 'customer' AND deleted_at IS NULL");
     final permanent = await db.rawQuery("SELECT COUNT(*) as count FROM users WHERE role = 'customer' AND is_permanent_customer = 1 AND deleted_at IS NULL");
-    final balances = await db.rawQuery("SELECT SUM(CASE WHEN balance < 0 THEN balance ELSE 0 END) as debts, SUM(CASE WHEN balance > 0 THEN balance ELSE 0 END) as deposits FROM users WHERE role = 'customer' AND deleted_at IS NULL");
+    // Debt is POSITIVE, Deposit is NEGATIVE
+    final balances = await db.rawQuery("SELECT SUM(CASE WHEN balance > 0 THEN balance ELSE 0 END) as debts, SUM(CASE WHEN balance < 0 THEN balance ELSE 0 END) as deposits FROM users WHERE role = 'customer' AND deleted_at IS NULL");
     final unpaidNonPermanent = await db.rawQuery("SELECT COUNT(DISTINCT u.id) as count FROM users u JOIN invoices i ON u.id = i.user_id WHERE u.is_permanent_customer = 0 AND i.payment_status IN ('UNPAID', 'PARTIAL') AND i.deleted_at IS NULL");
 
     return {
       'total_customers': customers.first['count'] ?? 0,
       'permanent_count': permanent.first['count'] ?? 0,
-      'total_debts': (balances.first['debts'] as num?)?.toDouble().abs() ?? 0.0,
-      'total_balances': (balances.first['deposits'] as num?)?.toDouble() ?? 0.0,
+      'total_debts': (balances.first['debts'] as num?)?.toDouble() ?? 0.0,
+      'total_balances': (balances.first['deposits'] as num?)?.toDouble().abs() ?? 0.0,
       'unpaid_non_permanent_count': unpaidNonPermanent.first['count'] ?? 0,
     };
   }
@@ -551,14 +556,8 @@ class DatabaseService {
     final start = DateTime(year, month, 1).toIso8601String();
     final end = DateTime(year, month + 1, 0, 23, 59, 59).toIso8601String();
     
-    // Updated Logic: Only include ACTUAL money flow (Sales Cash + Paid App Invoices + Paid App Debt Repayments)
-    // Formula for a specific day: 
-    // 1. Invoices (SALE) that are PAID and method type is 'cash' or 'app'
-    // 2. Transactions (DEBT_PAYMENT/DEPOSIT) where method type is 'app' or 'cash'
-    
     final r = await db.rawQuery('''
       SELECT day, SUM(total) as daily_total FROM (
-        -- 1. PAID SALES (Cash/App)
         SELECT SUBSTR(i.created_at, 1, 10) as day, SUM(i.amount) as total 
         FROM invoices i 
         JOIN payment_methods pm ON i.payment_method_id = pm.id 
@@ -568,8 +567,6 @@ class DatabaseService {
         
         UNION ALL
         
-        -- 2. APP/CASH DEBT REPAYMENTS (Transactions not linked to a specific new sale)
-        -- We filter by DEPOSIT/DEBT_PAYMENT which represent money coming in
         SELECT SUBSTR(t.created_at, 1, 10) as day, SUM(t.amount) as total
         FROM transactions t
         JOIN payment_methods pm ON t.payment_method_id = pm.id
@@ -651,7 +648,8 @@ class DatabaseService {
       final now = DateTime.now().toIso8601String();
       final dateStr = DateFormat('dd-MM-yyyy EEEE', 'ar').format(DateTime.now());
       await txn.insert('invoices', {'user_id': customer.id, 'invoice_date': dateStr, 'amount': amount, 'paid_amount': 0.0, 'payment_method_id': paymentMethodId, 'payment_status': 'UNPAID', 'type': 'WITHDRAWAL', 'notes': 'سحب نقدي: ${notes ?? ""}', 'created_at': now});
-      await txn.rawUpdate('UPDATE users SET balance = balance - ? WHERE id = ?', [amount, customer.id!]);
+      // Withdrawal increases debt (balance)
+      await txn.rawUpdate('UPDATE users SET balance = balance + ? WHERE id = ?', [amount, customer.id!]);
       await txn.insert('purchases', {'merchant_name': 'سحب نقدي: ${customer.name}', 'amount': amount, 'payment_source': 'CASH', 'notes': 'سحب نقدي كدين للمشتري - ${notes ?? ""}', 'created_at': now});
     });
   }

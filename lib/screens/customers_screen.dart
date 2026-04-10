@@ -400,11 +400,17 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   Widget _buildBalanceInfo(User customer) {
+    // New Logic: Balance > 0 is DEBT (Red), Balance < 0 is CREDIT (Green)
+    bool isDebt = customer.balance > 0;
+    bool isCredit = customer.balance < 0;
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        Text('${customer.balance.toStringAsFixed(2)} ₪', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: customer.balance < 0 ? Colors.redAccent : Colors.green)),
-        Text(customer.balance < 0 ? 'دين' : 'رصيد', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+        Text('${customer.balance.abs().toStringAsFixed(2)} ₪', 
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, 
+          color: isDebt ? Colors.redAccent : (isCredit ? Colors.green : Colors.grey))),
+        Text(isDebt ? 'دين' : (isCredit ? 'رصيد' : 'متعادل'), style: const TextStyle(fontSize: 10, color: Colors.grey)),
       ],
     );
   }
@@ -481,7 +487,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text('${c.balance} ₪', style: TextStyle(color: c.balance < 0 ? Colors.red : Colors.green, fontWeight: FontWeight.bold, fontSize: 13)),
+                  Text('${c.balance.abs()} ₪', style: TextStyle(color: c.balance > 0 ? Colors.red : (c.balance < 0 ? Colors.green : Colors.grey), fontWeight: FontWeight.bold, fontSize: 13)),
                   Text(c.creditLimit == -1 ? 'دين مفتوح' : 'سقف: ${c.creditLimit}₪', style: const TextStyle(fontSize: 10, color: Colors.grey)),
                 ],
               )),
@@ -561,15 +567,10 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     final db = context.read<DatabaseService>();
     final methods = await db.getPaymentMethods(category: 'SALE');
     
-    double calculatedBalance = _invoices.fold(0, (sum, item) {
-      if (item.type == 'DEPOSIT') {
-        return sum - item.amount; 
-      } else {
-        return sum + (item.amount - item.paidAmount);
-      }
-    });
+    // Balance > 0 is Debt
+    double calculatedDebt = _currentCustomer.balance > 0 ? _currentCustomer.balance : 0;
 
-    final amountController = TextEditingController(text: calculatedBalance > 0 ? calculatedBalance.toStringAsFixed(2) : '');
+    final amountController = TextEditingController(text: calculatedDebt > 0 ? calculatedDebt.toStringAsFixed(2) : '');
     final notesController = TextEditingController();
     PaymentMethod? selectedMethod = methods.isNotEmpty ? methods.first : null;
 
@@ -583,8 +584,8 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (calculatedBalance > 0)
-                  Text('إجمالي الدين المستحق: ${calculatedBalance.toStringAsFixed(2)} ₪', 
+                if (calculatedDebt > 0)
+                  Text('إجمالي الدين المستحق: ${calculatedDebt.toStringAsFixed(2)} ₪', 
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.red)),
                 const SizedBox(height: 16),
                 TextField(
@@ -699,13 +700,8 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   }
 
   Widget _buildInfoGrid(bool isDark, Size size) {
-    double calculatedBalance = _invoices.fold(0, (sum, item) {
-      if (item.type == 'DEPOSIT') {
-        return sum - item.amount; 
-      } else {
-        return sum + (item.amount - item.paidAmount);
-      }
-    });
+    final bool isDebt = _currentCustomer.balance > 0;
+    final bool isCredit = _currentCustomer.balance < 0;
 
     final bool isMobile = size.width < 700;
     final double cardWidth = isMobile ? (size.width - 48) : 250;
@@ -715,12 +711,12 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       runSpacing: 20,
       children: [
         _buildDetailCard(
-          'إجمالي الدين الكلي', 
-          '${calculatedBalance.abs().toStringAsFixed(2)} ₪', 
-          calculatedBalance > 0 ? Colors.red : Colors.green, 
+          isDebt ? 'إجمالي الدين الكلي' : 'إجمالي الرصيد الدائن', 
+          '${_currentCustomer.balance.abs().toStringAsFixed(2)} ₪', 
+          isDebt ? Colors.red : (isCredit ? Colors.green : Colors.grey), 
           isDark, 
           width: cardWidth,
-          subtitle: calculatedBalance > 0 ? 'مستحق الدفع' : 'رصيد لك لدينا'
+          subtitle: isDebt ? 'مستحق الدفع' : (isCredit ? 'رصيد لك لدينا' : 'الحساب متعادل')
         ),
         
         _buildDetailCard('سقف الدين', _currentCustomer.creditLimit == -1 ? 'غير محدود' : '${_currentCustomer.creditLimit} ₪', Colors.orange, isDark, width: cardWidth),

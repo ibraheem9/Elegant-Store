@@ -190,9 +190,9 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildHeader(isMobile, isDark),
+                      _buildHeader(isMobile, isDark, size),
                       const SizedBox(height: 32),
-                      _buildSummaryRow(isMobile, isDark),
+                      _buildSummaryGrid(size, isDark),
                       const SizedBox(height: 32),
                       _buildPurchaseForm(theme, isMobile, isDark),
                       const SizedBox(height: 48),
@@ -219,7 +219,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     );
   }
 
-  Widget _buildHeader(bool isMobile, bool isDark) {
+  Widget _buildHeader(bool isMobile, bool isDark, Size size) {
     if (isMobile) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -227,7 +227,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           Text('إدارة المشتريات', 
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A))),
           const SizedBox(height: 16),
-          _buildFilterBar(isDark),
+          _buildFilterBar(isDark, size),
         ],
       );
     }
@@ -236,29 +236,27 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       children: [
         Text('إدارة المشتريات', 
           style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A))),
-        _buildFilterBar(isDark),
+        _buildFilterBar(isDark, size),
       ],
     );
   }
 
-  Widget _buildFilterBar(bool isDark) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Container(
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E293B) : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0))
-        ),
-        child: Row(
-          children: [
-            _filterBtn('اليوم', 'today', isDark),
-            _filterBtn('أسبوع', 'week', isDark),
-            _filterBtn('شهر', 'month', isDark),
-            _filterBtn('تاريخ', 'custom', isDark, icon: Icons.calendar_today),
-          ],
-        ),
+  Widget _buildFilterBar(bool isDark, Size size) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 450),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0))
+      ),
+      child: Row(
+        children: [
+          Expanded(child: _filterBtn('اليوم', 'today', isDark)),
+          Expanded(child: _filterBtn('أسبوع', 'week', isDark)),
+          Expanded(child: _filterBtn('شهر', 'month', isDark)),
+          Expanded(child: _filterBtn('تاريخ', 'custom', isDark, icon: Icons.calendar_today)),
+        ],
       ),
     );
   }
@@ -268,12 +266,13 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     return GestureDetector(
       onTap: () => value == 'custom' ? _selectCustomRange() : _setFilter(value),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
           color: active ? Colors.orange[800] : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             if (icon != null) ...[Icon(icon, size: 14, color: active ? Colors.white : (isDark ? Colors.white70 : Colors.black54)), const SizedBox(width: 4)],
             Text(label, style: TextStyle(fontSize: 12, color: active ? Colors.white : (isDark ? Colors.white70 : Colors.black54), fontWeight: active ? FontWeight.bold : FontWeight.normal)),
@@ -283,17 +282,20 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     );
   }
 
-  Widget _buildSummaryRow(bool isMobile, bool isDark) {
-    if (isMobile) {
-      return Column(
-        children: _purchaseMethods.map((m) => Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: _buildSummaryItem(m, isDark),
-        )).toList(),
-      );
-    }
-    return Row(
-      children: _purchaseMethods.map((m) => Expanded(child: _buildSummaryItem(m, isDark))).toList(),
+  Widget _buildSummaryGrid(Size size, bool isDark) {
+    int crossAxisCount = (size.width > 1200) ? 4 : (size.width > 800 ? 2 : 1);
+    
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+        mainAxisExtent: 110,
+      ),
+      itemCount: _purchaseMethods.length,
+      itemBuilder: (context, index) => _buildSummaryItem(_purchaseMethods[index], isDark),
     );
   }
 
@@ -304,7 +306,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     if (m.name.contains('حمودة')) color = Colors.orange;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 4),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF0F172A) : Colors.white,
@@ -314,9 +315,10 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(m.name, style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 14)),
-          const SizedBox(height: 8),
+          Text(m.name, style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 13), overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 4),
           Text('${sum.toStringAsFixed(2)} ₪', 
             style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.bold)),
         ],

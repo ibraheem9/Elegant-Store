@@ -1,19 +1,19 @@
 import 'package:intl/intl.dart';
 
-// User Model (Blueprint 3.1 & 3.2)
+// User Model
 class User {
   final int? id;
   final String username;
   final String? email;
   final String name;
-  final String? nickname; // اللقب
-  final String role; // SUPER_ADMIN, ACCOUNTANT, CUSTOMER
-  final int isPermanentCustomer; // 0 for NON_PERMANENT, 1 for PERMANENT
-  final double? creditLimit; // debt_limit in blueprint
+  final String? nickname; 
+  final String role; 
+  final int isPermanentCustomer; 
+  final double? creditLimit; 
   final String? phone;
-  final String? notes; // الملاحظات
-  final String? transferNames; // أسماء التحويلات
-  final double balance; // Positive = Credit, Negative = Debt (Blueprint 6.2)
+  final String? notes; 
+  final String? transferNames; 
+  final double balance; 
   final String createdAt;
   final String? deletedAt;
 
@@ -71,14 +71,19 @@ class User {
       deletedAt: map['deleted_at'],
     );
   }
+
+  @override
+  bool operator ==(Object other) => identical(this, other) || other is User && runtimeType == other.runtimeType && id == other.id;
+  @override
+  int get hashCode => id.hashCode;
 }
 
-// Payment Method Model (Blueprint 3.3)
+// Payment Method Model
 class PaymentMethod {
   final int? id;
   final String name;
-  final String type; // cash, app, deferred, credit_balance, unpaid
-  final String category; // SALE, PURCHASE
+  final String type; 
+  final String category; 
   final String? description;
   final int isActive;
   final int sortOrder;
@@ -117,6 +122,11 @@ class PaymentMethod {
     );
   }
 
+  @override
+  bool operator ==(Object other) => identical(this, other) || other is PaymentMethod && runtimeType == other.runtimeType && id == other.id;
+  @override
+  int get hashCode => id.hashCode;
+
   PaymentMethod copyWith({int? sortOrder}) {
     return PaymentMethod(
       id: id,
@@ -130,26 +140,24 @@ class PaymentMethod {
   }
 }
 
-// Invoice Model (Blueprint 3.4)
+// Invoice Model
 class Invoice {
   final int? id;
-  final int userId; // buyer_id
+  final int userId; 
   final String invoiceDate;
   final double amount;
   final double paidAmount; 
   final int? paymentMethodId;
-  final String paymentStatus; // PAID, UNPAID, DEFERRED, PARTIAL
-  final String type; // SALE, WITHDRAWAL, DEPOSIT
+  final String paymentStatus; 
+  final String type; 
   final String? notes;
   final String createdAt;
   final String? updatedAt;
   final String? deletedAt;
 
-  // Virtual fields for joined queries
   final String? customerName;
   final String? customerPhone;
   final String? methodName;
-  List<FinancialTransaction>? payments; // New: To track multiple payments
 
   Invoice({
     this.id,
@@ -167,10 +175,7 @@ class Invoice {
     this.customerName,
     this.customerPhone,
     this.methodName,
-    this.payments,
   });
-
-  double get remainingAmount => amount - paidAmount;
 
   Map<String, dynamic> toMap() {
     return {
@@ -210,19 +215,17 @@ class Invoice {
   }
 }
 
-// Transaction Model (Blueprint 3.5)
+// Transaction Model
 class FinancialTransaction {
   final int? id;
   final int buyerId;
   final int? invoiceId;
-  final String type; // INVOICE_CHARGE, DEBT_PAYMENT, DEPOSIT
+  final String type; 
   final double amount;
-  final double usedAmount; // New: For tracking unspent deposits
-  final int? paymentMethodId; // New: Source of money
-  final String? notes; // New
+  final double usedAmount; 
+  final int? paymentMethodId; 
+  final String? notes; 
   final String createdAt;
-
-  // Virtual field
   final String? methodName;
 
   FinancialTransaction({
@@ -268,19 +271,17 @@ class FinancialTransaction {
   }
 }
 
-// Purchase Model (Blueprint 3.6)
+// Purchase Model
 class Purchase {
   final int? id;
   final String merchantName;
   final double amount;
-  final String paymentSource; // CASH, APP
+  final String paymentSource; 
   final int? paymentMethodId;
   final String? notes;
   final String createdAt;
   final String? updatedAt;
   final String? deletedAt;
-
-  // Virtual field
   final String? methodName;
 
   Purchase({
@@ -326,7 +327,7 @@ class Purchase {
   }
 }
 
-// Daily Statistics Model (Blueprint 5.7)
+// Daily Statistics Model
 class DailyStatistics {
   final int? id;
   final String statisticDate;
