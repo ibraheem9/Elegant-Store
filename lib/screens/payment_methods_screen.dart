@@ -88,8 +88,8 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(32.0),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(32.0, 32.0, 32.0, 150.0), // Large bottom padding for FAB
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -113,11 +113,9 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
               style: TextStyle(fontSize: 16, color: isDark ? Colors.white60 : const Color(0xFF64748B)),
             ),
             const SizedBox(height: 32),
-            Expanded(
-              child: _isLoading 
-                ? const Center(child: CircularProgressIndicator())
-                : _isReordering ? _buildReorderableList(isDark) : _buildMethodsGrid(isDark),
-            ),
+            _isLoading 
+              ? const Center(child: CircularProgressIndicator())
+              : _isReordering ? _buildReorderableList(isDark) : _buildMethodsGrid(isDark),
           ],
         ),
       ),
@@ -130,6 +128,8 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
     }
 
     return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 400,
         mainAxisExtent: 200,
@@ -148,6 +148,8 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
     return Theme(
       data: Theme.of(context).copyWith(canvasColor: Colors.transparent),
       child: ReorderableListView(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
         onReorder: (oldIndex, newIndex) {
           setState(() {
             if (newIndex > oldIndex) newIndex -= 1;

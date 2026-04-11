@@ -14,6 +14,8 @@ import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'core/config/app_themes.dart';
 
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('ar_SA', null);
@@ -58,6 +60,7 @@ class ElegantStoreApp extends StatelessWidget {
 
     return MaterialApp(
       title: 'Elegant Store',
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       themeMode: themeNotifier.themeMode,
       theme: AppThemes.lightTheme,

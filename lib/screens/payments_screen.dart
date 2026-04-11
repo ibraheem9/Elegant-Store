@@ -26,8 +26,8 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
   Map<int, double> _methodTotals = {};
   bool _isLoading = false;
   String _searchQuery = "";
-  String _sortBy = "name"; // name, date, amount
-  bool _isAscending = true;
+  String _sortBy = "date"; // name, date, amount, method
+  bool _isAscending = false;
 
   @override
   void initState() {
@@ -114,6 +114,8 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
         result = a.createdAt.compareTo(b.createdAt);
       } else if (_sortBy == 'amount') {
         result = a.amount.compareTo(b.amount);
+      } else if (_sortBy == 'method') {
+        result = (a.methodName ?? '').compareTo(b.methodName ?? '');
       }
       return _isAscending ? result : -result;
     });
@@ -136,8 +138,11 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
     String updatedNotes = currentNotes + editLog;
 
     String newStatus = 'PAID';
+    double newPaidAmount = inv.amount;
+    
     if (selectedMethod.type == 'deferred' || selectedMethod.type == 'unpaid') {
       newStatus = 'UNPAID';
+      newPaidAmount = 0.0;
     }
 
     final updatedInvoice = Invoice(
@@ -145,6 +150,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
       userId: inv.userId,
       invoiceDate: inv.invoiceDate,
       amount: inv.amount,
+      paidAmount: newPaidAmount, // Fixed: Ensure paidAmount is updated
       notes: updatedNotes,
       paymentStatus: newStatus,
       paymentMethodId: selectedMethod.id,
@@ -322,7 +328,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
       ),
       child: PopupMenuButton<String>(
         icon: const Icon(Icons.sort, color: Colors.blue),
-        tooltip: 'ترتيب',
+        tooltip: 'ترتيب حسب',
         onSelected: (val) {
           if (_sortBy == val) {
             setState(() => _isAscending = !_isAscending);
@@ -334,9 +340,10 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
           }
         },
         itemBuilder: (context) => [
-          const PopupMenuItem(value: 'name', child: Text('الاسم')),
-          const PopupMenuItem(value: 'date', child: Text('التاريخ')),
+          const PopupMenuItem(value: 'name', child: Text('اسم المشتري')),
+          const PopupMenuItem(value: 'date', child: Text('الوقت')),
           const PopupMenuItem(value: 'amount', child: Text('المبلغ')),
+          const PopupMenuItem(value: 'method', child: Text('طريقة الدفع')),
         ],
       ),
     );
@@ -507,13 +514,101 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
       return Center(child: Text(isUnpaidTab ? 'لا توجد فواتير معلقة' : 'لا توجد فواتير مدفوعة في هذه الفترة'));
     }
 
-    return ListView.builder(
-      padding: EdgeInsets.all(isMobile ? 16 : 32),
-      itemCount: invoices.length,
-      itemBuilder: (context, index) {
-        final inv = invoices[index];
-        return _buildInvoiceCard(inv, isDark, isUnpaidTab, isMobile);
-      },
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // threshold for table view: if we have enough width to show a decent table
+        if (constraints.maxWidth > 950) {
+          return _buildInvoicesTable(invoices, isDark, isUnpaidTab);
+        } else {
+          return ListView.builder(
+            padding: EdgeInsets.all(isMobile ? 16 : 32),
+            itemCount: invoices.length,
+            itemBuilder: (context, index) {
+              final inv = invoices[index];
+              return _buildInvoiceCard(inv, isDark, isUnpaidTab, isMobile);
+            },
+          );
+        }
+      }
+    );
+  }
+
+  Widget _buildInvoicesTable(List<Invoice> invoices, bool isDark, bool isUnpaidTab) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(32),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF0F172A) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: DataTable(
+            headingRowColor: MaterialStateProperty.all(isDark ? const Color(0xFF1E293B) : Colors.grey[50]),
+            dataRowHeight: 80,
+            columnSpacing: 24,
+            columns: [
+              const DataColumn(label: Text('الوقت والتاريخ', style: TextStyle(fontWeight: FontWeight.bold))),
+              const DataColumn(label: Text('المشتري', style: TextStyle(fontWeight: FontWeight.bold))),
+              const DataColumn(label: Text('المبلغ', style: TextStyle(fontWeight: FontWeight.bold))),
+              const DataColumn(label: Text('طريقة الدفع', style: TextStyle(fontWeight: FontWeight.bold))),
+              const DataColumn(label: Text('النوع/الحالة', style: TextStyle(fontWeight: FontWeight.bold))),
+              if (isUnpaidTab) const DataColumn(label: Text('إجراءات التسوية', style: TextStyle(fontWeight: FontWeight.bold))),
+            ],
+            rows: invoices.map((inv) => _buildInvoiceDataRow(inv, isDark, isUnpaidTab)).toList(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  DataRow _buildInvoiceDataRow(Invoice inv, bool isDark, bool isUnpaidTab) {
+    Color typeColor = inv.type == 'WITHDRAWAL' ? Colors.orange : (inv.type == 'DEPOSIT' ? Colors.green : Colors.blue);
+    String typeLabel = inv.type == 'WITHDRAWAL' ? 'سحب نقدي' : (inv.type == 'DEPOSIT' ? 'دفع مقدم' : 'بيع');
+    
+    PaymentMethod? localSelectedMethod;
+    try { if (inv.paymentMethodId != null) localSelectedMethod = _saleMethods.firstWhere((m) => m.id == inv.paymentMethodId); } catch (_) {}
+
+    return DataRow(
+      cells: [
+        DataCell(Text(inv.invoiceDate, style: const TextStyle(fontSize: 13, color: Colors.grey))),
+        DataCell(InkWell(
+          onTap: () => _navigateToCustomerDetails(inv.userId),
+          child: Text(inv.customerName ?? 'زبون عابر', style: const TextStyle(fontWeight: FontWeight.bold, decoration: TextDecoration.underline)))),
+        DataCell(Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(fontWeight: FontWeight.w900, color: typeColor, fontSize: 16))),
+        DataCell(Text(inv.methodName ?? (isUnpaidTab ? 'بانتظار الاختيار' : 'غير محدد'), style: TextStyle(color: inv.methodName != null ? Colors.green : Colors.grey, fontWeight: FontWeight.bold))),
+        DataCell(Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(color: typeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+          child: Text(typeLabel, style: TextStyle(color: typeColor, fontSize: 11, fontWeight: FontWeight.bold)))),
+        if (isUnpaidTab) DataCell(Row(
+          children: [
+            SizedBox(
+              width: 150,
+              child: DropdownButtonHideUnderline(
+                child: DropdownButtonFormField<PaymentMethod>(
+                  value: localSelectedMethod,
+                  isExpanded: true,
+                  hint: const Text('اختر الطريقة', style: TextStyle(fontSize: 12)),
+                  dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                  items: _saleMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name, style: const TextStyle(fontSize: 13)))).toList(),
+                  onChanged: (val) => localSelectedMethod = val,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: () {
+                if (localSelectedMethod != null) _confirmPayment(inv, localSelectedMethod!);
+                else ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('يرجى اختيار وسيلة الدفع')));
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+              child: const Text('تسوية', style: TextStyle(fontSize: 12)),
+            )
+          ],
+        )),
+      ]
     );
   }
 

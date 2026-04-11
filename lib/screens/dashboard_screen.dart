@@ -12,6 +12,7 @@ import 'settings_screen.dart';
 import 'payment_methods_screen.dart';
 import 'purchases_methods_screen.dart';
 import 'recycle_bin_screen.dart';
+import 'notifications_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -330,10 +331,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           bool hasAlert = (snap.data?['unpaid_non_permanent_count'] ?? 0) > 0;
           return Stack(
             children: [
-              Container(
-                padding: const EdgeInsets.all(8), 
-                decoration: BoxDecoration(color: isDark ? const Color(0xFF1E293B) : Colors.grey[100], shape: BoxShape.circle), 
-                child: Icon(Icons.notifications_none_rounded, color: isDark ? const Color(0xFF00E5FF) : const Color(0xFF64748B), size: 22)
+              InkWell(
+                onTap: () {
+                   Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsScreen()));
+                },
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.all(8), 
+                  decoration: BoxDecoration(color: isDark ? const Color(0xFF1E293B) : Colors.grey[100], shape: BoxShape.circle), 
+                  child: Icon(Icons.notifications_none_rounded, color: isDark ? const Color(0xFF00E5FF) : const Color(0xFF64748B), size: 22)
+                ),
               ),
               if (hasAlert) Positioned(right: 2, top: 2, child: Container(width: 10, height: 10, decoration: BoxDecoration(color: Colors.red, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)))),
             ],
@@ -386,7 +393,9 @@ class DashboardHomeScreen extends StatelessWidget {
                   _buildStatCard('إجمالي الديون القائمة', '${stats['total_debts'].toStringAsFixed(2)} ₪', Icons.money_off_rounded, const Color(0xFFEF4444), isDark),
                   _buildStatCard('إجمالي الأرصدة المودعة', '${stats['total_balances'].toStringAsFixed(2)} ₪', Icons.account_balance_rounded, const Color(0xFF10B981), isDark),
                   _buildStatCard('عدد الزبائن الكلي', '${stats['total_customers']}', Icons.group_rounded, const Color(0xFF3B82F6), isDark),
-                  _buildStatCard('تنبيهات غير مسددة', '${stats['unpaid_non_permanent_count'] ?? 0}', Icons.warning_amber_rounded, Colors.orange, isDark),
+                  _buildStatCard('تنبيهات غير مسددة', '${stats['unpaid_non_permanent_count'] ?? 0}', Icons.warning_amber_rounded, Colors.orange, isDark, onTap: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsScreen()));
+                  }),
                 ],
               );
             },
@@ -396,24 +405,28 @@ class DashboardHomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color, bool isDark) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF0F172A) : Colors.white, 
-        borderRadius: BorderRadius.circular(20), 
-        border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)), 
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)), child: Icon(icon, size: 24, color: color)),
-          const Spacer(),
-          Text(title, style: TextStyle(fontSize: 13, color: isDark ? Colors.white60 : const Color(0xFF64748B), fontWeight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A))),
-        ],
+  Widget _buildStatCard(String title, String value, IconData icon, Color color, bool isDark, {VoidCallback? onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF0F172A) : Colors.white, 
+          borderRadius: BorderRadius.circular(20), 
+          border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)), 
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)), child: Icon(icon, size: 24, color: color)),
+            const Spacer(),
+            Text(title, style: TextStyle(fontSize: 13, color: isDark ? Colors.white60 : const Color(0xFF64748B), fontWeight: FontWeight.w600)),
+            const SizedBox(height: 4),
+            Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A))),
+          ],
+        ),
       ),
     );
   }

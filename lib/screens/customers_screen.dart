@@ -18,7 +18,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
   bool _isLoading = false;
   bool _isTableView = false; 
   
-  int _sortColumnIndex = 0;
+  String _sortBy = "name"; // name, balance, createdAt, permanent
   bool _isAscending = true;
 
   @override
@@ -42,22 +42,30 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
   void _applySort() {
     setState(() {
-      if (_sortColumnIndex == 0) { 
-        _filteredCustomers.sort((a, b) => _isAscending 
-          ? a.name.compareTo(b.name) 
-          : b.name.compareTo(a.name));
-      } else if (_sortColumnIndex == 1) { 
-        _filteredCustomers.sort((a, b) => _isAscending 
-          ? a.balance.compareTo(b.balance) 
-          : b.balance.compareTo(a.balance));
-      }
+      _filteredCustomers.sort((a, b) {
+        int result = 0;
+        if (_sortBy == 'name') {
+          result = a.name.compareTo(b.name);
+        } else if (_sortBy == 'balance') {
+          result = a.balance.compareTo(b.balance);
+        } else if (_sortBy == 'createdAt') {
+          result = a.createdAt.compareTo(b.createdAt);
+        } else if (_sortBy == 'permanent') {
+          result = a.isPermanentCustomer.compareTo(b.isPermanentCustomer);
+        }
+        return _isAscending ? result : -result;
+      });
     });
   }
 
-  void _onSort(int columnIndex, bool ascending) {
+  void _onSort(String criteria) {
     setState(() {
-      _sortColumnIndex = columnIndex;
-      _isAscending = ascending;
+      if (_sortBy == criteria) {
+        _isAscending = !_isAscending;
+      } else {
+        _sortBy = criteria;
+        _isAscending = true;
+      }
       _applySort();
     });
   }
@@ -230,7 +238,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
               children: [
                 _buildHeader(isSmall, isDark),
                 const SizedBox(height: 24),
-                _buildSearchBar(isDark),
+                _buildSearchBar(isDark, isSmall),
               ],
             ),
           ),
@@ -293,23 +301,66 @@ class _CustomersScreenState extends State<CustomersScreen> {
     );
   }
 
-  Widget _buildSearchBar(bool isDark) {
+  Widget _buildSearchBar(bool isDark, bool isSmall) {
+    return Row(
+      children: [
+        Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF0F172A) : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+            ),
+            child: TextField(
+              onChanged: _filterCustomers,
+              style: TextStyle(color: isDark ? Colors.white : Colors.black),
+              decoration: InputDecoration(
+                hintText: isSmall ? 'بحث...' : 'بحث بالاسم، اللقب، أو اسم التحويل...',
+                hintStyle: TextStyle(color: isDark ? Colors.grey : Colors.grey[400]),
+                prefixIcon: const Icon(Icons.search_rounded, color: Colors.blue),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 16),
+        _buildSortMenu(isDark),
+      ],
+    );
+  }
+
+  Widget _buildSortMenu(bool isDark) {
     return Container(
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF0F172A) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
       ),
-      child: TextField(
-        onChanged: _filterCustomers,
-        style: TextStyle(color: isDark ? Colors.white : Colors.black),
-        decoration: InputDecoration(
-          hintText: 'بحث بالاسم، اللقب، أو اسم التحويل...',
-          hintStyle: TextStyle(color: isDark ? Colors.grey : Colors.grey[400]),
-          prefixIcon: const Icon(Icons.search_rounded, color: Colors.blue),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-        ),
+      child: PopupMenuButton<String>(
+        icon: const Icon(Icons.sort_rounded, color: Colors.blue),
+        tooltip: 'ترتيب حسب',
+        onSelected: _onSort,
+        itemBuilder: (context) => [
+          _buildSortItem('name', 'اسم المشتري'),
+          _buildSortItem('balance', 'الدين / الرصيد'),
+          _buildSortItem('createdAt', 'وقت الانشاء'),
+          _buildSortItem('permanent', 'دائم / غير دائم'),
+        ],
+      ),
+    );
+  }
+
+  PopupMenuItem<String> _buildSortItem(String value, String label) {
+    bool isSelected = _sortBy == value;
+    return PopupMenuItem(
+      value: value,
+      child: Row(
+        children: [
+          Text(label, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? Colors.blue : null)),
+          const Spacer(),
+          if (isSelected) Icon(_isAscending ? Icons.arrow_upward : Icons.arrow_downward, size: 16, color: Colors.blue),
+        ],
       ),
     );
   }
@@ -407,7 +458,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        Text('${customer.balance.abs().toStringAsFixed(2)} ₪', 
+        Text('${customer.balance.toStringAsFixed(2)} ₪', 
           style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, 
           color: isDebt ? Colors.redAccent : (isCredit ? Colors.green : Colors.grey))),
         Text(isDebt ? 'دين' : (isCredit ? 'رصيد' : 'متعادل'), style: const TextStyle(fontSize: 10, color: Colors.grey)),
@@ -452,7 +503,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
             border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
           ),
           child: DataTable(
-            sortColumnIndex: _sortColumnIndex,
+            sortColumnIndex: _getSortColumnIndex(),
             sortAscending: _isAscending,
             columnSpacing: isCompact ? 12 : 24,
             horizontalMargin: 16,
@@ -462,11 +513,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
             columns: [
               DataColumn(
                 label: const Text('معلومات الزبون', style: TextStyle(fontWeight: FontWeight.bold)),
-                onSort: _onSort,
+                onSort: (_, __) => _onSort('name'),
               ),
               DataColumn(
                 label: const Text('الحساب', style: TextStyle(fontWeight: FontWeight.bold)),
-                onSort: _onSort,
+                onSort: (_, __) => _onSort('balance'),
               ),
               const DataColumn(label: Text('الإجراءات', style: TextStyle(fontWeight: FontWeight.bold))),
             ],
@@ -497,10 +548,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text('${c.balance.abs().toStringAsFixed(1)} ₪', 
+                  Text('${c.balance.toStringAsFixed(2)} ₪', 
                     style: TextStyle(color: c.balance > 0 ? Colors.red : (c.balance < 0 ? Colors.green : Colors.grey), fontWeight: FontWeight.bold, fontSize: 13)),
                   const SizedBox(height: 4),
-                  Text(c.creditLimit == -1 ? 'دين مفتوح' : 'سقف: ${c.creditLimit}₪', 
+                  Text(c.isPermanentCustomer == 1 ? (c.creditLimit == -1 ? 'دين مفتوح' : 'دائم (سقف: ${c.creditLimit}₪)') : 'زبون غير دائم', 
                     style: const TextStyle(fontSize: 10, color: Colors.grey),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -517,6 +568,12 @@ class _CustomersScreenState extends State<CustomersScreen> {
         ),
       ),
     );
+  }
+
+  int? _getSortColumnIndex() {
+    if (_sortBy == 'name') return 0;
+    if (_sortBy == 'balance') return 1;
+    return null;
   }
 
   Widget _buildEmptyState(bool isDark) {
@@ -574,26 +631,10 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     final fresh = customers.firstWhere((c) => c.id == _currentCustomer.id);
     final invoices = await db.getCustomerInvoices(fresh.id!);
     
-    // Logic: Calculate balance from scratch for UI to be accurate based on rules
-    // Rule: Unpaid Invoices (+) minus Deposits (-)
-    double totalUnpaid = 0.0;
-    double totalDeposits = 0.0;
-    
-    for (var inv in invoices) {
-      if (inv.type == 'DEPOSIT') {
-        totalDeposits += inv.amount;
-      } else {
-        // Only include unpaid, partial or deferred parts
-        if (inv.paymentStatus != 'PAID') {
-          totalUnpaid += (inv.amount - inv.paidAmount);
-        }
-      }
-    }
-    
     setState(() {
       _currentCustomer = fresh;
       _invoices = invoices;
-      _calculatedBalance = totalUnpaid - totalDeposits;
+      _calculatedBalance = fresh.balance; // Unified Balance
       _isLoading = false;
     });
   }
@@ -746,7 +787,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       children: [
         _buildDetailCard(
           isDebt ? 'إجمالي الدين الكلي' : 'إجمالي الرصيد الدائن', 
-          '${_calculatedBalance.abs().toStringAsFixed(2)} ₪',
+          '${_calculatedBalance.toStringAsFixed(2)} ₪',
           isDebt ? Colors.red : (isCredit ? Colors.green : Colors.grey), 
           isDark, 
           width: cardWidth,

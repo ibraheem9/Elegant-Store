@@ -20,6 +20,8 @@ class _SalesScreenState extends State<SalesScreen> {
   final _notesController = TextEditingController();
   final _customerSearchController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _dateController = TextEditingController();
+  final _tableFilterController = TextEditingController();
 
   final LayerLink _layerLink = LayerLink();
   OverlayEntry? _overlayEntry;
@@ -31,13 +33,14 @@ class _SalesScreenState extends State<SalesScreen> {
   List<PaymentMethod> _paymentMethods = [];
   PaymentMethod? _selectedPaymentMethod;
   List<Invoice> _invoices = [];
+  List<Invoice> _filteredInvoices = [];
   
-  DateTime? _startDate = DateTime.now();
-  DateTime? _endDate = DateTime.now();
-  PaymentMethod? _filterPaymentMethod;
+  DateTime _startDate = DateTime.now();
+  DateTime _endDate = DateTime.now();
+  DateTime _selectedInvoiceDate = DateTime.now();
   
-  int? _sortColumnIndex;
-  bool _isAscending = true;
+  int? _sortColumnIndex = 1; // Default to Date
+  bool _isAscending = false; // Newest first
 
   Map<String, dynamic> _todayStats = {'total_sales': 0.0, 'total_debt': 0.0, 'buyers_count': 0};
   bool _isLoading = false;
@@ -46,6 +49,7 @@ class _SalesScreenState extends State<SalesScreen> {
   @override
   void initState() {
     super.initState();
+    _dateController.text = DateFormat('yyyy-MM-dd').format(_selectedInvoiceDate);
     _loadData();
   }
 
@@ -56,6 +60,8 @@ class _SalesScreenState extends State<SalesScreen> {
     _notesController.dispose();
     _customerSearchController.dispose();
     _phoneController.dispose();
+    _dateController.dispose();
+    _tableFilterController.dispose();
     super.dispose();
   }
 
@@ -67,8 +73,8 @@ class _SalesScreenState extends State<SalesScreen> {
       final customers = await db.getCustomers();
       final methods = await db.getPaymentMethods(category: 'SALE');
       
-      DateTime rangeStart = DateTime(_startDate!.year, _startDate!.month, _startDate!.day);
-      DateTime rangeEnd = DateTime(_endDate!.year, _endDate!.month, _endDate!.day, 23, 59, 59);
+      DateTime rangeStart = DateTime(_startDate.year, _startDate.month, _startDate.day);
+      DateTime rangeEnd = DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59);
       
       final stats = await db.getSalesStats(start: rangeStart, end: rangeEnd);
       final invoices = await db.getInvoices(start: rangeStart, end: rangeEnd);
@@ -93,7 +99,7 @@ class _SalesScreenState extends State<SalesScreen> {
             }
           }
           
-          _applyClientSideFilters();
+          _applyTableFilter();
           _isDataLoading = false;
         });
       }
@@ -105,34 +111,42 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
-  void _applyClientSideFilters() {
-    if (_filterPaymentMethod != null) {
-      _invoices = _invoices.where((inv) => inv.paymentMethodId == _filterPaymentMethod!.id).toList();
-    }
-    _applySort();
+  void _applyTableFilter() {
+    String query = _normalizeArabic(_tableFilterController.text);
+    setState(() {
+      _filteredInvoices = _invoices.where((inv) {
+        bool matchesName = _normalizeArabic(inv.customerName ?? '').contains(query);
+        bool matchesAmount = inv.amount.toString().contains(query);
+        bool matchesMethod = _normalizeArabic(inv.methodName ?? '').contains(query);
+        return matchesName || matchesAmount || matchesMethod;
+      }).toList();
+      _applySort();
+    });
   }
 
   void _applySort() {
     if (_sortColumnIndex == null) return;
-    setState(() {
-      _invoices.sort((a, b) {
-        dynamic aVal, bVal;
-        switch (_sortColumnIndex) {
-          case 0: aVal = a.customerName ?? ''; bVal = b.customerName ?? ''; break;
-          case 1: aVal = a.createdAt; bVal = b.createdAt; break;
-          case 2: aVal = a.amount; bVal = b.amount; break;
-          case 4: aVal = a.methodName ?? ''; bVal = b.methodName ?? ''; break;
-          default: return 0;
-        }
-        return _isAscending ? Comparable.compare(aVal, bVal) : Comparable.compare(bVal, aVal);
-      });
+    _filteredInvoices.sort((a, b) {
+      dynamic aVal, bVal;
+      switch (_sortColumnIndex) {
+        case 0: aVal = a.customerName ?? ''; bVal = b.customerName ?? ''; break;
+        case 1: aVal = a.createdAt; bVal = b.createdAt; break;
+        case 2: aVal = a.amount; bVal = b.amount; break;
+        case 3: aVal = a.methodName ?? ''; bVal = b.methodName ?? ''; break;
+        default: return 0;
+      }
+      return _isAscending ? Comparable.compare(aVal, bVal) : Comparable.compare(bVal, aVal);
     });
   }
 
-  void _onSort(int columnIndex, bool ascending) {
+  void _onSort(int columnIndex) {
     setState(() {
-      _sortColumnIndex = columnIndex;
-      _isAscending = ascending;
+      if (_sortColumnIndex == columnIndex) {
+        _isAscending = !_isAscending;
+      } else {
+        _sortColumnIndex = columnIndex;
+        _isAscending = true;
+      }
       _applySort();
     });
   }
@@ -196,7 +210,7 @@ class _SalesScreenState extends State<SalesScreen> {
                             ],
                           ),
                           subtitle: Text(c.phone ?? 'بدون هاتف', style: TextStyle(color: isDark ? Colors.white60 : Colors.black54)),
-                          trailing: Text('${c.balance} ₪', style: TextStyle(color: c.balance >= 0 ? Colors.green : Colors.red, fontWeight: FontWeight.bold)),
+                          trailing: Text('${c.balance} ₪', style: TextStyle(color: c.balance > 0 ? Colors.red : Colors.green, fontWeight: FontWeight.bold)),
                           onTap: () {
                             _selectCustomer(c);
                             _hideOverlay();
@@ -253,6 +267,21 @@ class _SalesScreenState extends State<SalesScreen> {
     });
   }
 
+  Future<void> _selectDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedInvoiceDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2101),
+    );
+    if (picked != null && picked != _selectedInvoiceDate) {
+      setState(() {
+        _selectedInvoiceDate = picked;
+        _dateController.text = DateFormat('yyyy-MM-dd').format(_selectedInvoiceDate);
+      });
+    }
+  }
+
   Future<void> _createInvoice() async {
     if (_amountController.text.isEmpty) { _showSnackBar('يرجى إدخال المبلغ', Colors.redAccent); return; }
     if (_selectedPaymentMethod == null) { _showSnackBar('يرجى اختيار طريقة الدفع', Colors.redAccent); return; }
@@ -281,13 +310,23 @@ class _SalesScreenState extends State<SalesScreen> {
         status = (customer.isPermanentCustomer == 1) ? 'DEFERRED' : 'UNPAID';
       }
 
+      final now = DateTime.now();
+      final combinedDateTime = DateTime(
+        _selectedInvoiceDate.year,
+        _selectedInvoiceDate.month,
+        _selectedInvoiceDate.day,
+        now.hour,
+        now.minute,
+        now.second,
+      );
+
       final invoice = Invoice(
         userId: customer.id!,
-        invoiceDate: DateFormat('dd-MM-yyyy EEEE', 'ar').format(DateTime.now()),
+        invoiceDate: DateFormat('dd-MM-yyyy EEEE', 'ar').format(combinedDateTime),
         amount: amount,
         paymentStatus: status,
         paymentMethodId: _selectedPaymentMethod?.id,
-        createdAt: DateTime.now().toIso8601String(),
+        createdAt: combinedDateTime.toIso8601String(),
         notes: _notesController.text,
       );
 
@@ -313,6 +352,8 @@ class _SalesScreenState extends State<SalesScreen> {
         final id = await db.insertUser(User(username: 'cust_${DateTime.now().millisecondsSinceEpoch}', name: _customerSearchController.text.trim().isEmpty ? 'زبون عابر' : _customerSearchController.text.trim(), phone: _phoneController.text, role: 'customer', createdAt: DateTime.now().toIso8601String()), '123');
         customer = (await db.getCustomers()).firstWhere((c) => c.id == id);
       }
+      final now = DateTime.now();
+      final combinedDateTime = DateTime(_selectedInvoiceDate.year, _selectedInvoiceDate.month, _selectedInvoiceDate.day, now.hour, now.minute, now.second);
       await db.recordCashWithdrawal(customer: customer, amount: amount, notes: _notesController.text, paymentMethodId: _selectedPaymentMethod?.id);
       _clearFields(); await _loadData(); _showSnackBar('تم تسجيل السحب بنجاح', Colors.orange);
     } catch (e) { _showSnackBar('خطأ: $e', Colors.red); } finally { setState(() => _isLoading = false); }
@@ -498,11 +539,27 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
+  Future<void> _selectFilterDateRange(BuildContext context) async {
+    final DateTimeRange? picked = await showDateRangePicker(
+      context: context,
+      initialDateRange: DateTimeRange(start: _startDate, end: _endDate),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2101),
+    );
+    if (picked != null) {
+      setState(() {
+        _startDate = picked.start;
+        _endDate = picked.end;
+      });
+      _loadData();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final size = MediaQuery.of(context).size;
-    final bool isMobile = size.width < 700;
+    final bool isMobile = size.width < 900;
 
     return Scaffold(
       backgroundColor: isDark ? Colors.transparent : const Color(0xFFF1F5F9),
@@ -519,7 +576,7 @@ class _SalesScreenState extends State<SalesScreen> {
                 const SizedBox(height: 32),
                 _buildInvoiceForm(isMobile, isDark),
                 const SizedBox(height: 48),
-                _buildTodaySalesTable(isMobile, isDark),
+                _buildInvoiceSection(isMobile, isDark),
               ],
             ),
           ),
@@ -533,7 +590,23 @@ class _SalesScreenState extends State<SalesScreen> {
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('شاشة البيع', style: TextStyle(fontSize: isMobile ? 24 : 32, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A))),
         ]),
-        IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
+        Row(
+          children: [
+            ElevatedButton.icon(
+              onPressed: () => _selectFilterDateRange(context),
+              icon: const Icon(Icons.date_range, size: 18),
+              label: Text(DateFormat('MM/dd').format(_startDate) + ' - ' + DateFormat('MM/dd').format(_endDate)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                foregroundColor: isDark ? Colors.white : Colors.black87,
+                elevation: 0,
+                side: BorderSide(color: isDark ? Colors.white10 : Colors.black12)
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
+          ],
+        ),
       ],
     );
   }
@@ -575,27 +648,104 @@ class _SalesScreenState extends State<SalesScreen> {
   Widget _buildInvoiceForm(bool isMobile, bool isDark) {
     return Container(
       padding: EdgeInsets.all(isMobile ? 20 : 32),
-      decoration: BoxDecoration(color: isDark ? const Color(0xFF0F172A) : Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0))),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        CompositedTransformTarget(
-          link: _layerLink,
-          child: TextField(controller: _customerSearchController, onChanged: _filterCustomers, decoration: const InputDecoration(labelText: 'اسم المشتري', prefixIcon: Icon(Icons.person))),
-        ),
-        const SizedBox(height: 16),
-        TextField(controller: _amountController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'المبلغ (₪)', prefixIcon: Icon(Icons.payments))),
-        const SizedBox(height: 16),
-        DropdownButtonFormField<PaymentMethod>(
-          value: (_paymentMethods.contains(_selectedPaymentMethod)) ? _selectedPaymentMethod : null, 
-          items: _paymentMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name))).toList(), 
-          onChanged: (v) => setState(() => _selectedPaymentMethod = v), 
-          decoration: const InputDecoration(labelText: 'طريقة الدفع', prefixIcon: Icon(Icons.wallet)),
-          validator: (value) => value == null ? 'يرجى اختيار طريقة دفع' : null,
-        ),
-        const SizedBox(height: 16),
-        TextField(controller: _notesController, decoration: const InputDecoration(labelText: 'ملاحظات', prefixIcon: Icon(Icons.note))),
-        const SizedBox(height: 32),
-        _buildActionButtons(isMobile),
-      ]),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0F172A) : Colors.white, 
+        borderRadius: BorderRadius.circular(24), 
+        border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5))]
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start, 
+        children: [
+          const Text('إدخال فاتورة جديدة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          const SizedBox(height: 24),
+          if (isMobile) ...[
+            _buildCustomerField(),
+            const SizedBox(height: 16),
+            _buildAmountField(),
+            const SizedBox(height: 16),
+            _buildPaymentMethodField(),
+            const SizedBox(height: 16),
+            _buildDateField(),
+            const SizedBox(height: 16),
+            _buildNotesField(),
+          ] else ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: _buildCustomerField()),
+                const SizedBox(width: 16),
+                Expanded(child: _buildAmountField()),
+                const SizedBox(width: 16),
+                Expanded(child: _buildPaymentMethodField()),
+                const SizedBox(width: 16),
+                Expanded(child: _buildDateField()),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _buildNotesField(),
+          ],
+          const SizedBox(height: 32),
+          _buildActionButtons(isMobile),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCustomerField() {
+    return CompositedTransformTarget(
+      link: _layerLink,
+      child: TextField(
+        controller: _customerSearchController, 
+        onChanged: _filterCustomers, 
+        decoration: const InputDecoration(
+          labelText: 'اسم المشتري', 
+          prefixIcon: Icon(Icons.person, color: Colors.blue),
+          hintText: 'ابحث عن زبون أو اكتب اسم جديد'
+        )
+      ),
+    );
+  }
+
+  Widget _buildAmountField() {
+    return TextField(
+      controller: _amountController, 
+      keyboardType: const TextInputType.numberWithOptions(decimal: true), 
+      decoration: const InputDecoration(
+        labelText: 'المبلغ (₪)', 
+        prefixIcon: Icon(Icons.payments, color: Colors.green)
+      )
+    );
+  }
+
+  Widget _buildPaymentMethodField() {
+    return DropdownButtonFormField<PaymentMethod>(
+      value: (_paymentMethods.contains(_selectedPaymentMethod)) ? _selectedPaymentMethod : null, 
+      items: _paymentMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name))).toList(), 
+      onChanged: (v) => setState(() => _selectedPaymentMethod = v), 
+      decoration: const InputDecoration(labelText: 'طريقة الدفع', prefixIcon: Icon(Icons.wallet, color: Colors.purple)),
+    );
+  }
+
+  Widget _buildDateField() {
+    return TextField(
+      controller: _dateController,
+      readOnly: true,
+      onTap: () => _selectDate(context),
+      decoration: const InputDecoration(
+        labelText: 'تاريخ الفاتورة',
+        prefixIcon: Icon(Icons.calendar_today, color: Colors.orange),
+      ),
+    );
+  }
+
+  Widget _buildNotesField() {
+    return TextField(
+      controller: _notesController, 
+      decoration: const InputDecoration(
+        labelText: 'ملاحظات إضافية', 
+        prefixIcon: Icon(Icons.note, color: Colors.blueGrey)
+      )
     );
   }
 
@@ -611,46 +761,188 @@ class _SalesScreenState extends State<SalesScreen> {
     ]);
   }
 
-  Widget _buildTodaySalesTable(bool isMobile, bool isDark) {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('آخر العمليات', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
-      const SizedBox(height: 16),
-      SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Container(
-          decoration: BoxDecoration(color: isDark ? const Color(0xFF0F172A) : Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0))),
-          child: DataTable(
-            columns: const [
-              DataColumn(label: Text('المشتري')),
-              DataColumn(label: Text('المبلغ')),
-              DataColumn(label: Text('النوع')),
-              DataColumn(label: Text('طريقة الدفع')),
-              DataColumn(label: Text('الإجراءات')),
-            ],
-            rows: _invoices.map((inv) {
-              return DataRow(cells: [
-                DataCell(
-                  InkWell(
-                    onTap: () => _navigateToCustomerDetails(inv.userId),
-                    child: Text(inv.customerName ?? 'عابر', style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
-                  )
-                ),
-                DataCell(Text('${inv.amount} ₪')),
-                DataCell(Text(inv.type == 'SALE' ? 'بيع' : 'سحب')),
-                DataCell(Text(inv.methodName ?? '-')),
-                DataCell(Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(icon: const Icon(Icons.history, color: Colors.grey, size: 18), onPressed: () => _showEditHistory(inv.id!)),
-                    IconButton(icon: const Icon(Icons.edit, color: Colors.orange, size: 18), onPressed: () => _showEditInvoiceDialog(inv)),
-                    IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18), onPressed: () => _deleteInvoice(inv)),
-                  ],
-                )),
-              ]);
-            }).toList(),
-          ),
+  Widget _buildInvoiceSection(bool isMobile, bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('سجل العمليات', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+            _buildSortMenu(isDark),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _buildTableSearchBar(isDark, isMobile),
+        const SizedBox(height: 16),
+        isMobile ? _buildInvoiceCards(isDark) : _buildTodaySalesTable(isDark),
+      ],
+    );
+  }
+
+  Widget _buildSortMenu(bool isDark) {
+    return PopupMenuButton<int>(
+      icon: const Icon(Icons.sort_rounded, color: Colors.blue),
+      tooltip: 'ترتيب حسب',
+      onSelected: _onSort,
+      itemBuilder: (context) => [
+        _buildSortItem(1, 'التاريخ'),
+        _buildSortItem(0, 'اسم المشتري'),
+        _buildSortItem(3, 'طريقة الدفع'),
+        _buildSortItem(2, 'المبلغ'),
+      ],
+    );
+  }
+
+  PopupMenuItem<int> _buildSortItem(int value, String label) {
+    bool isSelected = _sortColumnIndex == value;
+    return PopupMenuItem(
+      value: value,
+      child: Row(
+        children: [
+          Text(label, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? Colors.blue : null)),
+          const Spacer(),
+          if (isSelected) Icon(_isAscending ? Icons.arrow_upward : Icons.arrow_downward, size: 16, color: Colors.blue),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTableSearchBar(bool isDark, bool isMobile) {
+    return Container(
+      width: double.infinity,
+      height: 48,
+      child: TextField(
+        controller: _tableFilterController,
+        onChanged: (_) => _applyTableFilter(),
+        style: const TextStyle(fontSize: 14),
+        decoration: InputDecoration(
+          hintText: 'بحث في السجل بالاسم، المبلغ، أو طريقة الدفع...',
+          prefixIcon: const Icon(Icons.search, size: 20, color: Colors.blue),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+          filled: true,
+          fillColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDark ? Colors.white10 : Colors.black12)),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDark ? Colors.white10 : Colors.black12)),
         ),
       ),
-    ]);
+    );
+  }
+
+  Widget _buildInvoiceCards(bool isDark) {
+    if (_filteredInvoices.isEmpty) return const Center(child: Padding(padding: EdgeInsets.all(32), child: Text('لا يوجد نتائج')));
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _filteredInvoices.length,
+      itemBuilder: (context, index) {
+        final inv = _filteredInvoices[index];
+        bool isDeposit = inv.type == 'DEPOSIT';
+        
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isDeposit ? Colors.green.withOpacity(0.1) : (isDark ? const Color(0xFF0F172A) : Colors.white),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: isDeposit ? Colors.green.withOpacity(0.3) : (isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)), width: isDeposit ? 2 : 1),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => _navigateToCustomerDetails(inv.userId),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(inv.customerName ?? 'عابر', style: TextStyle(color: isDeposit ? Colors.green[800] : Colors.blue, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
+                          if (isDeposit) Text('فاتورة تسديد ديون', style: TextStyle(color: Colors.green[700], fontSize: 10, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Text('${inv.amount} ₪', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: isDeposit ? Colors.green[800] : null)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(inv.invoiceDate, style: TextStyle(color: isDeposit ? Colors.green[700]!.withOpacity(0.7) : Colors.grey[500], fontSize: 12)),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(color: (isDeposit ? Colors.green : Colors.blue).withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+                    child: Text(inv.methodName ?? '-', style: TextStyle(fontSize: 10, color: isDeposit ? Colors.green[800] : Colors.blue, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+              const Divider(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  IconButton(icon: Icon(Icons.history, color: isDeposit ? Colors.green[700] : Colors.grey, size: 20), onPressed: () => _showEditHistory(inv.id!)),
+                  IconButton(icon: Icon(Icons.edit, color: isDeposit ? Colors.green : Colors.orange, size: 20), onPressed: () => _showEditInvoiceDialog(inv)),
+                  IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), onPressed: () => _deleteInvoice(inv)),
+                ],
+              )
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildTodaySalesTable(bool isDark) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(color: isDark ? const Color(0xFF0F172A) : Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0))),
+      child: DataTable(
+        sortColumnIndex: _sortColumnIndex,
+        sortAscending: _isAscending,
+        columns: [
+          DataColumn(label: const Text('المشتري'), onSort: (i, _) => _onSort(i)),
+          DataColumn(label: const Text('التاريخ'), onSort: (i, _) => _onSort(i)),
+          DataColumn(label: const Text('المبلغ'), onSort: (i, _) => _onSort(i)),
+          DataColumn(label: const Text('طريقة الدفع'), onSort: (i, _) => _onSort(i)),
+          const DataColumn(label: Text('الإجراءات')),
+        ],
+        rows: _filteredInvoices.map((inv) {
+          bool isDeposit = inv.type == 'DEPOSIT';
+          return DataRow(
+            color: isDeposit ? MaterialStateProperty.all(Colors.green.withOpacity(0.05)) : null,
+            cells: [
+              DataCell(
+                InkWell(
+                  onTap: () => _navigateToCustomerDetails(inv.userId),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(inv.customerName ?? 'عابر', style: TextStyle(color: isDeposit ? Colors.green[800] : Colors.blue, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
+                      if (isDeposit) Text('فاتورة تسديد ديون', style: TextStyle(color: Colors.green[700], fontSize: 9, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                )
+              ),
+              DataCell(Text(inv.invoiceDate, style: TextStyle(color: isDeposit ? Colors.green[800] : null))),
+              DataCell(Text('${inv.amount} ₪', style: TextStyle(color: isDeposit ? Colors.green[800] : null, fontWeight: isDeposit ? FontWeight.bold : null))),
+              DataCell(Text(inv.methodName ?? '-', style: TextStyle(color: isDeposit ? Colors.green[800] : null))),
+              DataCell(Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(icon: Icon(Icons.history, color: isDeposit ? Colors.green[700] : Colors.grey, size: 18), onPressed: () => _showEditHistory(inv.id!)),
+                  IconButton(icon: Icon(Icons.edit, color: isDeposit ? Colors.green : Colors.orange, size: 18), onPressed: () => _showEditInvoiceDialog(inv)),
+                  IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18), onPressed: () => _deleteInvoice(inv)),
+                ],
+              )),
+            ]
+          );
+        }).toList(),
+      ),
+    );
   }
 }

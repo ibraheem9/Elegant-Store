@@ -207,6 +207,8 @@ class DatabaseService {
   // --- Users ---
   Future<List<User>> getCustomers() async {
     final db = await database;
+    // CRITICAL: Calculate balance dynamically based on invoices and transactions to ensure accuracy across all screens.
+    // Balance = (Sum of Unpaid/Partial SALE/WITHDRAWAL Invoices) - (Sum of Unused DEPOSIT Transactions)
     final r = await db.rawQuery('''
       SELECT u.*, 
       (
@@ -293,6 +295,7 @@ class DatabaseService {
       double amountFromBalance = 0;
       List<String> paymentSources = [];
 
+      // We still use currentBalance from table for logic, but calculated_balance for display
       final user = await txn.query('users', columns: ['balance'], where: 'id = ?', whereArgs: [inv.userId]);
       double currentBalance = (user.first['balance'] as num).toDouble();
 
@@ -377,10 +380,7 @@ class DatabaseService {
     await db.transaction((txn) async {
       final now = DateTime.now().toIso8601String();
       
-      // Update balance if amount changed and it was debt
       if (oldInv.amount != newInv.amount) {
-         // This is simplified. Ideally we should recalculate based on payment methods.
-         // But for now let's log the change.
          await txn.rawUpdate('UPDATE users SET balance = balance + ? WHERE id = ?', [newInv.amount - oldInv.amount, newInv.userId]);
       }
 
