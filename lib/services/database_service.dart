@@ -29,17 +29,20 @@ class DatabaseService {
 
     final db = await openDatabase(
       path,
-      version: 11,
+      version: 15,
       onCreate: (db, version) async {
         await _createTables(db);
         await _createTriggers(db);
         await _seedInitialData(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 11) {
-          await _createTriggers(db);
-          await recalculateAllBalances(db);
-        }
+        // Force refresh triggers to fix replacement bugs
+        await db.execute('DROP TRIGGER IF EXISTS trg_invoice_insert');
+        await db.execute('DROP TRIGGER IF EXISTS trg_invoice_update');
+        await db.execute('DROP TRIGGER IF EXISTS trg_invoice_delete');
+        
+        await _createTriggers(db);
+        await recalculateAllBalances(db);
       },
     );
 
@@ -47,13 +50,16 @@ class DatabaseService {
   }
 
   Future<void> _createTriggers(Database db) async {
-    const String contributionSql = "(CASE WHEN type IN ('SALE', 'WITHDRAWAL') THEN (amount - paid_amount) WHEN type = 'DEPOSIT' THEN (-amount) ELSE 0 END)";
+    // Template with placeholders that are absolutely unique and won't match partial strings
+    const String insertSql = "(CASE WHEN new.type IN ('SALE', 'WITHDRAWAL') THEN (new.amount - new.paid_amount) WHEN new.type = 'DEPOSIT' THEN (-new.amount) ELSE 0 END)";
+    const String oldSql = "(CASE WHEN old.type IN ('SALE', 'WITHDRAWAL') THEN (old.amount - old.paid_amount) WHEN old.type = 'DEPOSIT' THEN (-old.amount) ELSE 0 END)";
+    const String updateNewSql = "(CASE WHEN new.type IN ('SALE', 'WITHDRAWAL') THEN (new.amount - new.paid_amount) WHEN new.type = 'DEPOSIT' THEN (-new.amount) ELSE 0 END)";
 
     await db.execute('''
       CREATE TRIGGER IF NOT EXISTS trg_invoice_insert AFTER INSERT ON invoices
       WHEN (new.deleted_at IS NULL)
       BEGIN
-        UPDATE users SET balance = balance + ${contributionSql.replaceAll('amount', 'new.amount').replaceAll('paid_amount', 'new.paid_amount').replaceAll('type', 'new.type')}
+        UPDATE users SET balance = balance + $insertSql
         WHERE id = new.user_id;
       END;
     ''');
@@ -61,20 +67,19 @@ class DatabaseService {
     await db.execute('''
       CREATE TRIGGER IF NOT EXISTS trg_invoice_update AFTER UPDATE ON invoices
       BEGIN
-        UPDATE users SET balance = balance - ${contributionSql.replaceAll('amount', 'old.amount').replaceAll('paid_amount', 'old.paid_amount').replaceAll('type', 'old.type')}
+        UPDATE users SET balance = balance - $oldSql
         WHERE id = old.user_id AND old.deleted_at IS NULL;
         
-        UPDATE users SET balance = balance + ${contributionSql.replaceAll('amount', 'new.amount').replaceAll('paid_amount', 'new.paid_amount').replaceAll('type', 'new.type')}
+        UPDATE users SET balance = balance + $updateNewSql
         WHERE id = new.user_id AND new.deleted_at IS NULL;
       END;
     ''');
 
     await db.execute('''
       CREATE TRIGGER IF NOT EXISTS trg_invoice_delete AFTER DELETE ON invoices
-      WHEN (old.deleted_at IS NULL)
       BEGIN
-        UPDATE users SET balance = balance - ${contributionSql.replaceAll('amount', 'old.amount').replaceAll('paid_amount', 'old.paid_amount').replaceAll('type', 'old.type')}
-        WHERE id = old.user_id;
+        UPDATE users SET balance = balance - $oldSql
+        WHERE id = old.user_id AND old.deleted_at IS NULL;
       END;
     ''');
   }
@@ -445,7 +450,7 @@ class DatabaseService {
     List<dynamic> args = [methodId];
     if (start != null) { where += ' AND created_at >= ?'; args.add(start.toIso8601String()); }
     if (end != null) { where += ' AND created_at <= ?'; args.add(end.toIso8601String()); }
-    final r = await db.query('purchases', where: where, whereArgs: args, orderBy: 'created_at DESC');
+    final r = await db.query('purchases', where: where, whereArgs: args, orderBy: 'sort_order DESC');
     return r.map((m) => Purchase.fromMap(m)).toList();
   }
 

@@ -16,6 +16,28 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _keepMeLoggedIn = false;
+  bool _showBiometricIcon = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkBiometricStatus();
+  }
+
+  Future<void> _checkBiometricStatus() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final isEnabled = await authService.isBiometricEnabled;
+    final canCheck = await authService.canCheckBiometrics();
+    if (mounted) {
+      setState(() {
+        _showBiometricIcon = isEnabled && canCheck;
+      });
+      if (_showBiometricIcon) {
+        // Automatically trigger biometric login if enabled
+        _loginWithBiometrics();
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -27,13 +49,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _login() async {
     if (_usernameController.text.isEmpty || _passwordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('يرجى إدخال اسم المستخدم وكلمة المرور'),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      _showError('يرجى إدخال اسم المستخدم وكلمة المرور');
       return;
     }
 
@@ -48,27 +64,44 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (!success) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('خطأ في اسم المستخدم أو كلمة المرور'),
-              behavior: SnackBarBehavior.floating,
-              backgroundColor: Colors.redAccent,
-            ),
-          );
-        }
+        _showError('خطأ في اسم المستخدم أو كلمة المرور');
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ: $e')),
-        );
-      }
+      _showError('خطأ: $e');
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  Future<void> _loginWithBiometrics() async {
+    setState(() => _isLoading = true);
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      bool success = await authService.authenticateWithBiometrics();
+      if (!success && mounted) {
+        // If it failed (user cancelled or other reason), we don't necessarily show an error 
+        // because they can still type their password.
+      }
+    } catch (e) {
+       // Silent fail for auto-trigger
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.redAccent,
+      ),
+    );
   }
 
   @override
@@ -132,20 +165,31 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 10),
                         Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Checkbox(
-                              value: _keepMeLoggedIn,
-                              onChanged: (value) {
-                                setState(() {
-                                  _keepMeLoggedIn = value ?? false;
-                                });
-                              },
-                              activeColor: const Color(0xFF1E3A8A),
+                            Row(
+                              children: [
+                                Checkbox(
+                                  value: _keepMeLoggedIn,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _keepMeLoggedIn = value ?? false;
+                                    });
+                                  },
+                                  activeColor: const Color(0xFF1E3A8A),
+                                ),
+                                const Text(
+                                  'تذكرني',
+                                  style: TextStyle(fontSize: 14, color: Color(0xFF475569)),
+                                ),
+                              ],
                             ),
-                            const Text(
-                              'تذكرني (البقاء متصلاً لمدة شهر)',
-                              style: TextStyle(fontSize: 14, color: Color(0xFF475569)),
-                            ),
+                            if (_showBiometricIcon)
+                              IconButton(
+                                icon: const Icon(Icons.fingerprint, size: 32, color: Color(0xFF1E3A8A)),
+                                onPressed: _isLoading ? null : _loginWithBiometrics,
+                                tooltip: 'دخول بالبصمة',
+                              ),
                           ],
                         ),
                         const SizedBox(height: 20),

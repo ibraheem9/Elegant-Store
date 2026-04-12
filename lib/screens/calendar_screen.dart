@@ -87,8 +87,16 @@ class _CalendarScreenState extends State<CalendarScreen> {
           )
         : Row(
             children: [
-              Expanded(flex: 2, child: _buildCalendarCard(isDark, false)),
-              Expanded(flex: 1, child: _buildInvoicesCard(isDark, false)),
+              Expanded(
+                flex: 2, 
+                child: SingleChildScrollView(
+                  child: _buildCalendarCard(isDark, false),
+                ),
+              ),
+              Expanded(
+                flex: 1, 
+                child: _buildInvoicesCard(isDark, false),
+              ),
             ],
           ),
     );
@@ -111,8 +119,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
         calendarFormat: _calendarFormat,
         startingDayOfWeek: StartingDayOfWeek.sunday,
         availableCalendarFormats: const {CalendarFormat.month: 'Month'},
-        rowHeight: isMobile ? 70 : 90, 
-        daysOfWeekHeight: isMobile ? 30 : 40,
+        rowHeight: isMobile ? 64 : 80, 
+        daysOfWeekHeight: isMobile ? 25 : 35,
         selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
         onDaySelected: (selectedDay, focusedDay) {
           setState(() {

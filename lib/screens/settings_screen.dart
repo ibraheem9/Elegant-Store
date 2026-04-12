@@ -24,6 +24,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _adminNameController = TextEditingController();
   
   bool _notificationsEnabled = true;
+  bool _biometricEnabled = false;
+  bool _canCheckBiometrics = false;
   TimeOfDay _notificationTime = const TimeOfDay(hour: 10, minute: 0);
 
   @override
@@ -37,8 +39,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _adminNameController.text = auth.currentUser?.name ?? '';
     
     final prefs = await SharedPreferences.getInstance();
+    final canBio = await auth.canCheckBiometrics();
+    final bioEnabled = await auth.isBiometricEnabled;
+
     setState(() {
       _notificationsEnabled = prefs.getBool('notifications_enabled') ?? true;
+      _biometricEnabled = bioEnabled;
+      _canCheckBiometrics = canBio;
       String? timeStr = prefs.getString('notification_time');
       if (timeStr != null) {
         final parts = timeStr.split(':');
@@ -55,6 +62,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
     
     if (enabled) {
       NotificationService.scheduleDailyCheck(context.read<DatabaseService>());
+    }
+  }
+
+  Future<void> _toggleBiometric(bool enabled) async {
+    final auth = context.read<AuthService>();
+    if (enabled) {
+      // Prompt user to authenticate before enabling to ensure it works
+      bool authenticated = await auth.authenticateWithBiometrics();
+      if (authenticated) {
+         await auth.setBiometricEnabled(true);
+         setState(() => _biometricEnabled = true);
+         _showSnackBar('تم تفعيل الدخول بالبصمة بنجاح', Colors.green);
+      } else {
+         _showSnackBar('فشل التحقق من البصمة. يرجى تسجيل الدخول أولاً.', Colors.red);
+      }
+    } else {
+      await auth.setBiometricEnabled(false);
+      setState(() => _biometricEnabled = false);
     }
   }
 
@@ -191,6 +216,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildTextField('اسم المتجر', _storeNameController, Icons.store, isDark),
               const SizedBox(height: 16),
               _buildTextField('اسم المسؤول', _adminNameController, Icons.person, isDark),
+            ]),
+
+            const SizedBox(height: 32),
+            _buildSection('الحماية والأمان', isDark, [
+               if (_canCheckBiometrics)
+                SwitchListTile(
+                  title: const Text('تفعيل الدخول ببصمة الإصبع', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('استخدم البصمة لتسجيل الدخول السريع بدلاً من كلمة المرور'),
+                  value: _biometricEnabled,
+                  onChanged: _toggleBiometric,
+                  activeColor: Colors.green,
+                  secondary: const Icon(Icons.fingerprint, color: Colors.green),
+                )
+               else
+                 const ListTile(
+                   title: Text('البصمة غير مدعومة'),
+                   subtitle: Text('جهازك لا يدعم المصادقة الحيوية أو لم يتم إعدادها'),
+                   leading: Icon(Icons.fingerprint, color: Colors.grey),
+                 ),
             ]),
 
             const SizedBox(height: 32),

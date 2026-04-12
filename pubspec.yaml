@@ -23,6 +23,7 @@ dependencies:
   flutter_local_notifications: ^17.2.2
   timezone: ^0.9.4
   shared_preferences: ^2.3.2
+  local_auth: ^2.3.0
   flutter_localizations:
     sdk: flutter
 

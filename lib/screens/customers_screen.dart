@@ -732,11 +732,18 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       appBar: AppBar(
         title: Row(
           children: [
-            Expanded(child: Text(_currentCustomer.name, style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black, fontSize: isMobile ? 16 : 20), overflow: TextOverflow.ellipsis)),
-            if (_currentCustomer.creditLimit == -1) ...[
-              const SizedBox(width: 8),
-              const Icon(Icons.verified, color: Colors.blue, size: 24),
-            ],
+            Expanded(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(child: Text(_currentCustomer.name, style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black, fontSize: isMobile ? 16 : 20), overflow: TextOverflow.ellipsis)),
+                  if (_currentCustomer.creditLimit == -1) ...[
+                    const SizedBox(width: 8),
+                    const Icon(Icons.verified, color: Colors.blue, size: 22),
+                  ],
+                ],
+              ),
+            ),
           ],
         ),
         actions: [
