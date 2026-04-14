@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
@@ -10,9 +11,14 @@ import '../screens/customers_screen.dart';
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
+  static bool _isInitialized = false;
 
   static Future<void> init() async {
     tz.initializeTimeZones();
+    
+    // Notifications are not supported on Windows in the current setup
+    if (Platform.isWindows) return;
+
     const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
     const DarwinInitializationSettings initializationSettingsIOS = DarwinInitializationSettings();
     const LinuxInitializationSettings initializationSettingsLinux = LinuxInitializationSettings(defaultActionName: 'Open notification');
@@ -23,18 +29,23 @@ class NotificationService {
       linux: initializationSettingsLinux,
     );
 
-    await _notificationsPlugin.initialize(
-      initializationSettings,
-      onDidReceiveNotificationResponse: (NotificationResponse response) async {
-        final String? payload = response.payload;
-        if (payload != null && payload.startsWith('customer_')) {
-          final int? customerId = int.tryParse(payload.split('_')[1]);
-          if (customerId != null) {
-            _navigateToCustomer(customerId);
+    try {
+      await _notificationsPlugin.initialize(
+        initializationSettings,
+        onDidReceiveNotificationResponse: (NotificationResponse response) async {
+          final String? payload = response.payload;
+          if (payload != null && payload.startsWith('customer_')) {
+            final int? customerId = int.tryParse(payload.split('_')[1]);
+            if (customerId != null) {
+              _navigateToCustomer(customerId);
+            }
           }
-        }
-      },
-    );
+        },
+      );
+      _isInitialized = true;
+    } catch (e) {
+      debugPrint('Failed to initialize notifications: $e');
+    }
   }
 
   static void _navigateToCustomer(int customerId) async {
@@ -54,6 +65,8 @@ class NotificationService {
   }
 
   static Future<void> scheduleDailyCheck(DatabaseService db) async {
+    if (Platform.isWindows) return;
+    
     final prefs = await SharedPreferences.getInstance();
     final bool enabled = prefs.getBool('notifications_enabled') ?? true;
     if (!enabled) return;
@@ -87,6 +100,8 @@ class NotificationService {
   }
 
   static Future<void> _showImmediateNotification(String title, String body, {String? payload}) async {
+    if (!_isInitialized || Platform.isWindows) return;
+
     const NotificationDetails notificationDetails = NotificationDetails(
       android: AndroidNotificationDetails(
         'debt_channel', 
@@ -96,12 +111,16 @@ class NotificationService {
         priority: Priority.high
       ),
     );
-    await _notificationsPlugin.show(
-      body.hashCode, // Unique ID per customer/message
-      title, 
-      body, 
-      notificationDetails, 
-      payload: payload
-    );
+    try {
+      await _notificationsPlugin.show(
+        body.hashCode, // Unique ID per customer/message
+        title, 
+        body, 
+        notificationDetails, 
+        payload: payload
+      );
+    } catch (e) {
+      debugPrint('Failed to show notification: $e');
+    }
   }
 }

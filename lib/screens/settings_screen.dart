@@ -20,8 +20,10 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final _storeNameController = TextEditingController(text: 'Elegant Store');
-  final _adminNameController = TextEditingController();
+  final _nameController = TextEditingController();
+  final _usernameController = TextEditingController();
+  final _currentPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
   
   bool _notificationsEnabled = true;
   bool _biometricEnabled = false;
@@ -36,7 +38,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadSettings() async {
     final auth = context.read<AuthService>();
-    _adminNameController.text = auth.currentUser?.name ?? '';
+    _nameController.text = auth.currentUser?.name ?? '';
+    _usernameController.text = auth.currentUser?.username ?? '';
     
     final prefs = await SharedPreferences.getInstance();
     final canBio = await auth.canCheckBiometrics();
@@ -54,6 +57,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  Future<void> _updateProfile() async {
+    final auth = context.read<AuthService>();
+    final success = await auth.updateProfile(_nameController.text, _usernameController.text);
+    if (success) {
+      _showSnackBar('تم تحديث الملف الشخصي بنجاح', Colors.green);
+    } else {
+      _showSnackBar('فشل تحديث الملف الشخصي. تأكد من الاتصال بالإنترنت.', Colors.red);
+    }
+  }
+
+  Future<void> _changePassword() async {
+     if (_newPasswordController.text.length < 3) {
+       _showSnackBar('كلمة المرور قصيرة جداً', Colors.red);
+       return;
+     }
+     final auth = context.read<AuthService>();
+     final success = await auth.changePassword(_currentPasswordController.text, _newPasswordController.text);
+     if (success) {
+       _currentPasswordController.clear();
+       _newPasswordController.clear();
+       _showSnackBar('تم تغيير كلمة المرور بنجاح', Colors.green);
+     } else {
+       _showSnackBar('فشل تغيير كلمة المرور. تأكد من كلمة المرور الحالية والاتصال.', Colors.red);
+     }
+  }
+
   Future<void> _saveNotificationSettings(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('notifications_enabled', enabled);
@@ -68,7 +97,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _toggleBiometric(bool enabled) async {
     final auth = context.read<AuthService>();
     if (enabled) {
-      // Prompt user to authenticate before enabling to ensure it works
       bool authenticated = await auth.authenticateWithBiometrics();
       if (authenticated) {
          await auth.setBiometricEnabled(true);
@@ -80,108 +108,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } else {
       await auth.setBiometricEnabled(false);
       setState(() => _biometricEnabled = false);
-    }
-  }
-
-  Future<void> _exportData() async {
-    try {
-      final db = context.read<DatabaseService>();
-      final customers = await db.getCustomers();
-      final invoices = await db.getInvoices();
-      final purchases = await db.getTodayPurchases();
-
-      Map<String, dynamic> exportData = {
-        'export_date': DateTime.now().toIso8601String(),
-        'customers': customers.map((c) => c.toMap()).toList(),
-        'invoices': invoices.map((i) => i.toMap()).toList(),
-        'purchases': purchases.map((p) => p.toMap()).toList(),
-      };
-
-      String jsonString = jsonEncode(exportData);
-      String? outputFile = await FilePicker.platform.saveFile(
-        dialogTitle: 'اختر مكان حفظ النسخة الاحتياطية',
-        fileName: 'elegant_store_backup_${DateTime.now().millisecondsSinceEpoch}.json',
-      );
-
-      if (outputFile != null) {
-        final file = File(outputFile);
-        await file.writeAsString(jsonString);
-        _showSnackBar('تم تصدير البيانات بنجاح', Colors.green);
-      }
-    } catch (e) {
-      _showSnackBar('فشل تصدير البيانات: $e', Colors.red);
-    }
-  }
-
-  Future<void> _clearAllTransactions() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => Directionality(
-        textDirection: ui.TextDirection.rtl,
-        child: AlertDialog(
-          title: const Text('تأكيد الحذف الشامل'),
-          content: const Text('هل أنت متأكد من حذف كافة الفواتير والمشتريات؟\n\n'
-              '- سيتم تصفير أرصدة الزبائن لمطابقة السجل الفارغ.\n'
-              '- سيتم حذف سجل العمليات والإحصائيات بالكامل.\n'
-              '- سيتم الحفاظ على بيانات الزبائن وطرق الدفع.\n\n'
-              'لا يمكن التراجع عن هذه العملية!'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('إلغاء'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('نعم، قم بالتفريغ'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (confirmed == true) {
-      try {
-        await context.read<DatabaseService>().resetAllTransactions();
-        _showSnackBar('تم تفريغ كافة الفواتير والعمليات بنجاح', Colors.green);
-      } catch (e) {
-        _showSnackBar('حدث خطأ أثناء عملية التفريغ: $e', Colors.red);
-      }
-    }
-  }
-
-  Future<void> _handleFactoryReset() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => Directionality(
-        textDirection: ui.TextDirection.rtl,
-        child: AlertDialog(
-          title: const Text('تصفير كامل للنظام (Factory Reset)'),
-          content: const Text('سيتم حذف كل شيء (زبائن، فواتير، طرق دفع، مشتريات).\n'
-              'سيبقى فقط حساب المدير والمحاسب.\n\n'
-              'هل أنت متأكد تماماً؟'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-              child: const Text('نعم، تصفير شامل'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (confirmed == true) {
-      try {
-        await context.read<DatabaseService>().factoryReset();
-        _showSnackBar('تم تصفير النظام بالكامل بنجاح', Colors.orange);
-      } catch (e) {
-        _showSnackBar('فشل التصفير: $e', Colors.red);
-      }
     }
   }
 
@@ -212,10 +138,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 32),
 
-            _buildSection('الملف الشخصي والمتجر', isDark, [
-              _buildTextField('اسم المتجر', _storeNameController, Icons.store, isDark),
+            _buildSection('الملف الشخصي', isDark, [
+              _buildTextField('الاسم الكامل', _nameController, Icons.person, isDark),
               const SizedBox(height: 16),
-              _buildTextField('اسم المسؤول', _adminNameController, Icons.person, isDark),
+              _buildTextField('اسم المستخدم', _usernameController, Icons.alternate_email, isDark),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _updateProfile,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0B74FF),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                  ),
+                  child: const Text('تحديث البيانات', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ]),
+
+            const SizedBox(height: 32),
+            _buildSection('تغيير كلمة المرور', isDark, [
+              _buildTextField('كلمة المرور الحالية', _currentPasswordController, Icons.lock_outline, isDark, obscure: true),
+              const SizedBox(height: 16),
+              _buildTextField('كلمة المرور الجديدة', _newPasswordController, Icons.lock_reset, isDark, obscure: true),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _changePassword,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                  ),
+                  child: const Text('تغيير كلمة المرور', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                ),
+              ),
             ]),
 
             const SizedBox(height: 32),
@@ -238,33 +197,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ]),
 
             const SizedBox(height: 32),
-            _buildSection('نظام التنبيهات الذكي', isDark, [
-              SwitchListTile(
-                title: const Text('تفعيل تنبيهات الديون والتحصيل', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text('سيقوم النظام بإعلامك يومياً بالفواتير المتأخرة والزبائن المتجاوزين للسقف'),
-                value: _notificationsEnabled,
-                onChanged: _saveNotificationSettings,
-                activeColor: const Color(0xFF0B74FF),
-              ),
-              if (_notificationsEnabled)
-                ListTile(
-                  title: const Text('وقت التنبيه اليومي'),
-                  trailing: TextButton(
-                    onPressed: () async {
-                      final picked = await showTimePicker(context: context, initialTime: _notificationTime);
-                      if (picked != null) {
-                        setState(() => _notificationTime = picked);
-                        _saveNotificationSettings(true);
-                      }
-                    },
-                    child: Text(_notificationTime.format(context), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  ),
-                  leading: const Icon(Icons.access_time_filled_rounded, color: Colors.orange),
-                ),
-            ]),
-
-            const SizedBox(height: 32),
-            _buildSection('النظام والبيانات', isDark, [
+            _buildSection('النظام والتنبيهات', isDark, [
               SwitchListTile(
                 title: Text(
                   'الوضع الداكن (Dark Mode)', 
@@ -275,40 +208,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 secondary: Icon(Icons.dark_mode, color: isDark ? const Color(0xFF00E5FF) : Colors.grey),
               ),
               const Divider(),
-              ListTile(
-                title: Text(
-                  'تصدير نسخة احتياطية (Backup)', 
-                  style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)
-                ),
-                leading: const Icon(Icons.download, color: Color(0xFF0B74FF)),
-                onTap: _exportData,
+              SwitchListTile(
+                title: const Text('تفعيل تنبيهات الديون والتحصيل', style: TextStyle(fontWeight: FontWeight.bold)),
+                value: _notificationsEnabled,
+                onChanged: _saveNotificationSettings,
+                activeColor: const Color(0xFF0B74FF),
               ),
             ]),
 
-            const SizedBox(height: 32),
-            _buildSection('إدارة قاعدة البيانات (منطقة خطر)', isDark, [
-              ListTile(
-                title: const Text(
-                  'تفريغ كافة الفواتير والعمليات', 
-                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)
-                ),
-                subtitle: const Text('سيتم حذف الفواتير والمشتريات وتصفير أرصدة الزبائن مع الحفاظ على بياناتهم وطرق الدفع'),
-                leading: const Icon(Icons.delete_sweep_rounded, color: Colors.red),
-                onTap: _clearAllTransactions,
-              ),
-              if (auth.isDeveloper()) ...[
-                const Divider(),
+            if (auth.isDeveloper()) ...[
+              const SizedBox(height: 32),
+              _buildSection('إدارة متقدمة (للمطور)', isDark, [
                 ListTile(
-                  title: const Text(
-                    'تصفير شامل للنظام (Developer Reset)', 
-                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange)
-                  ),
-                  subtitle: const Text('تحذير: هذا الخيار متاح فقط للمطور. سيقوم بحذف كل شيء بما في ذلك الزبائن وطرق الدفع.'),
-                  leading: const Icon(Icons.phonelink_erase_rounded, color: Colors.deepOrange),
-                  onTap: _handleFactoryReset,
+                  title: const Text('إعادة ضبط حالة المزامنة', style: TextStyle(fontWeight: FontWeight.bold)),
+                  leading: const Icon(Icons.sync_problem, color: Colors.blue),
+                  onTap: () async {
+                    await context.read<DatabaseService>().resetSyncStatus();
+                    _showSnackBar('تمت إعادة ضبط المزامنة', Colors.blue);
+                  },
                 ),
-              ],
-            ]),
+              ]),
+            ],
+
+            const SizedBox(height: 48),
+            Center(
+              child: TextButton.icon(
+                onPressed: () => auth.logout(),
+                icon: const Icon(Icons.logout, color: Colors.red),
+                label: const Text('تسجيل الخروج', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 18)),
+              ),
+            ),
+            const SizedBox(height: 64),
           ],
         ),
       ),
@@ -335,9 +265,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildTextField(String label, TextEditingController controller, IconData icon, bool isDark) {
+  Widget _buildTextField(String label, TextEditingController controller, IconData icon, bool isDark, {bool obscure = false}) {
     return TextField(
       controller: controller,
+      obscureText: obscure,
       style: TextStyle(color: isDark ? Colors.white : Colors.black),
       decoration: InputDecoration(
         labelText: label,

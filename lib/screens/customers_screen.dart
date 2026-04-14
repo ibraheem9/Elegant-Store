@@ -31,7 +31,18 @@ class _CustomersScreenState extends State<CustomersScreen> {
     if (!mounted) return;
     setState(() => _isLoading = true);
     final db = context.read<DatabaseService>();
-    final customers = await db.getCustomers();
+    final auth = context.read<AuthService>();
+
+    List<User> customers;
+    if (auth.isManager()) {
+      // If manager, we might want to see accountants as well in some view,
+      // but for "Customers" screen, we filter by role CUSTOMER.
+      final all = await db.getCustomers();
+      customers = all.where((u) => u.role == 'CUSTOMER' || u.role == 'customer').toList();
+    } else {
+      customers = await db.getCustomers();
+    }
+
     setState(() {
       _customers = customers;
       _filteredCustomers = List.from(customers);
@@ -182,15 +193,18 @@ class _CustomersScreenState extends State<CustomersScreen> {
               onPressed: () async {
                 if (nameController.text.isEmpty) return;
                 final db = context.read<DatabaseService>();
+                final auth = context.read<AuthService>();
                 double limit = isUnlimited ? -1 : (double.tryParse(limitController.text) ?? 100.0);
 
                 final userData = User(
                   id: customer?.id,
+                  uuid: customer?.uuid ?? '',
+                  parentId: customer?.parentId ?? auth.currentUser?.getStoreManagerIdLocal(),
                   username: customer?.username ?? 'cust_${DateTime.now().millisecondsSinceEpoch}',
                   name: nameController.text.trim(),
                   nickname: nicknameController.text.trim(),
                   phone: phoneController.text.trim(),
-                  role: 'customer',
+                  role: 'CUSTOMER',
                   isPermanentCustomer: isPermanent ? 1 : 0,
                   creditLimit: isPermanent ? limit : 0.0,
                   balance: customer != null ? (double.tryParse(balanceController.text) ?? customer.balance) : 0.0,
@@ -225,6 +239,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
     final bool isSmall = size.width < 700;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final auth = context.read<AuthService>();
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -254,6 +269,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'add_cust',
         onPressed: () => _showAddOrEditCustomerDialog(),
         backgroundColor: const Color(0xFF0F172A),
         icon: const Icon(Icons.person_add_alt_1_rounded, color: Colors.white, size: 20),
@@ -451,7 +467,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   Widget _buildBalanceInfo(User customer) {
-    // New Logic: Balance > 0 is DEBT (Red), Balance < 0 is CREDIT (Green)
     bool isDebt = customer.balance > 0;
     bool isCredit = customer.balance < 0;
     
@@ -584,13 +599,14 @@ class _CustomersScreenState extends State<CustomersScreen> {
     Navigator.push(context, MaterialPageRoute(builder: (_) => CustomerDetailsScreen(customer: customer))).then((_) => _loadCustomers());
   }
 
-  Widget _buildDialogField(String label, TextEditingController controller, IconData icon, {bool isNumeric = false, int maxLines = 1, Function(String)? onChanged}) {
+  Widget _buildDialogField(String label, TextEditingController controller, IconData icon, {bool isNumeric = false, int maxLines = 1, Function(String)? onChanged, bool obscure = false}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: TextField(
         controller: controller,
         maxLines: maxLines,
         onChanged: onChanged,
+        obscureText: obscure,
         keyboardType: isNumeric ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
         decoration: InputDecoration(
           labelText: label,
