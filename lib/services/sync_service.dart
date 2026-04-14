@@ -142,6 +142,7 @@ class SyncService extends ChangeNotifier {
       if (response.statusCode == 200 && isSuccess) {
         final pullData = responseData['pull_data'] as Map<String, dynamic>?;
         final serverTimestamp = responseData['timestamp'] as String?;
+        final remappedUuids = responseData['remapped_uuids'] as Map<String, dynamic>?;
 
         if (pullData == null || serverTimestamp == null) {
           throw Exception('استجابة غير صالحة من السيرفر: بيانات المزامنة ناقصة');
@@ -155,6 +156,16 @@ class SyncService extends ChangeNotifier {
 
         final db = await _dbService.database;
         await db.transaction((txn) async {
+          // 0. Handle Remapped UUIDs (e.g., from customer merges)
+          if (remappedUuids != null && remappedUuids.isNotEmpty) {
+            for (var entry in remappedUuids.entries) {
+              final oldUuid = entry.key;
+              final newUuid = entry.value;
+              await _handleUuidRemapping(oldUuid, newUuid, txn);
+            }
+          }
+
+          // 1. Process Pull Data
           for (var table in tablesOrder) {
             if (pullData.containsKey(table)) {
               final items = pullData[table];
@@ -183,6 +194,7 @@ class SyncService extends ChangeNotifier {
             }
           }
 
+          // 2. Mark pushed items as synced
           for (var table in payload.keys) {
             final List items = payload[table]!;
             final uuids = items.map((e) => e['uuid'] as String).toList();
@@ -227,6 +239,24 @@ class SyncService extends ChangeNotifier {
       _isSyncing = false;
       notifyListeners();
     }
+  }
+
+  Future<void> _handleUuidRemapping(String oldUuid, String newUuid, dynamic txn) async {
+    dev.log('Remapping UUID: $oldUuid -> $newUuid', name: 'SyncService');
+    
+    // 1. Update the record itself if it exists locally
+    // We check multiple tables but primarily 'users' for customer merges
+    final tables = ['users', 'invoices', 'transactions', 'purchases', 'daily_statistics', 'edit_history'];
+    for (var table in tables) {
+      await txn.update(table, {'uuid': newUuid, 'is_synced': 1}, where: 'uuid = ?', whereArgs: [oldUuid]);
+    }
+
+    // 2. Update foreign key references in other tables
+    // This is handled by the server during pull, but we do it locally for immediate consistency
+    await txn.update('invoices', {'user_uuid': newUuid}, where: 'user_uuid = ?', whereArgs: [oldUuid]);
+    await txn.update('transactions', {'buyer_uuid': newUuid}, where: 'buyer_uuid = ?', whereArgs: [oldUuid]);
+    await txn.update('transactions', {'invoice_uuid': newUuid}, where: 'invoice_uuid = ?', whereArgs: [oldUuid]);
+    // Add other FK relations as needed
   }
 
   Future<Map<String, List<Map<String, dynamic>>>> _prepareSyncPayload() async {

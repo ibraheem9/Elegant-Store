@@ -322,10 +322,13 @@ class DatabaseService {
   Future<void> softDeleteUser(int id) async {
     final db = await database;
     final now = DateTime.now().toIso8601String();
+    final existing = await db.query('users', where: 'id = ?', whereArgs: [id], limit: 1);
+    int currentVersion = existing.isNotEmpty ? (existing.first['version'] as int? ?? 0) : 0;
+    
     await db.update('users', {
       'deleted_at': now,
       'is_synced': 0,
-      'version': 1000,
+      'version': currentVersion + 1,
       'updated_at': now
     }, where: 'id = ?', whereArgs: [id]);
   }
@@ -567,9 +570,13 @@ class DatabaseService {
   Future<int> deletePaymentMethod(int id) async {
     final db = await database;
     final now = DateTime.now().toIso8601String();
+    final existing = await db.query('payment_methods', where: 'id = ?', whereArgs: [id], limit: 1);
+    int currentVersion = existing.isNotEmpty ? (existing.first['version'] as int? ?? 0) : 0;
+
     return await db.update('payment_methods', {
       'is_active': 0,
       'is_synced': 0,
+      'version': currentVersion + 1,
       'updated_at': now
     }, where: 'id = ?', whereArgs: [id]);
   }
@@ -612,7 +619,6 @@ class DatabaseService {
         'invoice_date': dateStr,
         'amount': amount,
         'paid_amount': 0.0,
-        'payment_method_id': paymentMethodId,
         'payment_status': 'UNPAID',
         'type': 'WITHDRAWAL',
         'notes': 'سحب نقدي: ${notes ?? ""}',
