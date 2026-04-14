@@ -32,11 +32,25 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await _createTables(db);
         await _createTriggers(db);
         await _seedInitialData(db);
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          // Add missing columns for edit_history
+          try { await db.execute('ALTER TABLE edit_history ADD COLUMN edited_by_id INTEGER'); } catch (_) {}
+          try { await db.execute('ALTER TABLE edit_history ADD COLUMN edited_by_name TEXT'); } catch (_) {}
+          try { await db.execute('ALTER TABLE edit_history ADD COLUMN deleted_at TEXT'); } catch (_) {}
+          // Add missing deleted_at for payment_methods, purchase_methods, daily_statistics
+          try { await db.execute('ALTER TABLE payment_methods ADD COLUMN deleted_at TEXT'); } catch (_) {}
+          try { await db.execute('ALTER TABLE payment_methods ADD COLUMN created_at TEXT'); } catch (_) {}
+          try { await db.execute('ALTER TABLE purchase_methods ADD COLUMN deleted_at TEXT'); } catch (_) {}
+          try { await db.execute('ALTER TABLE purchase_methods ADD COLUMN created_at TEXT'); } catch (_) {}
+          try { await db.execute('ALTER TABLE daily_statistics ADD COLUMN deleted_at TEXT'); } catch (_) {}
+        }
       },
     );
   }
@@ -78,7 +92,9 @@ class DatabaseService {
         is_active INTEGER DEFAULT 1,
         sort_order INTEGER DEFAULT 0,
         version INTEGER DEFAULT 1,
+        created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
+        deleted_at TEXT,
         is_synced INTEGER DEFAULT 0
       )''');
 
@@ -93,7 +109,9 @@ class DatabaseService {
         is_active INTEGER DEFAULT 1,
         sort_order INTEGER DEFAULT 0,
         version INTEGER DEFAULT 1,
+        created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
+        deleted_at TEXT,
         is_synced INTEGER DEFAULT 0
       )''');
 
@@ -176,6 +194,7 @@ class DatabaseService {
         version INTEGER DEFAULT 1,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
+        deleted_at TEXT,
         is_synced INTEGER DEFAULT 0
       )''');
 
@@ -184,6 +203,8 @@ class DatabaseService {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         uuid TEXT UNIQUE NOT NULL,
         store_manager_id INTEGER,
+        edited_by_id INTEGER,
+        edited_by_name TEXT,
         target_id INTEGER,
         target_type TEXT,
         field_name TEXT,
@@ -193,6 +214,7 @@ class DatabaseService {
         version INTEGER DEFAULT 1,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
+        deleted_at TEXT,
         is_synced INTEGER DEFAULT 0
       )''');
   }
@@ -926,6 +948,11 @@ class DatabaseService {
     final sanitizedData = Map<String, dynamic>.from(data);
     sanitizedData.remove('id');
     sanitizedData['is_synced'] = 1;
+
+    // Strip fields that don't exist in the local SQLite table to prevent errors
+    final tableInfo = await txn.rawQuery('PRAGMA table_info($table)');
+    final validColumns = tableInfo.map((col) => col['name'] as String).toSet();
+    sanitizedData.removeWhere((key, _) => !validColumns.contains(key));
 
     // Determine if the server is marking this record as deleted
     final bool isDeletedOnServer = sanitizedData['deleted_at'] != null &&

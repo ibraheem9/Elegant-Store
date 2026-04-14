@@ -121,6 +121,27 @@ class SyncService extends ChangeNotifier {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // SAFE TYPE HELPERS
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Safely extract a Map<String, dynamic> from a dynamic value.
+  /// Handles the case where PHP sends `[]` (empty array) instead of `{}`
+  /// (empty object) for associative arrays that happen to be empty.
+  Map<String, dynamic>? _safeMap(dynamic value) {
+    if (value == null) return null;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    // PHP sends empty arrays `[]` for empty associative arrays
+    if (value is List && value.isEmpty) return {};
+    return null;
+  }
+
+  /// Safely extract a String from a dynamic value.
+  String? _safeString(dynamic value) {
+    if (value == null) return null;
+    return value.toString();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // MAIN SYNC ENTRY POINT
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -167,19 +188,27 @@ class SyncService extends ChangeNotifier {
           success == true || success == 'true' || success == 1;
 
       if (response.statusCode == 200 && isSuccess) {
-        final pullData =
-            responseData['pull_data'] as Map<String, dynamic>?;
+        // ── Safe type extraction ──────────────────────────────────────────
+        final pullData = _safeMap(responseData['pull_data']);
+
+        // Server may send 'timestamp' or 'server_time' — accept both
         final String? serverTimestamp =
-            responseData['timestamp'] as String?;
-        final remappedUuids =
-            responseData['remapped_uuids'] as Map<String, dynamic>?;
+            _safeString(responseData['timestamp']) ??
+            _safeString(responseData['server_time']);
+
+        // remapped_uuids: PHP sends [] when empty, {} when populated
+        final remappedUuids = _safeMap(responseData['remapped_uuids']);
 
         if (pullData == null || serverTimestamp == null) {
+          dev.log(
+            'Invalid response keys: ${responseData.keys.toList()}',
+            name: 'SyncService',
+          );
           throw Exception('استجابة غير صالحة من السيرفر: بيانات المزامنة ناقصة');
         }
 
-        final int custDown = pullData['users']?.length ?? 0;
-        final int invDown  = pullData['invoices']?.length ?? 0;
+        final int custDown = (pullData['users'] as List?)?.length ?? 0;
+        final int invDown  = (pullData['invoices'] as List?)?.length ?? 0;
         final List<String> mergedNames = [];
 
         final db = await _dbService.database;
@@ -187,7 +216,10 @@ class SyncService extends ChangeNotifier {
           // ── Step 1: Apply UUID remappings from server (e.g., merged customers) ──
           if (remappedUuids != null && remappedUuids.isNotEmpty) {
             for (final entry in remappedUuids.entries) {
-              await _applyUuidRemap(entry.key, entry.value as String, txn);
+              final newUuid = entry.value?.toString();
+              if (newUuid != null && newUuid.isNotEmpty) {
+                await _applyUuidRemap(entry.key, newUuid, txn);
+              }
             }
           }
 
@@ -198,7 +230,15 @@ class SyncService extends ChangeNotifier {
 
             for (final rawItem in items) {
               try {
-                final item = Map<String, dynamic>.from(rawItem as Map);
+                // Safely convert each item to Map<String, dynamic>
+                if (rawItem is! Map) {
+                  dev.log(
+                    'Skipping non-map item in $table: ${rawItem.runtimeType}',
+                    name: 'SyncService',
+                  );
+                  continue;
+                }
+                final item = Map<String, dynamic>.from(rawItem);
 
                 // Detect client-side duplicate customer names for UI feedback
                 if (table == 'users') {
@@ -208,7 +248,7 @@ class SyncService extends ChangeNotifier {
                     final dup = await txn.query('users',
                         where: 'name = ? AND uuid != ?',
                         whereArgs: [name, uuid]);
-                    if (dup.isNotEmpty) mergedNames.add(name as String);
+                    if (dup.isNotEmpty) mergedNames.add(name.toString());
                   }
                 }
 
@@ -230,6 +270,7 @@ class SyncService extends ChangeNotifier {
           // ── Step 3: Mark pushed items as synced ───────────────────────────────
           for (final table in payload.keys) {
             final uuids = payload[table]!
+                .where((e) => e['uuid'] != null)
                 .map((e) => e['uuid'] as String)
                 .toList();
             if (uuids.isNotEmpty) {
@@ -391,6 +432,11 @@ class SyncService extends ChangeNotifier {
         // Never send the local plain-text password to the server
         item.remove('password');
         break;
+
+      case 'edit_history':
+        item['edited_by_uuid'] = await uuidFor('users', item['edited_by_id'] as int?);
+        item.remove('edited_by_id');
+        break;
     }
 
     return item;
@@ -413,6 +459,7 @@ class SyncService extends ChangeNotifier {
       'invoice_uuid':        ['invoices',        'invoice_id'],
       'payment_method_uuid': ['payment_methods', 'payment_method_id'],
       'parent_uuid':         ['users',           'parent_id'],
+      'edited_by_uuid':      ['users',           'edited_by_id'],
     };
 
     for (final entry in relations.entries) {
