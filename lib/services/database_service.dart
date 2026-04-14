@@ -954,6 +954,12 @@ class DatabaseService {
     final validColumns = tableInfo.map((col) => col['name'] as String).toSet();
     sanitizedData.removeWhere((key, _) => !validColumns.contains(key));
 
+    // SQLite only supports num, String, and Uint8List — convert booleans to 0/1
+    sanitizedData.updateAll((key, value) {
+      if (value is bool) return value ? 1 : 0;
+      return value;
+    });
+
     // Determine if the server is marking this record as deleted
     final bool isDeletedOnServer = sanitizedData['deleted_at'] != null &&
         sanitizedData['deleted_at'].toString().isNotEmpty;
