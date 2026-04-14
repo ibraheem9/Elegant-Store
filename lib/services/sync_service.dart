@@ -57,11 +57,23 @@ class SyncService extends ChangeNotifier {
   SyncDetails? _lastSyncDetails;
   SyncDetails? get lastSyncDetails => _lastSyncDetails;
 
+  /// Tables must be processed in dependency order (parents before children).
+  static const List<String> _tableOrder = [
+    'payment_methods',
+    'purchase_methods',
+    'users',
+    'invoices',
+    'transactions',
+    'purchases',
+    'daily_statistics',
+    'edit_history',
+  ];
+
   SyncService(this._dbService, this._prefs) {
     _dio = Dio(BaseOptions(
       baseUrl: ApiConfig.baseUrl,
       connectTimeout: const Duration(seconds: 30),
-      receiveTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 60),
       headers: {'Accept': 'application/json'},
     ));
 
@@ -98,7 +110,8 @@ class SyncService extends ChangeNotifier {
 
   Future<bool> checkConnectivity() async {
     try {
-      final result = await InternetAddress.lookup('google.com').timeout(const Duration(seconds: 5));
+      final result = await InternetAddress.lookup('google.com')
+          .timeout(const Duration(seconds: 5));
       _isOffline = result.isEmpty || result[0].rawAddress.isEmpty;
     } catch (_) {
       _isOffline = true;
@@ -107,12 +120,19 @@ class SyncService extends ChangeNotifier {
     return !_isOffline;
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // MAIN SYNC ENTRY POINT
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Performs a full bidirectional sync with the server.
+  ///
+  /// [isInitialSync] = true → sends last_sync_time = null so the server
+  /// returns ALL store data (used on first login or after a user switch).
   Future<void> performFullSync({bool isInitialSync = false}) async {
     if (_isSyncing) return;
-    
-    bool hasInternet = await checkConnectivity();
+
+    final bool hasInternet = await checkConnectivity();
     if (!hasInternet) {
-      dev.log('Sync aborted: No internet connection.', name: 'SyncService');
       _isOffline = true;
       notifyListeners();
       throw Exception('أنت غير متصل بالإنترنت. يرجى التحقق من الاتصال للمزامنة.');
@@ -122,86 +142,103 @@ class SyncService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      dev.log('Starting HQ Delta Sync. Initial sync: $isInitialSync', name: 'SyncService');
+      dev.log('Starting sync. Initial: $isInitialSync', name: 'SyncService');
 
-      final lastSyncTime = isInitialSync ? null : _prefs.getString('last_sync_time');
+      // On initial sync, send null so server returns all data
+      final String? lastSyncTime =
+          isInitialSync ? null : _prefs.getString('last_sync_time');
+
       final payload = await _prepareSyncPayload();
 
-      int custUp = payload['users']?.length ?? 0;
-      int invUp = payload['invoices']?.length ?? 0;
+      final int custUp = payload['users']?.length ?? 0;
+      final int invUp  = payload['invoices']?.length ?? 0;
 
       final response = await _dio.post('sync/receive', data: {
         'data': payload,
         'last_sync_time': lastSyncTime,
       });
 
-      final responseData = response.data is String ? jsonDecode(response.data) : response.data;
-      final success = responseData['success'];
-      final isSuccess = success == true || success == 'true' || success == 1;
+      final responseData = response.data is String
+          ? jsonDecode(response.data)
+          : response.data;
+
+      final dynamic success = responseData['success'];
+      final bool isSuccess =
+          success == true || success == 'true' || success == 1;
 
       if (response.statusCode == 200 && isSuccess) {
-        final pullData = responseData['pull_data'] as Map<String, dynamic>?;
-        final serverTimestamp = responseData['timestamp'] as String?;
-        final remappedUuids = responseData['remapped_uuids'] as Map<String, dynamic>?;
+        final pullData =
+            responseData['pull_data'] as Map<String, dynamic>?;
+        final String? serverTimestamp =
+            responseData['timestamp'] as String?;
+        final remappedUuids =
+            responseData['remapped_uuids'] as Map<String, dynamic>?;
 
         if (pullData == null || serverTimestamp == null) {
           throw Exception('استجابة غير صالحة من السيرفر: بيانات المزامنة ناقصة');
         }
 
-        int custDown = pullData['users']?.length ?? 0;
-        int invDown = pullData['invoices']?.length ?? 0;
-        List<String> mergedNames = [];
-
-        final tablesOrder = ['payment_methods', 'purchase_methods', 'users', 'invoices', 'transactions', 'purchases', 'daily_statistics', 'edit_history'];
+        final int custDown = pullData['users']?.length ?? 0;
+        final int invDown  = pullData['invoices']?.length ?? 0;
+        final List<String> mergedNames = [];
 
         final db = await _dbService.database;
         await db.transaction((txn) async {
-          // 0. Handle Remapped UUIDs (e.g., from customer merges)
+          // ── Step 1: Apply UUID remappings from server (e.g., merged customers) ──
           if (remappedUuids != null && remappedUuids.isNotEmpty) {
-            for (var entry in remappedUuids.entries) {
-              final oldUuid = entry.key;
-              final newUuid = entry.value;
-              await _handleUuidRemapping(oldUuid, newUuid, txn);
+            for (final entry in remappedUuids.entries) {
+              await _applyUuidRemap(entry.key, entry.value as String, txn);
             }
           }
 
-          // 1. Process Pull Data
-          for (var table in tablesOrder) {
-            if (pullData.containsKey(table)) {
-              final items = pullData[table];
-              if (items is List) {
-                for (var itemData in items) {
-                  try {
-                    final standardized = Map<String, dynamic>.from(itemData);
-                    final resolvedItem = await _resolveRelationsInTxn(table, standardized, txn);
+          // ── Step 2: Process pull data in dependency order ─────────────────────
+          for (final table in _tableOrder) {
+            final items = pullData[table];
+            if (items is! List || items.isEmpty) continue;
 
-                    if (table == 'users') {
-                      final name = resolvedItem['name'];
-                      final uuid = resolvedItem['uuid'];
-                      final existing = await txn.query('users', where: 'name = ? AND uuid != ?', whereArgs: [name, uuid]);
-                      if (existing.isNotEmpty) {
-                        mergedNames.add(name);
-                      }
-                    }
+            for (final rawItem in items) {
+              try {
+                final item = Map<String, dynamic>.from(rawItem as Map);
 
-                    await _dbService.upsertFromSyncInTxn(table, resolvedItem, txn);
-                  } catch (itemError) {
-                    dev.log('Error processing item in table $table: $itemError', name: 'SyncService', error: itemError);
-                    rethrow;
+                // Detect client-side duplicate customer names for UI feedback
+                if (table == 'users') {
+                  final name = item['name'];
+                  final uuid = item['uuid'];
+                  if (name != null && uuid != null) {
+                    final dup = await txn.query('users',
+                        where: 'name = ? AND uuid != ?',
+                        whereArgs: [name, uuid]);
+                    if (dup.isNotEmpty) mergedNames.add(name as String);
                   }
                 }
+
+                // Resolve UUID-based foreign keys to local integer IDs
+                final resolved = await _resolveRelationsInTxn(table, item, txn);
+
+                await _dbService.upsertFromSyncInTxn(table, resolved, txn);
+              } catch (itemError) {
+                dev.log(
+                  'Error processing $table item: $itemError',
+                  name: 'SyncService',
+                  error: itemError,
+                );
+                rethrow;
               }
             }
           }
 
-          // 2. Mark pushed items as synced
-          for (var table in payload.keys) {
-            final List items = payload[table]!;
-            final uuids = items.map((e) => e['uuid'] as String).toList();
+          // ── Step 3: Mark pushed items as synced ───────────────────────────────
+          for (final table in payload.keys) {
+            final uuids = payload[table]!
+                .map((e) => e['uuid'] as String)
+                .toList();
             if (uuids.isNotEmpty) {
-              await txn.update(table, {'is_synced': 1},
-                where: "uuid IN (${uuids.map((_) => '?').join(', ')})",
-                whereArgs: uuids);
+              await txn.update(
+                table,
+                {'is_synced': 1},
+                where: 'uuid IN (${List.filled(uuids.length, '?').join(', ')})',
+                whereArgs: uuids,
+              );
             }
           }
         });
@@ -218,18 +255,25 @@ class SyncService extends ChangeNotifier {
           mergedCustomers: mergedNames,
         ));
 
-        dev.log('HQ Delta Sync completed successfully at $serverTimestamp.', name: 'SyncService');
+        dev.log('Sync completed at $serverTimestamp.', name: 'SyncService');
       } else {
-        String errorMsg = responseData['message'] ?? 'Unknown server error';
+        final String errorMsg =
+            responseData['message'] as String? ?? 'Unknown server error';
         dev.log('Sync failed on server: $errorMsg', name: 'SyncService');
         throw Exception(errorMsg);
       }
     } on DioException catch (e) {
       String message = 'فشلت المزامنة بسبب مشكلة في الشبكة';
-      if (e.type == DioExceptionType.connectionTimeout) message = 'انتهت مهلة الاتصال بالسيرفر';
-      if (e.response?.statusCode == 401) message = 'انتهت صلاحية الجلسة، يرجى إعادة تسجيل الدخول';
-      if (e.response?.statusCode == 500) message = 'خطأ داخلي في السيرفر (500)';
-
+      if (e.type == DioExceptionType.connectionTimeout) {
+        message = 'انتهت مهلة الاتصال بالسيرفر';
+      } else if (e.response?.statusCode == 401) {
+        message = 'انتهت صلاحية الجلسة، يرجى إعادة تسجيل الدخول';
+      } else if (e.response?.statusCode == 500) {
+        final serverMsg = e.response?.data is Map
+            ? (e.response!.data['message'] ?? 'خطأ داخلي في السيرفر (500)')
+            : 'خطأ داخلي في السيرفر (500)';
+        message = serverMsg.toString();
+      }
       dev.log('Sync failed (Network): ${e.message}', name: 'SyncService');
       throw Exception(message);
     } catch (e) {
@@ -241,112 +285,164 @@ class SyncService extends ChangeNotifier {
     }
   }
 
-  Future<void> _handleUuidRemapping(String oldUuid, String newUuid, dynamic txn) async {
-    dev.log('Remapping UUID: $oldUuid -> $newUuid', name: 'SyncService');
-    
-    // 1. Update the record itself if it exists locally
-    // We check multiple tables but primarily 'users' for customer merges
-    final tables = ['users', 'invoices', 'transactions', 'purchases', 'daily_statistics', 'edit_history'];
-    for (var table in tables) {
-      await txn.update(table, {'uuid': newUuid, 'is_synced': 1}, where: 'uuid = ?', whereArgs: [oldUuid]);
+  // ─────────────────────────────────────────────────────────────────────────
+  // UUID REMAPPING
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// When the server merges two customers, it sends a remapping of the old
+  /// UUID to the canonical new UUID. We apply this locally so all FK references
+  /// point to the surviving record.
+  Future<void> _applyUuidRemap(
+      String oldUuid, String newUuid, dynamic txn) async {
+    dev.log('Remapping UUID: $oldUuid → $newUuid', name: 'SyncService');
+
+    // Update the record itself (in case it was created locally with the old UUID)
+    for (final table in _tableOrder) {
+      await txn.rawUpdate(
+        'UPDATE $table SET uuid = ?, is_synced = 1 WHERE uuid = ?',
+        [newUuid, oldUuid],
+      );
     }
 
-    // 2. Update foreign key references in other tables
-    // This is handled by the server during pull, but we do it locally for immediate consistency
-    await txn.update('invoices', {'user_uuid': newUuid}, where: 'user_uuid = ?', whereArgs: [oldUuid]);
-    await txn.update('transactions', {'buyer_uuid': newUuid}, where: 'buyer_uuid = ?', whereArgs: [oldUuid]);
-    await txn.update('transactions', {'invoice_uuid': newUuid}, where: 'invoice_uuid = ?', whereArgs: [oldUuid]);
-    // Add other FK relations as needed
+    // Update integer FK columns that reference the old local user ID.
+    // We find the local ID of the old UUID first, then remap.
+    final oldRows = await txn.rawQuery(
+      'SELECT id FROM users WHERE uuid = ? LIMIT 1',
+      [oldUuid],
+    );
+    final newRows = await txn.rawQuery(
+      'SELECT id FROM users WHERE uuid = ? LIMIT 1',
+      [newUuid],
+    );
+
+    if (oldRows.isNotEmpty && newRows.isNotEmpty) {
+      final int oldId = oldRows.first['id'] as int;
+      final int newId = newRows.first['id'] as int;
+
+      if (oldId != newId) {
+        await txn.rawUpdate(
+            'UPDATE invoices SET user_id = ? WHERE user_id = ?',
+            [newId, oldId]);
+        await txn.rawUpdate(
+            'UPDATE transactions SET buyer_id = ? WHERE buyer_id = ?',
+            [newId, oldId]);
+      }
+    }
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // PUSH PAYLOAD PREPARATION
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Collect all unsynced local records and replace integer IDs with UUIDs
+  /// so the server can resolve relationships independently.
   Future<Map<String, List<Map<String, dynamic>>>> _prepareSyncPayload() async {
     final Map<String, List<Map<String, dynamic>>> payload = {};
-    final tables = ['payment_methods', 'purchase_methods', 'users', 'invoices', 'transactions', 'purchases', 'daily_statistics', 'edit_history'];
-    
-    for (var table in tables) {
+
+    for (final table in _tableOrder) {
       final unsynced = await _dbService.getUnsynced(table);
       if (unsynced.isNotEmpty) {
-        payload[table] = await Future.wait(unsynced.map((item) async {
-          final map = Map<String, dynamic>.from(item);
-          return await _replaceIdsWithUuids(table, map);
-        }));
+        payload[table] = await Future.wait(
+          unsynced.map((item) => _replaceIdsWithUuids(table, Map<String, dynamic>.from(item))),
+        );
       }
     }
     return payload;
   }
 
-  Future<Map<String, dynamic>> _replaceIdsWithUuids(String table, Map<String, dynamic> item) async {
+  /// Replace integer FK columns with their UUID equivalents for server transport.
+  Future<Map<String, dynamic>> _replaceIdsWithUuids(
+      String table, Map<String, dynamic> item) async {
     final db = await _dbService.database;
-    item.remove('id');
+    item.remove('id'); // Never send local auto-increment IDs to server
 
-    if (table == 'invoices') {
-      if (item['user_id'] != null) {
-        final r = await db.query('users', columns: ['uuid'], where: 'id = ?', whereArgs: [item['user_id']]);
-        if (r.isNotEmpty) item['user_uuid'] = r.first['uuid'];
-        item.remove('user_id');
-      }
-      if (item['payment_method_id'] != null) {
-        final r = await db.query('payment_methods', columns: ['uuid'], where: 'id = ?', whereArgs: [item['payment_method_id']]);
-        if (r.isNotEmpty) item['payment_method_uuid'] = r.first['uuid'];
-        item.remove('payment_method_id');
-      }
-    } else if (table == 'transactions') {
-      if (item['buyer_id'] != null) {
-        final r = await db.query('users', columns: ['uuid'], where: 'id = ?', whereArgs: [item['buyer_id']]);
-        if (r.isNotEmpty) item['buyer_uuid'] = r.first['uuid'];
-        item.remove('buyer_id');
-      }
-      if (item['invoice_id'] != null) {
-        final r = await db.query('invoices', columns: ['uuid'], where: 'id = ?', whereArgs: [item['invoice_id']]);
-        if (r.isNotEmpty) item['invoice_uuid'] = r.first['uuid'];
-        item.remove('invoice_id');
-      }
-      if (item['payment_method_id'] != null) {
-        final r = await db.query('payment_methods', columns: ['uuid'], where: 'id = ?', whereArgs: [item['payment_method_id']]);
-        if (r.isNotEmpty) item['payment_method_uuid'] = r.first['uuid'];
-        item.remove('payment_method_id');
-      }
-    } else if (table == 'purchases') {
-      if (item['payment_method_id'] != null) {
-        final r = await db.query('payment_methods', columns: ['uuid'], where: 'id = ?', whereArgs: [item['payment_method_id']]);
-        if (r.isNotEmpty) item['payment_method_uuid'] = r.first['uuid'];
-        item.remove('payment_method_id');
-      }
-    } else if (table == 'users') {
-      if (item['parent_id'] != null) {
-        final r = await db.query('users', columns: ['uuid'], where: 'id = ?', whereArgs: [item['parent_id']]);
-        if (r.isNotEmpty) item['parent_uuid'] = r.first['uuid'];
-        item.remove('parent_id');
-      }
+    Future<String?> uuidFor(String fromTable, int? id) async {
+      if (id == null) return null;
+      final r = await db.query(fromTable,
+          columns: ['uuid'], where: 'id = ?', whereArgs: [id]);
+      return r.isNotEmpty ? r.first['uuid'] as String? : null;
     }
+
+    switch (table) {
+      case 'invoices':
+        item['user_uuid']           = await uuidFor('users', item['user_id'] as int?);
+        item['payment_method_uuid'] = await uuidFor('payment_methods', item['payment_method_id'] as int?);
+        item.remove('user_id');
+        item.remove('payment_method_id');
+        break;
+
+      case 'transactions':
+        item['buyer_uuid']          = await uuidFor('users', item['buyer_id'] as int?);
+        item['invoice_uuid']        = await uuidFor('invoices', item['invoice_id'] as int?);
+        item['payment_method_uuid'] = await uuidFor('payment_methods', item['payment_method_id'] as int?);
+        item.remove('buyer_id');
+        item.remove('invoice_id');
+        item.remove('payment_method_id');
+        break;
+
+      case 'purchases':
+        item['payment_method_uuid'] = await uuidFor('payment_methods', item['payment_method_id'] as int?);
+        item.remove('payment_method_id');
+        break;
+
+      case 'users':
+        item['parent_uuid'] = await uuidFor('users', item['parent_id'] as int?);
+        item.remove('parent_id');
+        // Never send the local plain-text password to the server
+        item.remove('password');
+        break;
+    }
+
     return item;
   }
 
-  Future<Map<String, dynamic>> _resolveRelationsInTxn(String table, Map<String, dynamic> data, dynamic txn) async {
+  // ─────────────────────────────────────────────────────────────────────────
+  // PULL: FOREIGN KEY RESOLUTION
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Convert UUID-based FK fields from the server response into local integer IDs.
+  /// If the related record is not yet in the local DB, the FK is set to null
+  /// (it will be resolved on the next sync once the parent arrives).
+  Future<Map<String, dynamic>> _resolveRelationsInTxn(
+      String table, Map<String, dynamic> data, dynamic txn) async {
     final map = Map<String, dynamic>.from(data);
 
-    final relations = {
-        'user_uuid': ['users', 'user_id'],
-        'buyer_uuid': ['users', 'buyer_id'],
-        'invoice_uuid': ['invoices', 'invoice_id'],
-        'payment_method_uuid': ['payment_methods', 'payment_method_id'],
-        'parent_uuid': ['users', 'parent_id'],
+    final Map<String, List<String>> relations = {
+      'user_uuid':           ['users',           'user_id'],
+      'buyer_uuid':          ['users',           'buyer_id'],
+      'invoice_uuid':        ['invoices',        'invoice_id'],
+      'payment_method_uuid': ['payment_methods', 'payment_method_id'],
+      'parent_uuid':         ['users',           'parent_id'],
     };
 
-    for (var entry in relations.entries) {
-        final uuidKey = entry.key;
-        if (map.containsKey(uuidKey) && map[uuidKey] != null) {
-            final targetTable = entry.value[0];
-            final idKey = entry.value[1];
-            final r = await txn.query(targetTable, columns: ['id'], where: 'uuid = ?', whereArgs: [map[uuidKey]]);
-            if (r.isNotEmpty) {
-              map[idKey] = r.first['id'];
-            } else {
-              dev.log('Warning: Could not resolve $uuidKey (${map[uuidKey]}) for table $table locally.', name: 'SyncService');
-            }
-            map.remove(uuidKey);
+    for (final entry in relations.entries) {
+      final uuidKey = entry.key;
+      if (!map.containsKey(uuidKey)) continue;
+
+      final targetUuid = map[uuidKey];
+      final targetTable = entry.value[0];
+      final idKey = entry.value[1];
+
+      if (targetUuid != null) {
+        final rows = await txn.rawQuery(
+          'SELECT id FROM $targetTable WHERE uuid = ? LIMIT 1',
+          [targetUuid],
+        );
+        map[idKey] = rows.isNotEmpty ? rows.first['id'] as int : null;
+
+        if (rows.isEmpty) {
+          dev.log(
+            'Warning: Cannot resolve $uuidKey ($targetUuid) in $table — parent not yet in local DB.',
+            name: 'SyncService',
+          );
         }
+      } else {
+        map[idKey] = null;
+      }
+
+      map.remove(uuidKey);
     }
+
     return map;
   }
 }
