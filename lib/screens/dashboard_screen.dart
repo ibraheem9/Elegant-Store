@@ -17,6 +17,7 @@ import 'purchases_methods_screen.dart';
 import 'recycle_bin_screen.dart';
 import 'notifications_screen.dart';
 import 'accountants_screen.dart';
+import 'sync_details_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -447,70 +448,11 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
     }
   }
 
-  void _showSyncDetailsDialog(SyncDetails details, bool isDark) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-        title: Row(
-          children: [
-            const Icon(Icons.info_outline, color: Colors.blue),
-            const SizedBox(width: 12),
-            const Text('تفاصيل آخر مزامنة', style: TextStyle(fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildDialogStat('وقت الانتهاء', details.lastSyncTime),
-            const Divider(),
-            Row(
-              children: [
-                Expanded(child: _buildDialogStat('زبائن مرفوعين', '${details.customersUploaded}')),
-                Expanded(child: _buildDialogStat('فواتير مرفوعة', '${details.invoicesUploaded}')),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(child: _buildDialogStat('زبائن محملين', '${details.customersDownloaded}')),
-                Expanded(child: _buildDialogStat('فواتير محملة', '${details.invoicesDownloaded}')),
-              ],
-            ),
-            const Divider(),
-            const Text('الزبائن الذين تم دمجهم (لتطابق الأسماء):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blue)),
-            const SizedBox(height: 8),
-            if (details.mergedCustomers.isEmpty)
-              const Text('لا يوجد دمج جديد', style: TextStyle(fontSize: 12, color: Colors.grey))
-            else
-              SizedBox(
-                height: 100,
-                width: double.maxFinite,
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: details.mergedCustomers.length,
-                  itemBuilder: (context, i) => Text('• ${details.mergedCustomers[i]}', style: const TextStyle(fontSize: 12)),
-                ),
-              ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إغلاق')),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDialogStat(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-      ],
-    );
+  void _openSyncDetails() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SyncDetailsScreen()),
+    ).then((_) => _loadSyncDetails()); // Refresh after returning
   }
 
   @override
@@ -540,17 +482,7 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
                       color: isDark ? const Color(0xFFDCEFFF) : const Color(0xFF0F172A)
                     )
                   ),
-                  Row(
-                    children: [
-                      if (syncService.lastSyncDetails != null)
-                        IconButton(
-                          icon: const Icon(Icons.history_rounded, color: Colors.blue),
-                          onPressed: () => _showSyncDetailsDialog(syncService.lastSyncDetails!, isDark),
-                          tooltip: 'تفاصيل المزامنة',
-                        ),
-                      _buildSyncButton(isDark, syncService.isSyncing),
-                    ],
-                  ),
+                  _buildSyncButton(isDark, syncService.isSyncing),
                 ],
               ),
               if (syncService.isSyncing || _syncStatus.contains('فشلت') || _syncStatus.contains('نجاح')) ...[
@@ -636,6 +568,20 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
   }
 
   Widget _buildLastSyncDetails(bool isDark, bool isMobile) {
+    final syncService = context.read<SyncService>();
+    final details = syncService.lastSyncDetails;
+
+    // Format last sync time for display
+    String lastSyncDisplay = 'لم تتم مزامنة بعد';
+    if (details != null && details.lastSyncTime.isNotEmpty) {
+      try {
+        final dt = DateTime.parse(details.lastSyncTime).toLocal();
+        lastSyncDisplay = DateFormat('yyyy/MM/dd  hh:mm a', 'ar').format(dt);
+      } catch (_) {
+        lastSyncDisplay = details.lastSyncTime;
+      }
+    }
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -646,22 +592,131 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('آخر البيانات المرفوعة للسيرفر', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.blue[300] : Colors.blue[800])),
+          // ── Header row ──────────────────────────────────────────────────
+          Row(
+            children: [
+              Icon(Icons.cloud_done_rounded,
+                  size: 20,
+                  color: details != null ? Colors.green : Colors.grey),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'حالة المزامنة',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    color: isDark ? Colors.blue[300] : Colors.blue[800],
+                  ),
+                ),
+              ),
+              // ── More Details button ──────────────────────────────────
+              TextButton.icon(
+                onPressed: _openSyncDetails,
+                icon: const Icon(Icons.bar_chart_rounded, size: 16),
+                label: const Text('مزيد من التفاصيل', style: TextStyle(fontSize: 12)),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.blue,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  backgroundColor: Colors.blue.withOpacity(0.08),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
+          // ── Last sync time ───────────────────────────────────────────
+          _buildDetailItem(
+            'آخر مزامنة:',
+            lastSyncDisplay,
+            Icons.access_time_rounded,
+            isDark,
+          ),
+          const SizedBox(height: 12),
+          // ── Last synced customer ─────────────────────────────────────
           if (isMobile) ...[
-            _buildDetailItem('آخر زبون مضاف:', _lastUser?.name ?? 'لا يوجد', Icons.person_add_alt_1_rounded, isDark),
+            _buildDetailItem(
+              'آخر زبون مرفوع للسيرفر:',
+              _lastUser?.name ?? 'لا يوجد',
+              Icons.person_add_alt_1_rounded,
+              isDark,
+            ),
             const SizedBox(height: 12),
-            _buildDetailItem('آخر فاتورة مضافة:', _lastInvoice != null ? '${_lastInvoice!.amount} ₪ (${_lastInvoice!.customerName})' : 'لا يوجد', Icons.receipt_long_rounded, isDark),
+            _buildDetailItem(
+              'آخر فاتورة مرفوعة:',
+              _lastInvoice != null
+                  ? '${_lastInvoice!.amount.toStringAsFixed(2)} ₪ — ${_lastInvoice!.customerName}'
+                  : 'لا يوجد',
+              Icons.receipt_long_rounded,
+              isDark,
+            ),
           ] else
             Row(
               children: [
-                Expanded(child: _buildDetailItem('آخر زبون مضاف:', _lastUser?.name ?? 'لا يوجد', Icons.person_add_alt_1_rounded, isDark)),
+                Expanded(
+                  child: _buildDetailItem(
+                    'آخر زبون مرفوع للسيرفر:',
+                    _lastUser?.name ?? 'لا يوجد',
+                    Icons.person_add_alt_1_rounded,
+                    isDark,
+                  ),
+                ),
                 const SizedBox(width: 24),
-                Expanded(child: _buildDetailItem('آخر فاتورة مضافة:', _lastInvoice != null ? '${_lastInvoice!.amount} ₪ (${_lastInvoice!.customerName})' : 'لا يوجد', Icons.receipt_long_rounded, isDark)),
+                Expanded(
+                  child: _buildDetailItem(
+                    'آخر فاتورة مرفوعة:',
+                    _lastInvoice != null
+                        ? '${_lastInvoice!.amount.toStringAsFixed(2)} ₪ — ${_lastInvoice!.customerName}'
+                        : 'لا يوجد',
+                    Icons.receipt_long_rounded,
+                    isDark,
+                  ),
+                ),
               ],
             ),
+          // ── Quick stats row ──────────────────────────────────────────
+          if (details != null) ...[
+            const SizedBox(height: 16),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                _buildMiniStat('مرفوع', '${details.customersUploaded + details.invoicesUploaded}', Icons.upload_rounded, Colors.green, isDark),
+                const SizedBox(width: 16),
+                _buildMiniStat('محمّل', '${details.customersDownloaded + details.invoicesDownloaded}', Icons.download_rounded, Colors.blue, isDark),
+                if (details.mergedCustomers.isNotEmpty) ...[
+                  const SizedBox(width: 16),
+                  _buildMiniStat('مدموج', '${details.mergedCustomers.length}', Icons.merge_type_rounded, Colors.orange, isDark),
+                ],
+              ],
+            ),
+          ],
         ],
       ),
+    );
+  }
+
+  Widget _buildMiniStat(String label, String value, IconData icon, Color color, bool isDark) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 14, color: color),
+        ),
+        const SizedBox(width: 6),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+            Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+          ],
+        ),
+      ],
     );
   }
 

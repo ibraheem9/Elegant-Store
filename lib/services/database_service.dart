@@ -830,6 +830,77 @@ class DatabaseService {
     dev.log('All data cleared from mobile database.', name: 'DatabaseService');
   }
 
+  /// Full reset: delete all rows, reset AUTOINCREMENT counters, and VACUUM.
+  /// Used to fix sync corruption or start fresh.
+  Future<void> clearAllDataAndReset() async {
+    final db = await database;
+    await db.transaction((txn) async {
+      final tables = [
+        'daily_statistics',
+        'edit_history',
+        'invoices',
+        'payment_methods',
+        'purchase_methods',
+        'purchases',
+        'transactions',
+        'users',
+      ];
+      for (final table in tables) {
+        await txn.rawDelete('DELETE FROM $table');
+      }
+      // Reset all AUTOINCREMENT counters
+      await txn.rawDelete('DELETE FROM sqlite_sequence');
+    });
+    // Reclaim disk space outside of transaction
+    await db.rawQuery('VACUUM');
+    dev.log('Full database reset completed.', name: 'DatabaseService');
+  }
+
+  /// Returns the count of unsynced records per table for the sync details screen.
+  Future<Map<String, int>> getUnsyncedCounts() async {
+    final db = await database;
+    final tables = [
+      'users', 'invoices', 'transactions', 'purchases',
+      'payment_methods', 'purchase_methods', 'daily_statistics', 'edit_history',
+    ];
+    final Map<String, int> counts = {};
+    for (final table in tables) {
+      final result = await db.rawQuery(
+        'SELECT COUNT(*) as cnt FROM $table WHERE is_synced = 0',
+      );
+      counts[table] = result.first['cnt'] as int? ?? 0;
+    }
+    return counts;
+  }
+
+  /// Returns total record counts per table.
+  Future<Map<String, int>> getTotalCounts() async {
+    final db = await database;
+    final tables = [
+      'users', 'invoices', 'transactions', 'purchases',
+      'payment_methods', 'purchase_methods',
+    ];
+    final Map<String, int> counts = {};
+    for (final table in tables) {
+      final result = await db.rawQuery('SELECT COUNT(*) as cnt FROM $table');
+      counts[table] = result.first['cnt'] as int? ?? 0;
+    }
+    return counts;
+  }
+
+  /// Returns customers whose name appears more than once (local duplicates).
+  Future<List<Map<String, dynamic>>> getDuplicateCustomers() async {
+    final db = await database;
+    return await db.rawQuery('''
+      SELECT name, COUNT(*) as count
+      FROM users
+      WHERE role = 'CUSTOMER'
+      GROUP BY name
+      HAVING COUNT(*) > 1
+      ORDER BY count DESC
+    ''');
+  }
+
   Future<List<Map<String, dynamic>>> getUnsynced(String table) async {
     final db = await database;
     return await db.query(table, where: 'is_synced = 0');
