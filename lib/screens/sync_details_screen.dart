@@ -139,9 +139,7 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
       }
     }
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: isDark ? const Color(0xFF0B1120) : const Color(0xFFF1F5F9),
         appBar: AppBar(
           title: const Text('تفاصيل المزامنة', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -340,8 +338,7 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
                   ),
                 ),
               ),
-      ),
-    );
+      );
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -628,9 +625,7 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
 
   Widget _buildResetConfirmDialog(BuildContext ctx) {
     final isDark = Theme.of(ctx).brightness == Brightness.dark;
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: AlertDialog(
+    return AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
         title: Row(
@@ -710,7 +705,6 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
             child: const Text('نعم، امسح البيانات', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
-      ),
     );
   }
 
