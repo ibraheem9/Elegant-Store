@@ -375,22 +375,27 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
   String _syncStatus = "جاهز للمزامنة";
   User? _lastUser;
   Invoice? _lastInvoice;
+  // Store reference to avoid using context in dispose()
+  SyncService? _syncService;
 
   @override
   void initState() {
     super.initState();
     _loadSyncDetails();
     
-    // Listen for sync completion to refresh details
+    // Store the SyncService reference and add listener after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<SyncService>().addListener(_onSyncStatusChanged);
+      if (mounted) {
+        _syncService = context.read<SyncService>();
+        _syncService!.addListener(_onSyncStatusChanged);
+      }
     });
   }
 
   @override
   void dispose() {
-    // Correct way to remove listener
-    Provider.of<SyncService>(context, listen: false).removeListener(_onSyncStatusChanged);
+    // Use stored reference — never access context in dispose()
+    _syncService?.removeListener(_onSyncStatusChanged);
     super.dispose();
   }
 

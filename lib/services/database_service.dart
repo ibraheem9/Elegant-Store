@@ -808,7 +808,7 @@ class DatabaseService {
 
       final storeTables = ['payment_methods', 'invoices', 'transactions', 'purchases', 'daily_statistics', 'edit_history', 'purchase_methods'];
       for (var table in storeTables) {
-        final tableInfo = await txn.rawQuery("PRAGMA table_info(\$table)");
+        final tableInfo = await txn.rawQuery('PRAGMA table_info($table)');
         if (tableInfo.any((col) => col['name'] == 'store_manager_id')) {
           await txn.update(table,
             {'store_manager_id': managerId, 'is_synced': 0, 'updated_at': DateTime.now().toIso8601String()},
@@ -854,9 +854,17 @@ class DatabaseService {
 
     final sanitizedData = Map<String, dynamic>.from(data);
     sanitizedData.remove('id');
+    sanitizedData['is_synced'] = 1;
 
-    // 1. Try to find by UUID
-    final existing = await txn.query(table, where: 'uuid = ?', whereArgs: [uuid], limit: 1);
+    // Determine if the server is marking this record as deleted
+    final bool isDeletedOnServer = sanitizedData['deleted_at'] != null &&
+        sanitizedData['deleted_at'].toString().isNotEmpty;
+
+    // 1. Try to find by UUID (including soft-deleted rows)
+    final existing = await txn.rawQuery(
+      'SELECT * FROM $table WHERE uuid = ? LIMIT 1',
+      [uuid],
+    );
 
     if (existing.isNotEmpty) {
       final existingId = existing.first['id'] as int;
@@ -864,26 +872,35 @@ class DatabaseService {
       final incomingVersion = sanitizedData['version'] as int? ?? 0;
 
       if (incomingVersion >= existingVersion) {
-        sanitizedData['is_synced'] = 1;
+        // Preserve local password — never overwrite with server hash
+        if (table == 'users') {
+          sanitizedData.remove('password');
+        }
         await txn.update(table, sanitizedData, where: 'id = ?', whereArgs: [existingId]);
       }
       return existingId;
     } else {
-      // 2. Special handling for users table: if UUID doesn't match but username does
+      // 2. For users: also try matching by username to handle UUID changes
       if (table == 'users') {
-        final existingByUsername = await txn.query(table, where: 'username = ?', whereArgs: [sanitizedData['username']], limit: 1);
-        if (existingByUsername.isNotEmpty) {
-          final existingId = existingByUsername.first['id'] as int;
-          sanitizedData['is_synced'] = 1;
+        final byUsername = await txn.rawQuery(
+          'SELECT * FROM $table WHERE username = ? LIMIT 1',
+          [sanitizedData['username']],
+        );
+        if (byUsername.isNotEmpty) {
+          final existingId = byUsername.first['id'] as int;
+          sanitizedData.remove('password');
           await txn.update(table, sanitizedData, where: 'id = ?', whereArgs: [existingId]);
           return existingId;
         }
       }
 
-      // 3. Insert new record
-      sanitizedData['is_synced'] = 1;
-      if (table == 'users' && (sanitizedData['password'] == null || sanitizedData['password'] == '')) {
-        sanitizedData['password'] = '123';
+      // 3. Insert new record — skip if server is telling us it is deleted
+      // (no point creating a record locally that is already deleted on server)
+      if (isDeletedOnServer) return -1;
+
+      if (table == 'users') {
+        // Assign a safe local password; real auth goes through the server token
+        sanitizedData['password'] = sanitizedData['password'] ?? '***';
       }
       return await txn.insert(table, sanitizedData);
     }
