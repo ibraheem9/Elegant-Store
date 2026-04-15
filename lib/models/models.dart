@@ -215,6 +215,7 @@ class Invoice {
   final String? customerName;
   final String? methodName;
   final String? userUuid;
+  final int customerIsPermanent; // 0 = non-permanent, 1 = permanent
 
   Invoice({
     this.id,
@@ -236,6 +237,7 @@ class Invoice {
     this.customerName,
     this.methodName,
     this.userUuid,
+    this.customerIsPermanent = 0,
   }) : this.updatedAt = updatedAt ?? DateTime.now().toIso8601String();
 
   Map<String, dynamic> toMap() {
@@ -280,6 +282,7 @@ class Invoice {
       customerName: map['customer_name'],
       methodName: map['method_name'],
       userUuid: map['user_uuid'],
+      customerIsPermanent: map['customer_is_permanent'] ?? 0,
     );
   }
 }

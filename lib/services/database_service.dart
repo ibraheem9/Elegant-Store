@@ -415,7 +415,7 @@ class DatabaseService {
     List<dynamic> args = [];
     if (start != null) { where += ' AND i.created_at >= ?'; args.add(start.toIso8601String()); }
     if (end != null) { where += ' AND i.created_at <= ?'; args.add(end.toIso8601String()); }
-    final r = await db.rawQuery('SELECT i.*, u.name as customer_name, u.nickname as customer_nickname, pm.name as method_name FROM invoices i JOIN users u ON i.user_id = u.id LEFT JOIN payment_methods pm ON i.payment_method_id = pm.id WHERE $where ORDER BY i.created_at DESC', args);
+    final r = await db.rawQuery('SELECT i.*, u.name as customer_name, u.nickname as customer_nickname, u.is_permanent_customer as customer_is_permanent, pm.name as method_name FROM invoices i JOIN users u ON i.user_id = u.id LEFT JOIN payment_methods pm ON i.payment_method_id = pm.id WHERE $where ORDER BY i.created_at DESC', args);
     return r.map((m) => Invoice.fromMap(m)).toList();
   }
 
@@ -785,6 +785,22 @@ class DatabaseService {
     map['updated_at'] = now;
     map['is_synced'] = 0;
     return await db.insert('purchases', map);
+  }
+
+  Future<void> updatePurchase(Purchase p) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    await db.update(
+      'purchases',
+      {
+        ...p.toMap(),
+        'version': p.version + 1,
+        'is_synced': 0,
+        'updated_at': now,
+      },
+      where: 'id = ?',
+      whereArgs: [p.id],
+    );
   }
 
   Future<void> updateInvoice(Invoice inv) async {

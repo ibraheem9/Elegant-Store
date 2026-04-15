@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/models.dart';
@@ -450,14 +451,76 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   Widget _buildInput(String label, TextEditingController controller, IconData icon, bool isDark, {bool isNumeric = false, double fontSize = 16}) {
     return TextField(
       controller: controller,
-      keyboardType: isNumeric ? TextInputType.number : TextInputType.text,
+      keyboardType: isNumeric ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
+      // Prevent letters in numeric fields
+      inputFormatters: isNumeric ? [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))] : null,
       style: TextStyle(fontSize: fontSize, color: isDark ? Colors.white : Colors.black),
       decoration: InputDecoration(
-        labelText: label, 
+        labelText: label,
         labelStyle: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 14),
-        prefixIcon: Icon(icon, size: 20)
+        prefixIcon: Icon(icon, size: 20),
       ),
     );
+  }
+
+  Future<void> _showEditPurchaseDialog(Purchase p) async {
+    final amountController = TextEditingController(text: p.amount.toString());
+    final merchantController = TextEditingController(text: p.merchantName);
+    final notesController = TextEditingController(text: p.notes ?? '');
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('تعديل المشتريات'),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(
+              controller: merchantController,
+              decoration: const InputDecoration(labelText: 'اسم المورد'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: amountController,
+              decoration: const InputDecoration(labelText: 'المبلغ الجديد'),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: notesController,
+              decoration: const InputDecoration(labelText: 'ملاحظات'),
+            ),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('حفظ')),
+        ],
+      ),
+    );
+    if (result == true) {
+      final newAmount = double.tryParse(amountController.text) ?? p.amount;
+      if (newAmount <= 0) return;
+      final db = context.read<DatabaseService>();
+      await db.updatePurchase(Purchase(
+        id: p.id,
+        uuid: p.uuid,
+        storeManagerId: p.storeManagerId,
+        merchantName: merchantController.text.trim().isEmpty ? p.merchantName : merchantController.text.trim(),
+        amount: newAmount,
+        paymentSource: p.paymentSource,
+        paymentMethodId: p.paymentMethodId,
+        notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
+        version: p.version,
+        createdAt: p.createdAt,
+        isSynced: 0,
+      ));
+      await _loadData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم تعديل المشتريات بنجاح'), backgroundColor: Colors.blue),
+        );
+      }
+    }
   }
 
   Widget _buildSection(String title, List<Purchase> items, Color color, bool isDark, bool isMobile) {
@@ -471,42 +534,66 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         ),
         const SizedBox(height: 16),
         if (items.isEmpty)
-          Padding(padding: const EdgeInsets.all(16), 
-            child: Text('لا توجد مشتريات للفترة المختارة لهذه الفئة', 
-              style: TextStyle(fontSize: 14, color: isDark ? Colors.white30 : Colors.grey)))
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text('لا توجد مشتريات للفترة المختارة لهذه الفئة',
+              style: TextStyle(fontSize: 14, color: isDark ? Colors.white30 : Colors.grey)),
+          )
         else
           ...items.map((p) => Container(
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF0F172A) : Colors.white, 
-              borderRadius: BorderRadius.circular(16), 
-              border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0))
+              color: isDark ? const Color(0xFF0F172A) : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(p.merchantName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isDark ? Colors.white : Colors.black)),
-                  const SizedBox(height: 4),
-                  Row(
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.access_time, size: 12, color: isDark ? Colors.white30 : Colors.grey),
-                      const SizedBox(width: 4),
-                      Text(DateFormat('MM/dd HH:mm').format(DateTime.parse(p.createdAt)), style: TextStyle(fontSize: 12, color: isDark ? Colors.white30 : Colors.grey)),
-                      if (p.notes != null && p.notes!.isNotEmpty && !isMobile) ...[
-                        const SizedBox(width: 8),
-                        const Text('• ', style: TextStyle(color: Colors.grey)),
-                        Expanded(child: Text(p.notes!, style: TextStyle(fontSize: 12, color: isDark ? Colors.white30 : Colors.grey), overflow: TextOverflow.ellipsis)),
-                      ]
+                      Text(p.merchantName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isDark ? Colors.white : Colors.black)),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(Icons.access_time, size: 12, color: isDark ? Colors.white30 : Colors.grey),
+                          const SizedBox(width: 4),
+                          Text(DateFormat('MM/dd HH:mm').format(DateTime.parse(p.createdAt)),
+                            style: TextStyle(fontSize: 12, color: isDark ? Colors.white30 : Colors.grey)),
+                        ],
+                      ),
+                      // Always show notes below on a new line
+                      if (p.notes != null && p.notes!.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(p.notes!,
+                          style: TextStyle(fontSize: 12, color: isDark ? Colors.white54 : Colors.grey[600]),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis),
+                      ],
                     ],
                   ),
-                  if (isMobile && p.notes != null && p.notes!.isNotEmpty) ...[
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('${p.amount.toStringAsFixed(2)} ₪',
+                      style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: color)),
                     const SizedBox(height: 4),
-                    Text(p.notes!, style: TextStyle(fontSize: 12, color: isDark ? Colors.white30 : Colors.grey)),
-                  ]
-                ])),
-                Text('${p.amount.toStringAsFixed(2)} ₪', 
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: color)),
+                    // Edit button
+                    InkWell(
+                      onTap: () => _showEditPurchaseDialog(p),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(Icons.edit_outlined, size: 18, color: color.withOpacity(0.7)),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           )).toList(),
