@@ -667,30 +667,18 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  void _navigateToCustomers() {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomersScreen(showBackButton: true)));
-  }
-
   Widget _buildStatsRow(bool isMobile, bool isDark) {
     if (isMobile) {
       return Column(children: [
         _buildStatCard('إجمالي مبيعات الفترة', '${_todayStats['total_sales'].toStringAsFixed(2)} ₪', Icons.trending_up, Colors.blue, isDark),
         const SizedBox(height: 16),
-        GestureDetector(
-          onTap: _navigateToCustomers,
-          child: _buildStatCard('إجمالي الزبائن', '${_allCustomers.length}', Icons.people, Colors.green, isDark, tappable: true),
-        ),
+        _buildStatCard('إجمالي الزبائن', '${_allCustomers.length}', Icons.people, Colors.green, isDark),
       ]);
     }
     return Row(children: [
       Expanded(child: _buildStatCard('إجمالي مبيعات الفترة', '${_todayStats['total_sales'].toStringAsFixed(2)} ₪', Icons.trending_up, Colors.blue, isDark)),
       const SizedBox(width: 20),
-      Expanded(
-        child: GestureDetector(
-          onTap: _navigateToCustomers,
-          child: _buildStatCard('إجمالي الزبائن', '${_allCustomers.length}', Icons.people, Colors.green, isDark, tappable: true),
-        ),
-      ),
+      Expanded(child: _buildStatCard('إجمالي الزبائن', '${_allCustomers.length}', Icons.people, Colors.green, isDark)),
     ]);
   }
 
