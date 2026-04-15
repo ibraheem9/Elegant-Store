@@ -14,8 +14,7 @@ class PaymentsScreen extends StatefulWidget {
   State<PaymentsScreen> createState() => _PaymentsScreenState();
 }
 
-class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _PaymentsScreenState extends State<PaymentsScreen> {
   DateTime _startDate = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
   DateTime _endDate = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day, 23, 59, 59);
   String _activeFilter = 'today'; // today, week, month, custom
@@ -32,7 +31,6 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _setFilter('today');
   }
 
@@ -57,7 +55,6 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
 
   @override
   void dispose() {
-    _tabController.dispose();
     super.dispose();
   }
 
@@ -192,17 +189,10 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
       body: Column(
         children: [
           _buildTopBar(isDark, isMobile),
-          _buildTabBar(isDark, isMobile),
           Expanded(
             child: _isLoading
                ? const Center(child: CircularProgressIndicator())
-               : TabBarView(
-                   controller: _tabController,
-                   children: [
-                     _buildUnpaidTab(isDark, isMobile),
-                     _buildPaidTab(isDark, isMobile),
-                   ],
-                 ),
+               : _buildPaidTab(isDark, isMobile),
           ),
         ],
       ),
@@ -359,32 +349,6 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
         ],
       ),
     );
-  }
-
-  Widget _buildTabBar(bool isDark, bool isMobile) {
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 32),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF0F172A) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: TabBar(
-        controller: _tabController,
-        labelColor: Colors.blue,
-        unselectedLabelColor: Colors.grey,
-        indicatorColor: Colors.blue,
-        indicatorWeight: 3,
-        tabs: const [
-          Tab(text: 'بحاجة لتسوية'),
-          Tab(text: 'سجل المدفوعات'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildUnpaidTab(bool isDark, bool isMobile) {
-    final list = _processList(_unpaidInvoices);
-    return _buildList(list, isDark, true, isMobile);
   }
 
   Widget _buildPaidTab(bool isDark, bool isMobile) {
