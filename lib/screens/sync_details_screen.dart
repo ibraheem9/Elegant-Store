@@ -719,7 +719,7 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
       'transactions': 'المعاملات المالية',
       'purchases': 'المشتريات',
       'payment_methods': 'طرق دفع المبيعات',
-      'purchase_methods': 'طرق دفع المشتريات',
+
       'daily_statistics': 'الإحصائيات اليومية',
       'edit_history': 'سجل التعديلات',
     };

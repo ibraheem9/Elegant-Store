@@ -44,11 +44,9 @@ class DatabaseService {
           try { await db.execute('ALTER TABLE edit_history ADD COLUMN edited_by_id INTEGER'); } catch (_) {}
           try { await db.execute('ALTER TABLE edit_history ADD COLUMN edited_by_name TEXT'); } catch (_) {}
           try { await db.execute('ALTER TABLE edit_history ADD COLUMN deleted_at TEXT'); } catch (_) {}
-          // Add missing deleted_at for payment_methods, purchase_methods, daily_statistics
+          // Add missing deleted_at for payment_methods, daily_statistics
           try { await db.execute('ALTER TABLE payment_methods ADD COLUMN deleted_at TEXT'); } catch (_) {}
           try { await db.execute('ALTER TABLE payment_methods ADD COLUMN created_at TEXT'); } catch (_) {}
-          try { await db.execute('ALTER TABLE purchase_methods ADD COLUMN deleted_at TEXT'); } catch (_) {}
-          try { await db.execute('ALTER TABLE purchase_methods ADD COLUMN created_at TEXT'); } catch (_) {}
           try { await db.execute('ALTER TABLE daily_statistics ADD COLUMN deleted_at TEXT'); } catch (_) {}
         }
       },
@@ -98,22 +96,7 @@ class DatabaseService {
         is_synced INTEGER DEFAULT 0
       )''');
 
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS purchase_methods (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        uuid TEXT UNIQUE NOT NULL,
-        store_manager_id INTEGER,
-        name TEXT NOT NULL,
-        type TEXT NOT NULL,
-        description TEXT,
-        is_active INTEGER DEFAULT 1,
-        sort_order INTEGER DEFAULT 0,
-        version INTEGER DEFAULT 1,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        deleted_at TEXT,
-        is_synced INTEGER DEFAULT 0
-      )''');
+
 
     await db.execute('''
       CREATE TABLE IF NOT EXISTS invoices (
@@ -857,7 +840,7 @@ class DatabaseService {
         WHERE id != ? AND role = 'CUSTOMER'
       ''', [managerId, DateTime.now().toIso8601String(), managerId]);
 
-      final storeTables = ['payment_methods', 'invoices', 'transactions', 'purchases', 'daily_statistics', 'edit_history', 'purchase_methods'];
+      final storeTables = ['payment_methods', 'invoices', 'transactions', 'purchases', 'daily_statistics', 'edit_history'];
       for (var table in storeTables) {
         final tableInfo = await txn.rawQuery('PRAGMA table_info($table)');
         if (tableInfo.any((col) => col['name'] == 'store_manager_id')) {
@@ -873,7 +856,7 @@ class DatabaseService {
   Future<void> clearAllData() async {
     final db = await database;
     await db.transaction((txn) async {
-      final tables = ['invoices', 'transactions', 'purchases', 'daily_statistics', 'edit_history', 'payment_methods', 'purchase_methods', 'users'];
+      final tables = ['invoices', 'transactions', 'purchases', 'daily_statistics', 'edit_history', 'payment_methods', 'users'];
       for (var table in tables) {
         await txn.delete(table);
       }
@@ -891,7 +874,6 @@ class DatabaseService {
         'edit_history',
         'invoices',
         'payment_methods',
-        'purchase_methods',
         'purchases',
         'transactions',
         'users',
@@ -912,7 +894,7 @@ class DatabaseService {
     final db = await database;
     final tables = [
       'users', 'invoices', 'transactions', 'purchases',
-      'payment_methods', 'purchase_methods', 'daily_statistics', 'edit_history',
+      'payment_methods', 'daily_statistics', 'edit_history',
     ];
     final Map<String, int> counts = {};
     for (final table in tables) {
@@ -929,7 +911,7 @@ class DatabaseService {
     final db = await database;
     final tables = [
       'users', 'invoices', 'transactions', 'purchases',
-      'payment_methods', 'purchase_methods',
+      'payment_methods',
     ];
     final Map<String, int> counts = {};
     for (final table in tables) {

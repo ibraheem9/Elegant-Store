@@ -60,7 +60,6 @@ class SyncService extends ChangeNotifier {
   /// Tables must be processed in dependency order (parents before children).
   static const List<String> _tableOrder = [
     'payment_methods',
-    'purchase_methods',
     'users',
     'invoices',
     'transactions',
