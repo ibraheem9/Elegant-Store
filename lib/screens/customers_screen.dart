@@ -6,7 +6,8 @@ import '../services/database_service.dart';
 import '../services/auth_service.dart';
 
 class CustomersScreen extends StatefulWidget {
-  const CustomersScreen({Key? key}) : super(key: key);
+  final bool showBackButton;
+  const CustomersScreen({Key? key, this.showBackButton = false}) : super(key: key);
 
   @override
   State<CustomersScreen> createState() => _CustomersScreenState();
@@ -279,9 +280,17 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   Widget _buildHeader(bool isSmall, bool isDark) {
+    final showBack = widget.showBackButton;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
+        if (showBack)
+          IconButton(
+            icon: Icon(Icons.arrow_back_ios_new_rounded,
+                color: isDark ? Colors.white : const Color(0xFF0F172A)),
+            tooltip: 'رجوع',
+            onPressed: () => Navigator.of(context).pop(),
+          ),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

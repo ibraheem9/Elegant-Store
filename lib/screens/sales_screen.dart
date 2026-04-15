@@ -668,7 +668,7 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   void _navigateToCustomers() {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomersScreen()));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomersScreen(showBackButton: true)));
   }
 
   Widget _buildStatsRow(bool isMobile, bool isDark) {
