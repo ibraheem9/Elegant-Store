@@ -306,6 +306,10 @@ class _SalesScreenState extends State<SalesScreen> {
   Future<void> _createInvoice() async {
     if (_amountController.text.isEmpty) { _showSnackBar('يرجى إدخال المبلغ', Colors.redAccent); return; }
     if (_selectedPaymentMethod == null) { _showSnackBar('يرجى اختيار طريقة الدفع', Colors.redAccent); return; }
+    if (_selectedCustomer == null && _customerSearchController.text.trim().isEmpty) {
+      _showSnackBar('يرجى إدخال اسم المشتري', Colors.redAccent);
+      return;
+    }
 
     final amount = double.tryParse(_amountController.text) ?? 0;
     if (amount <= 0) { _showSnackBar('يرجى إدخال مبلغ صحيح أكبر من صفر', Colors.redAccent); return; }
@@ -368,6 +372,10 @@ class _SalesScreenState extends State<SalesScreen> {
 
   Future<void> _handleCashWithdrawal() async {
     if (_amountController.text.isEmpty) { _showSnackBar('يرجى إدخال المبلغ المسحوب', Colors.redAccent); return; }
+    if (_selectedCustomer == null && _customerSearchController.text.trim().isEmpty) {
+      _showSnackBar('يرجى إدخال اسم المشتري', Colors.redAccent);
+      return;
+    }
     final amount = double.tryParse(_amountController.text) ?? 0;
     if (amount <= 0) { _showSnackBar('يرجى إدخال مبلغ صحيح أكبر من صفر', Colors.redAccent); return; }
     final db = context.read<DatabaseService>();
