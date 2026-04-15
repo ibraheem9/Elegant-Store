@@ -336,16 +336,7 @@ class SyncService extends ChangeNotifier {
       String oldUuid, String newUuid, dynamic txn) async {
     dev.log('Remapping UUID: $oldUuid → $newUuid', name: 'SyncService');
 
-    // Update the record itself (in case it was created locally with the old UUID)
-    for (final table in _tableOrder) {
-      await txn.rawUpdate(
-        'UPDATE $table SET uuid = ?, is_synced = 1 WHERE uuid = ?',
-        [newUuid, oldUuid],
-      );
-    }
-
-    // Update integer FK columns that reference the old local user ID.
-    // We find the local ID of the old UUID first, then remap.
+    // ── Resolve IDs before any structural changes ─────────────────────────────
     final oldRows = await txn.rawQuery(
       'SELECT id FROM users WHERE uuid = ? LIMIT 1',
       [oldUuid],
@@ -355,19 +346,49 @@ class SyncService extends ChangeNotifier {
       [newUuid],
     );
 
-    if (oldRows.isNotEmpty && newRows.isNotEmpty) {
+    final bool oldExists = oldRows.isNotEmpty;
+    final bool newExists = newRows.isNotEmpty;
+
+    if (oldExists && newExists) {
+      // Both records exist locally — the server merged them.
+      // Re-point all FK references from the old record to the new one,
+      // then delete the old duplicate so no UNIQUE violation occurs.
       final int oldId = oldRows.first['id'] as int;
       final int newId = newRows.first['id'] as int;
 
       if (oldId != newId) {
+        dev.log('Both UUIDs exist locally — re-pointing FKs and removing old record ($oldId → $newId)', name: 'SyncService');
+
+        // Re-point FK references
         await txn.rawUpdate(
             'UPDATE invoices SET user_id = ? WHERE user_id = ?',
             [newId, oldId]);
         await txn.rawUpdate(
             'UPDATE transactions SET buyer_id = ? WHERE buyer_id = ?',
             [newId, oldId]);
+
+        // Remove the old (now orphaned) user row to avoid UNIQUE conflict
+        await txn.rawDelete(
+            'DELETE FROM users WHERE id = ?', [oldId]);
+      }
+    } else if (oldExists && !newExists) {
+      // Only the old UUID exists locally — safe to rename it to the new UUID.
+      // Do this only for the users table; other tables use uuid as a plain field.
+      await txn.rawUpdate(
+        'UPDATE users SET uuid = ?, is_synced = 1 WHERE uuid = ?',
+        [newUuid, oldUuid],
+      );
+
+      // Also update uuid on any other table that stores it
+      for (final table in _tableOrder) {
+        if (table == 'users') continue; // already handled above
+        await txn.rawUpdate(
+          'UPDATE $table SET uuid = ?, is_synced = 1 WHERE uuid = ?',
+          [newUuid, oldUuid],
+        );
       }
     }
+    // If neither or only newExists — nothing to remap.
   }
 
   // ─────────────────────────────────────────────────────────────────────────
