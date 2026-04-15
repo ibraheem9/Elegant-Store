@@ -804,9 +804,18 @@ class _SalesScreenState extends State<SalesScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('رصيد الزبون الحالي', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-              Text('${currentBalance.toStringAsFixed(2)} ₪',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15,
-                  color: currentBalance > 0 ? Colors.red : Colors.green)),
+              Text(
+                currentBalance > 0
+                    ? '+${currentBalance.toStringAsFixed(2)} ₪  (دين عليه)'
+                    : currentBalance < 0
+                        ? '-${currentBalance.abs().toStringAsFixed(2)} ₪  (رصيد له)'
+                        : '0.00 ₪',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                  color: currentBalance > 0 ? Colors.red : Colors.green,
+                ),
+              ),
             ],
           ),
           if (enteredAmount > 0) ...[
@@ -815,9 +824,18 @@ class _SalesScreenState extends State<SalesScreen> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text('بعد الفاتورة', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-                Text('${projectedBalance.toStringAsFixed(2)} ₪',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15,
-                    color: isDebt ? Colors.red : Colors.green)),
+                Text(
+                  projectedBalance > 0
+                      ? '+${projectedBalance.toStringAsFixed(2)} ₪  (دين عليه)'
+                      : projectedBalance < 0
+                          ? '-${projectedBalance.abs().toStringAsFixed(2)} ₪  (رصيد له)'
+                          : '0.00 ₪',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    color: isDebt ? Colors.red : Colors.green,
+                  ),
+                ),
               ],
             ),
           ],
