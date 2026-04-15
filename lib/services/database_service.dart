@@ -696,11 +696,61 @@ class DatabaseService {
   Future<Map<String, double>> getDetailedTodayStats() async {
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     final db = await database;
-    final appDebt = await db.rawQuery('SELECT SUM(i.amount) as t FROM invoices i JOIN payment_methods pm ON i.payment_method_id = pm.id WHERE i.updated_at LIKE ? AND i.payment_status = \'PAID\' AND pm.type = \'app\'', ['$today%']);
-    final cashPurchases = await db.rawQuery('SELECT SUM(amount) as t FROM purchases WHERE created_at LIKE ? AND payment_source = \'CASH\'', ['$today%']);
-    final appPurchases = await db.rawQuery('SELECT SUM(amount) as t FROM purchases WHERE created_at LIKE ? AND payment_source = \'APP\'', ['$today%']);
-    final cashWithdrawals = await db.rawQuery("SELECT SUM(amount) as t FROM invoices WHERE created_at LIKE ? AND type = 'WITHDRAWAL'", ['$today%']);
-    return {'app_debt_repayment': (appDebt.first['t'] as num?)?.toDouble() ?? 0.0, 'cash_purchases': (cashPurchases.first['t'] as num?)?.toDouble() ?? 0.0, 'app_purchases': (appPurchases.first['t'] as num?)?.toDouble() ?? 0.0, 'cash_withdrawals': (cashWithdrawals.first['t'] as num?)?.toDouble() ?? 0.0};
+
+    // إجمالي المبيعات على التطبيق = فواتير مدفوعة بطريقة دفع بنكي (app) نوعها SALE
+    final appSales = await db.rawQuery(
+      '''SELECT SUM(i.amount) as t FROM invoices i
+         JOIN payment_methods pm ON i.payment_method_id = pm.id
+         WHERE i.created_at LIKE ? AND i.payment_status IN ('PAID','paid')
+         AND pm.type = 'app' AND i.type = 'SALE' AND i.deleted_at IS NULL''',
+      ['$today%'],
+    );
+
+    // إجمالي الدين على التطبيق = فواتير مدفوعة بطريقة بنكي (تسديد ديون) - الغير مدفوعة بنكي
+    // = مدفوعات بنكية (DEBT_PAYMENT/DEPOSIT transactions) - فواتير غير مدفوعة بنكي
+    final appDebtPaid = await db.rawQuery(
+      '''SELECT SUM(t.amount) as t FROM transactions t
+         JOIN payment_methods pm ON t.payment_method_id = pm.id
+         WHERE t.created_at LIKE ? AND t.type IN ('DEBT_PAYMENT','DEPOSIT')
+         AND pm.type = 'app' AND t.deleted_at IS NULL''',
+      ['$today%'],
+    );
+    final appUnpaid = await db.rawQuery(
+      '''SELECT SUM(i.amount) as t FROM invoices i
+         JOIN payment_methods pm ON i.payment_method_id = pm.id
+         WHERE i.created_at LIKE ? AND i.payment_status IN ('UNPAID','pending')
+         AND pm.type = 'app' AND i.type = 'SALE' AND i.deleted_at IS NULL''',
+      ['$today%'],
+    );
+
+    // إجمالي الديون الكاش = إجمالي السحب الكاش
+    final cashWithdrawals = await db.rawQuery(
+      "SELECT SUM(amount) as t FROM invoices WHERE created_at LIKE ? AND type = 'WITHDRAWAL' AND deleted_at IS NULL",
+      ['$today%'],
+    );
+
+    // المشتريات
+    final cashPurchases = await db.rawQuery(
+      "SELECT SUM(amount) as t FROM purchases WHERE created_at LIKE ? AND payment_source = 'CASH'",
+      ['$today%'],
+    );
+    final appPurchases = await db.rawQuery(
+      "SELECT SUM(amount) as t FROM purchases WHERE created_at LIKE ? AND payment_source = 'APP'",
+      ['$today%'],
+    );
+
+    final double paidApp  = (appDebtPaid.first['t'] as num?)?.toDouble() ?? 0.0;
+    final double unpaidApp = (appUnpaid.first['t'] as num?)?.toDouble() ?? 0.0;
+
+    return {
+      'app_sales':        (appSales.first['t'] as num?)?.toDouble() ?? 0.0,
+      'app_debt':         paidApp - unpaidApp,   // يمكن أن يكون سالباً
+      'cash_withdrawals': (cashWithdrawals.first['t'] as num?)?.toDouble() ?? 0.0,
+      'cash_purchases':   (cashPurchases.first['t'] as num?)?.toDouble() ?? 0.0,
+      'app_purchases':    (appPurchases.first['t'] as num?)?.toDouble() ?? 0.0,
+      // legacy keys kept for backward compat
+      'app_debt_repayment': paidApp,
+    };
   }
 
   Future<DailyStatistics?> getTodayStatistics() async {
@@ -708,6 +758,20 @@ class DatabaseService {
     final db = await database;
     final r = await db.query('daily_statistics', where: 'statistic_date = ?', whereArgs: [today]);
     return r.isNotEmpty ? DailyStatistics.fromMap(r.first) : null;
+  }
+
+  /// Returns the today_cash_in_box value saved for yesterday, or 0 if none.
+  Future<double> getYesterdayCashInBox() async {
+    final yesterday = DateFormat('yyyy-MM-dd').format(DateTime.now().subtract(const Duration(days: 1)));
+    final db = await database;
+    final r = await db.query('daily_statistics',
+        columns: ['today_cash_in_box'],
+        where: 'statistic_date = ?',
+        whereArgs: [yesterday]);
+    if (r.isNotEmpty) {
+      return (r.first['today_cash_in_box'] as num?)?.toDouble() ?? 0.0;
+    }
+    return 0.0;
   }
 
   Future<int> insertDailyStatistics(DailyStatistics stats) async {
