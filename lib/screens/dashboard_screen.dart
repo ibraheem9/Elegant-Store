@@ -150,6 +150,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 5),
           Expanded(
             child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               children: [
                 _buildSidebarItem(0, 'لوحة التحكم', Icons.dashboard_rounded),
                 _buildSidebarItem(1, 'شاشة البيع', Icons.receipt_long_rounded),
@@ -157,9 +158,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _buildSidebarItem(3, 'المشتريات', Icons.shopping_cart_rounded),
                 _buildSidebarItem(4, 'إدارة الزبائن', Icons.people_alt_rounded),
                 if (auth.isManager())
-                  _buildSidebarItem(5, 'إدارة الموظفين', Icons.badge_rounded),
+                   _buildSidebarItem(5, 'إدارة الموظفين', Icons.badge_rounded),
                 _buildSidebarItem(6, 'مراجعة المدفوعات', Icons.payments_rounded),
                 _buildSidebarItem(7, 'التقويم المالي', Icons.calendar_month_rounded),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+                  child: Divider(color: Colors.white10),
+                ),
                 _buildSidebarItem(8, 'طرق دفع المبيعات', Icons.payment_rounded),
                 _buildSidebarItem(9, 'طرق دفع المشتريات', Icons.account_balance_rounded),
                 _buildSidebarItem(10, 'سلة المحذوفات', Icons.delete_sweep_rounded),
@@ -167,7 +172,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
-          _buildUserCard(true, isDark),
+          _buildUserCard(false, isDark),
         ],
       ),
     );
@@ -175,67 +180,70 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildNavigationRail(ThemeData theme, bool isDark, AuthService auth) {
     return NavigationRail(
-      selectedIndex: _selectedIndex,
-      onDestinationSelected: (index) => setState(() => _selectedIndex = index),
       backgroundColor: const Color(0xFF0F172A),
-      unselectedIconTheme: const IconThemeData(color: Color(0xFF94A3B8)),
-      selectedIconTheme: const IconThemeData(color: Colors.white),
+      selectedIndex: _selectedIndex,
+      onDestinationSelected: (int index) => setState(() => _selectedIndex = index),
       labelType: NavigationRailLabelType.none,
       leading: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 24),
-        child: Image.asset('assets/logo.png', height: 40, errorBuilder: (context, error, stackTrace) => const Icon(Icons.storefront_rounded, color: Colors.blue, size: 32)),
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Image.asset('assets/logo.png', height: 40),
       ),
       destinations: [
-        const NavigationRailDestination(icon: Icon(Icons.dashboard_rounded), label: Text('الرئيسية')),
-        const NavigationRailDestination(icon: Icon(Icons.receipt_long_rounded), label: Text('البيع')),
-        const NavigationRailDestination(icon: Icon(Icons.bar_chart_rounded), label: Text('إحصائيات')),
-        const NavigationRailDestination(icon: Icon(Icons.shopping_cart_rounded), label: Text('المشتريات')),
-        const NavigationRailDestination(icon: Icon(Icons.people_alt_rounded), label: Text('الزبائن')),
+        const NavigationRailDestination(icon: Icon(Icons.dashboard_rounded, color: Colors.white60), selectedIcon: Icon(Icons.dashboard_rounded, color: Colors.blue), label: Text('لوحة التحكم')),
+        const NavigationRailDestination(icon: Icon(Icons.receipt_long_rounded, color: Colors.white60), selectedIcon: Icon(Icons.receipt_long_rounded, color: Colors.blue), label: Text('شاشة البيع')),
+        const NavigationRailDestination(icon: Icon(Icons.bar_chart_rounded, color: Colors.white60), selectedIcon: Icon(Icons.bar_chart_rounded, color: Colors.blue), label: Text('إحصائيات اليوم')),
+        const NavigationRailDestination(icon: Icon(Icons.shopping_cart_rounded, color: Colors.white60), selectedIcon: Icon(Icons.shopping_cart_rounded, color: Colors.blue), label: Text('المشتريات')),
+        const NavigationRailDestination(icon: Icon(Icons.people_alt_rounded, color: Colors.white60), selectedIcon: Icon(Icons.people_alt_rounded, color: Colors.blue), label: Text('إدارة الزبائن')),
         if (auth.isManager())
-          const NavigationRailDestination(icon: Icon(Icons.badge_rounded), label: Text('الموظفين')),
-        const NavigationRailDestination(icon: Icon(Icons.payments_rounded), label: Text('المدفوعات')),
-        const NavigationRailDestination(icon: Icon(Icons.calendar_month_rounded), label: Text('التقويم')),
-        const NavigationRailDestination(icon: Icon(Icons.payment_rounded), label: Text('دفع المبيعات')),
-        const NavigationRailDestination(icon: Icon(Icons.account_balance_rounded), label: Text('دفع المشتريات')),
-        const NavigationRailDestination(icon: Icon(Icons.delete_sweep_rounded), label: Text('سلة المحذوفات')),
-        const NavigationRailDestination(icon: Icon(Icons.settings_rounded), label: Text('الإعدادات')),
+          const NavigationRailDestination(icon: Icon(Icons.badge_rounded, color: Colors.white60), selectedIcon: Icon(Icons.badge_rounded, color: Colors.blue), label: Text('إدارة الموظفين')),
+        const NavigationRailDestination(icon: Icon(Icons.payments_rounded, color: Colors.white60), selectedIcon: Icon(Icons.payments_rounded, color: Colors.blue), label: Text('مراجعة المدفوعات')),
+        const NavigationRailDestination(icon: Icon(Icons.calendar_month_rounded, color: Colors.white60), selectedIcon: Icon(Icons.calendar_month_rounded, color: Colors.blue), label: Text('التقويم المالي')),
+        const NavigationRailDestination(icon: Icon(Icons.payment_rounded, color: Colors.white60), selectedIcon: Icon(Icons.payment_rounded, color: Colors.blue), label: Text('طرق الدفع')),
+        const NavigationRailDestination(icon: Icon(Icons.delete_sweep_rounded, color: Colors.white60), selectedIcon: Icon(Icons.delete_sweep_rounded, color: Colors.blue), label: Text('المحذوفات')),
+        const NavigationRailDestination(icon: Icon(Icons.settings_rounded, color: Colors.white60), selectedIcon: Icon(Icons.settings_rounded, color: Colors.blue), label: Text('الإعدادات')),
       ],
     );
   }
 
   Widget _buildBottomNav(ThemeData theme, AuthService auth) {
-    return BottomNavigationBar(
-      currentIndex: _selectedIndex > 4 ? 0 : _selectedIndex,
-      onTap: (index) => setState(() => _selectedIndex = index),
-      type: BottomNavigationBarType.fixed,
-      selectedItemColor: Colors.blue[700],
-      unselectedItemColor: const Color(0xFF94A3B8),
-      items: const [
-        BottomNavigationBarItem(icon: Icon(Icons.dashboard_rounded), label: 'الرئيسية'),
-        BottomNavigationBarItem(icon: Icon(Icons.receipt_long_rounded), label: 'البيع'),
-        BottomNavigationBarItem(icon: Icon(Icons.bar_chart_rounded), label: 'إحصائيات'),
-        BottomNavigationBarItem(icon: Icon(Icons.shopping_cart_rounded), label: 'المشتريات'),
-        BottomNavigationBarItem(icon: Icon(Icons.people_alt_rounded), label: 'الزبائن'),
+    return NavigationBar(
+      selectedIndex: _selectedIndex > 3 ? 0 : _selectedIndex,
+      onDestinationSelected: (index) {
+        if (index == 4) {
+          _scaffoldKey.currentState?.openDrawer();
+        } else {
+          setState(() => _selectedIndex = index);
+        }
+      },
+      destinations: const [
+        NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard_rounded), label: 'الرئيسية'),
+        NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long_rounded), label: 'البيع'),
+        NavigationDestination(icon: Icon(Icons.bar_chart_outlined), selectedIcon: Icon(Icons.bar_chart_rounded), label: 'الإحصائيات'),
+        NavigationDestination(icon: Icon(Icons.people_alt_outlined), selectedIcon: Icon(Icons.people_alt_rounded), label: 'الزبائن'),
+        NavigationDestination(icon: Icon(Icons.menu_rounded), label: 'المزيد'),
       ],
     );
   }
 
   Widget _buildSidebarHeader() {
-    return SafeArea(
-      bottom: false,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
-        child: Center(
-          child: Image.asset(
-            'assets/logo.png',
-            height: 80,
-            errorBuilder: (context, error, stackTrace) => Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Colors.blue.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
-              child: const Icon(Icons.storefront_rounded, color: Colors.blue, size: 32),
-            ),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 50, 20, 20),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+            child: Image.asset('assets/logo.png', height: 32),
           ),
-        ),
+          const SizedBox(width: 12),
+          const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Elegant', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18, letterSpacing: 0.5)),
+              Text('Store System', style: TextStyle(color: Colors.white54, fontSize: 11)),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -243,54 +251,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildSidebarItem(int index, String title, IconData icon) {
     bool isSelected = _selectedIndex == index;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-      child: InkWell(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: ListTile(
         onTap: () {
           setState(() => _selectedIndex = index);
-          if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
-            Navigator.pop(context);
-          }
+          if (MediaQuery.of(context).size.width < 650) Navigator.pop(context);
         },
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(color: isSelected ? Colors.blue.withOpacity(0.1) : Colors.transparent, borderRadius: BorderRadius.circular(12)),
-          child: Row(
-            children: [
-              Icon(icon, color: isSelected ? Colors.blue : const Color(0xFF94A3B8), size: 22),
-              const SizedBox(width: 16),
-              Expanded(child: Text(title, style: TextStyle(color: isSelected ? Colors.white : const Color(0xFF94A3B8), fontWeight: isSelected ? FontWeight.bold : FontWeight.w500, fontSize: 14))),
-            ],
-          ),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        leading: Icon(icon, color: isSelected ? Colors.blue : Colors.white60, size: 22),
+        title: Text(title, style: TextStyle(color: isSelected ? Colors.white : Colors.white70, fontSize: 14, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+        selected: isSelected,
+        selectedTileColor: Colors.blue.withOpacity(0.15),
       ),
     );
   }
 
-  Widget _buildUserCard(bool isFull, bool isDark) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Consumer<AuthService>(
-          builder: (context, auth, _) => Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(16)),
-            child: Row(
+  Widget _buildUserCard(bool isDrawer, bool isDark) {
+    final auth = context.read<AuthService>();
+    final user = auth.currentUser;
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white.withOpacity(0.1))),
+      child: Row(
+        children: [
+          CircleAvatar(backgroundColor: Colors.blue, radius: 18, child: Text(user?.name.substring(0, 1).toUpperCase() ?? 'U', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const CircleAvatar(backgroundColor: Colors.blue, radius: 16, child: Icon(Icons.person, color: Colors.white, size: 18)),
-                if (isFull) ...[
-                  const SizedBox(width: 12),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(auth.currentUser?.name ?? '', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
-                    Text(auth.isManager() ? 'مدير' : 'محاسب', style: TextStyle(color: Colors.grey[500], fontSize: 10)),
-                  ])),
-                  IconButton(icon: const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 18), onPressed: () => auth.logout()),
-                ]
+                Text(user?.name ?? 'المستخدم', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
+                Text(user?.role == 'manager' ? 'مدير النظام' : 'محاسب', style: const TextStyle(color: Colors.white54, fontSize: 10)),
               ],
             ),
           ),
-        ),
+          IconButton(
+            icon: const Icon(Icons.logout_rounded, color: Colors.white54, size: 18),
+            onPressed: () => auth.logout(),
+          ),
+        ],
       ),
     );
   }
@@ -374,17 +375,12 @@ class DashboardHomeScreen extends StatefulWidget {
 
 class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
   String _syncStatus = "جاهز للمزامنة";
-  User? _lastUser;
-  Invoice? _lastInvoice;
-  // Store reference to avoid using context in dispose()
   SyncService? _syncService;
 
   @override
   void initState() {
     super.initState();
-    _loadSyncDetails();
     
-    // Store the SyncService reference and add listener after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _syncService = context.read<SyncService>();
@@ -395,29 +391,12 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
 
   @override
   void dispose() {
-    // Use stored reference — never access context in dispose()
     _syncService?.removeListener(_onSyncStatusChanged);
     super.dispose();
   }
 
   void _onSyncStatusChanged() {
     if (!mounted) return;
-    final isSyncing = context.read<SyncService>().isSyncing;
-    if (!isSyncing) {
-       _loadSyncDetails();
-    }
-  }
-
-  Future<void> _loadSyncDetails() async {
-    final db = context.read<DatabaseService>();
-    final user = await db.getLastSyncedUser();
-    final invoice = await db.getLastSyncedInvoice();
-    if (mounted) {
-      setState(() {
-        _lastUser = user;
-        _lastInvoice = invoice;
-      });
-    }
   }
 
   Future<void> _handleSync() async {
@@ -452,7 +431,7 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const SyncDetailsScreen()),
-    ).then((_) => _loadSyncDetails()); // Refresh after returning
+    );
   }
 
   @override
@@ -594,21 +573,8 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
         children: [
           // ── Header row ──────────────────────────────────────────────────
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(Icons.cloud_done_rounded,
-                  size: 20,
-                  color: details != null ? Colors.green : Colors.grey),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'حالة المزامنة',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: isDark ? Colors.blue[300] : Colors.blue[800],
-                  ),
-                ),
-              ),
               // ── More Details button ──────────────────────────────────
               TextButton.icon(
                 onPressed: _openSyncDetails,
@@ -621,72 +587,57 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
                   backgroundColor: Colors.blue.withOpacity(0.08),
                 ),
               ),
+              Row(
+                children: [
+                  Text(
+                    'حالة المزامنة',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: isDark ? Colors.blue[300] : Colors.blue[800],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(Icons.cloud_done_rounded,
+                      size: 20,
+                      color: details != null ? Colors.green : Colors.grey),
+                ],
+              ),
             ],
           ),
           const SizedBox(height: 16),
           // ── Last sync time ───────────────────────────────────────────
-          _buildDetailItem(
-            'آخر مزامنة:',
-            lastSyncDisplay,
-            Icons.access_time_rounded,
-            isDark,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  const Text('آخر مزامنة:', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                  Text(lastSyncDisplay, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : Colors.black87)),
+                ],
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.access_time_rounded, size: 18, color: Colors.grey),
+            ],
           ),
-          const SizedBox(height: 12),
-          // ── Last synced customer ─────────────────────────────────────
-          if (isMobile) ...[
-            _buildDetailItem(
-              'آخر زبون مرفوع للسيرفر:',
-              _lastUser?.name ?? 'لا يوجد',
-              Icons.person_add_alt_1_rounded,
-              isDark,
-            ),
-            const SizedBox(height: 12),
-            _buildDetailItem(
-              'آخر فاتورة مرفوعة:',
-              _lastInvoice != null
-                  ? '${_lastInvoice!.amount.toStringAsFixed(2)} ₪ — ${_lastInvoice!.customerName}'
-                  : 'لا يوجد',
-              Icons.receipt_long_rounded,
-              isDark,
-            ),
-          ] else
-            Row(
-              children: [
-                Expanded(
-                  child: _buildDetailItem(
-                    'آخر زبون مرفوع للسيرفر:',
-                    _lastUser?.name ?? 'لا يوجد',
-                    Icons.person_add_alt_1_rounded,
-                    isDark,
-                  ),
-                ),
-                const SizedBox(width: 24),
-                Expanded(
-                  child: _buildDetailItem(
-                    'آخر فاتورة مرفوعة:',
-                    _lastInvoice != null
-                        ? '${_lastInvoice!.amount.toStringAsFixed(2)} ₪ — ${_lastInvoice!.customerName}'
-                        : 'لا يوجد',
-                    Icons.receipt_long_rounded,
-                    isDark,
-                  ),
-                ),
-              ],
-            ),
+          
           // ── Quick stats row ──────────────────────────────────────────
           if (details != null) ...[
             const SizedBox(height: 16),
             const Divider(height: 1),
             const SizedBox(height: 12),
             Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                _buildMiniStat('مرفوع', '${details.customersUploaded + details.invoicesUploaded}', Icons.upload_rounded, Colors.green, isDark),
-                const SizedBox(width: 16),
-                _buildMiniStat('محمّل', '${details.customersDownloaded + details.invoicesDownloaded}', Icons.download_rounded, Colors.blue, isDark),
                 if (details.mergedCustomers.isNotEmpty) ...[
-                  const SizedBox(width: 16),
                   _buildMiniStat('مدموج', '${details.mergedCustomers.length}', Icons.merge_type_rounded, Colors.orange, isDark),
+                  const SizedBox(width: 16),
                 ],
+                // Uploaded / Downloaded counts
+                _buildMiniStat('محمّل', '${details.customersDownloaded + details.invoicesDownloaded}', Icons.download_rounded, Colors.blue, isDark),
+                const SizedBox(width: 16),
+                _buildMiniStat('مرفوع', '${details.customersUploaded + details.invoicesUploaded}', Icons.upload_rounded, Colors.green, isDark),
               ],
             ),
           ],
@@ -699,6 +650,15 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+            Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+          ],
+        ),
+        const SizedBox(width: 6),
         Container(
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
@@ -706,35 +666,6 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, size: 14, color: color),
-        ),
-        const SizedBox(width: 6),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-            Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDetailItem(String label, String value, IconData icon, bool isDark) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 18, color: Colors.grey),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey), overflow: TextOverflow.ellipsis),
-              Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : Colors.black87), maxLines: 1, overflow: TextOverflow.ellipsis),
-            ],
-          ),
         ),
       ],
     );
@@ -748,18 +679,23 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF0F172A) : Colors.white, 
-          borderRadius: BorderRadius.circular(20), 
-          border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)), 
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+          boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)), child: Icon(icon, size: 24, color: color)),
-            const Spacer(),
-            Text(title, style: TextStyle(fontSize: 13, color: isDark ? Colors.white60 : const Color(0xFF64748B), fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(height: 16),
+            Text(title, style: TextStyle(fontSize: 13, color: isDark ? Colors.white54 : Colors.grey[600], fontWeight: FontWeight.w500)),
             const SizedBox(height: 4),
-            Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A)), overflow: TextOverflow.ellipsis),
+            FittedBox(child: Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A)))),
           ],
         ),
       ),
