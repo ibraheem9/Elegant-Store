@@ -323,7 +323,7 @@ class _SalesScreenState extends State<SalesScreen> {
           username: 'cust_${DateTime.now().millisecondsSinceEpoch}',
           name: name.isEmpty ? 'زبون عابر' : name,
           phone: _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
-          role: 'customer',
+          role: 'CUSTOMER',
           isPermanentCustomer: 0,
           createdAt: DateTime.now().toIso8601String(),
         ), '123');
@@ -383,7 +383,7 @@ class _SalesScreenState extends State<SalesScreen> {
           username: 'cust_${DateTime.now().millisecondsSinceEpoch}',
           name: name.isEmpty ? 'زبون عابر' : name,
           phone: _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
-          role: 'customer',
+          role: 'CUSTOMER',
           isPermanentCustomer: 0,
           createdAt: DateTime.now().toIso8601String(),
         ), '123');
