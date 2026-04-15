@@ -102,13 +102,24 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         }
       }
 
+      // Deduplicate by id to prevent DropdownButton duplicate-value assertion
+      final seen = <int?>{};
+      final uniqueMethods = methods.where((m) => seen.add(m.id)).toList();
+
       setState(() {
-        _purchaseMethods = methods;
+        _purchaseMethods = uniqueMethods;
         _groupedPurchases = grouped;
         _totalPurchases = total;
-
-        if (_purchaseMethods.isNotEmpty && _selectedMethod == null) {
-          _selectedMethod = _purchaseMethods.first;
+        // Re-match _selectedMethod from the refreshed deduplicated list
+        if (_purchaseMethods.isNotEmpty) {
+          if (_selectedMethod != null) {
+            _selectedMethod = _purchaseMethods.firstWhere(
+              (m) => m.id == _selectedMethod!.id,
+              orElse: () => _purchaseMethods.first,
+            );
+          } else {
+            _selectedMethod = _purchaseMethods.first;
+          }
         }
         _isInitialLoading = false;
       });
