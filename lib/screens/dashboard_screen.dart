@@ -227,23 +227,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildSidebarHeader() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 50, 20, 20),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-            child: Image.asset('assets/logo.png', height: 32),
-          ),
-          const SizedBox(width: 12),
-          const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Elegant', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18, letterSpacing: 0.5)),
-              Text('Store System', style: TextStyle(color: Colors.white54, fontSize: 11)),
-            ],
-          ),
-        ],
+      padding: const EdgeInsets.fromLTRB(16, 50, 16, 20),
+      child: Center(
+        child: Image.asset(
+          'assets/logo.png',
+          height: 56,
+          fit: BoxFit.contain,
+          errorBuilder: (context, error, stackTrace) =>
+              Image.asset('assets/icon.png', height: 48, fit: BoxFit.contain),
+        ),
       ),
     );
   }
@@ -328,8 +320,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               )
             else
-              Text('Elegant Store', 
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: isDark ? const Color(0xFFDCEFFF) : const Color(0xFF0F172A))),
+              Image.asset(
+                'assets/logo.png',
+                height: 42,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) =>
+                    Image.asset('assets/icon.png', height: 36, fit: BoxFit.contain),
+              ),
             const Spacer(),
             _buildNotificationIcon(isDark),
           ],
