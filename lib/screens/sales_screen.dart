@@ -80,8 +80,10 @@ class _SalesScreenState extends State<SalesScreen> {
     try {
       final db = context.read<DatabaseService>();
       final customers = await db.getCustomers();
-      final methods = await db.getPaymentMethods(category: 'SALE');
-      
+      final rawMethods = await db.getPaymentMethods(category: 'SALE');
+      final seenIds = <int?>{};
+      final methods = rawMethods.where((m) => seenIds.add(m.id)).toList();
+
       DateTime rangeStart = DateTime(_startDate.year, _startDate.month, _startDate.day);
       DateTime rangeEnd = DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59);
       

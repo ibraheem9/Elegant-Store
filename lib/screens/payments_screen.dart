@@ -65,7 +65,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
     setState(() => _isLoading = true);
     try {
       final db = context.read<DatabaseService>();
-      final methods = await db.getPaymentMethods(category: 'SALE');
+      final rawMethods = await db.getPaymentMethods(category: 'SALE');
+      final seenMethodIds = <int?>{};
+      final methods = rawMethods.where((m) => seenMethodIds.add(m.id)).toList();
       final allInvoices = await db.getInvoices(start: _startDate, end: _endDate);
 
       Map<int, double> totals = {};
