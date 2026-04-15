@@ -81,12 +81,19 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
       setState(() {
         _saleMethods = methods;
         _methodTotals = totals;
-        _unpaidInvoices = allInvoices.where((inv) => 
-          (inv.paymentStatus == 'UNPAID' || inv.paymentStatus == 'pending')
+
+        // Only show non-permanent customers and exclude cash withdrawals from UNPAID tab
+        _unpaidInvoices = allInvoices.where((inv) =>
+          (inv.paymentStatus == 'UNPAID' || inv.paymentStatus == 'pending') &&
+          inv.customerIsPermanent == 0 &&
+          inv.type != 'WITHDRAWAL'
         ).toList();
 
-        _paidInvoices = allInvoices.where((inv) => 
-          inv.paymentStatus == 'PAID' || inv.paymentStatus == 'paid' || inv.paymentStatus == 'PARTIAL'
+        // Paid tab: exclude permanent customers and cash withdrawals
+        _paidInvoices = allInvoices.where((inv) =>
+          (inv.paymentStatus == 'PAID' || inv.paymentStatus == 'paid' || inv.paymentStatus == 'PARTIAL') &&
+          inv.customerIsPermanent == 0 &&
+          inv.type != 'WITHDRAWAL'
         ).toList();
 
         _isLoading = false;
@@ -145,20 +152,23 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
       newPaidAmount = 0.0;
     }
 
-    final updatedInvoice = Invoice(
+     final updatedInvoice = Invoice(
       id: inv.id,
+      uuid: inv.uuid,
+      storeManagerId: inv.storeManagerId,
       userId: inv.userId,
       invoiceDate: inv.invoiceDate,
       amount: inv.amount,
-      paidAmount: newPaidAmount, // Fixed: Ensure paidAmount is updated
+      paidAmount: newPaidAmount,
       notes: updatedNotes,
       paymentStatus: newStatus,
       paymentMethodId: selectedMethod.id,
       type: inv.type,
+      version: inv.version,
+      isSynced: 0,
       createdAt: inv.createdAt,
       updatedAt: DateTime.now().toIso8601String(),
     );
-
     await db.updateInvoice(updatedInvoice);
     await db.logEdit(inv.id!, 'INVOICE', 'طريقة الدفع', inv.methodName ?? 'غير محدد', selectedMethod.name);
 
