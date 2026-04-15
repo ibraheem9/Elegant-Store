@@ -718,8 +718,9 @@ class DatabaseService {
     );
     final double appUnpaidTotal = (appUnpaidQuery.first['t'] as num?)?.toDouble() ?? 0.0;
 
-    // إجمالي الدين على التطبيق = إجمالي المبيعات على التطبيق - إجمالي الفواتير غير المدفوعة بنكي
-    final double appDebt = appSalesTotal - appUnpaidTotal;
+    // إجمالي الدين على التطبيق = الفواتير غير المدفوعة بنكي - إجمالي المبيعات على التطبيق
+    // إذا كانت النتيجة سالبة تُعرض صفر (معناه المبيعات المدفوعة تغطي كل الديون)
+    final double appDebt = (appUnpaidTotal - appSalesTotal).clamp(0.0, double.infinity);
 
     // إجمالي الديون الكاش = إجمالي السحب الكاش
     final cashWithdrawals = await db.rawQuery(
