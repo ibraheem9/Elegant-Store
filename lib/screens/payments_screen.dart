@@ -27,6 +27,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   String _searchQuery = "";
   String _sortBy = "date"; // name, date, amount, method
   bool _isAscending = false;
+  int? _selectedMethodId; // null = show all, non-null = filter by method
 
   @override
   void initState() {
@@ -105,8 +106,14 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
 
   List<Invoice> _processList(List<Invoice> list) {
     List<Invoice> filtered = list;
+
+    // Filter by selected payment method (tap on summary card)
+    if (_selectedMethodId != null) {
+      filtered = filtered.where((inv) => inv.paymentMethodId == _selectedMethodId).toList();
+    }
+
     if (_searchQuery.isNotEmpty) {
-      filtered = list.where((inv) => 
+      filtered = filtered.where((inv) => 
         (inv.customerName?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false) ||
         (inv.amount.toString().contains(_searchQuery))
       ).toList();
@@ -407,9 +414,10 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
       return Column(
         children: appMethods.map((m) {
           final total = _methodTotals[m.id] ?? 0.0;
+          final isSelected = _selectedMethodId == m.id;
           return Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: _buildSummaryCard(m.name, total, isDark),
+            child: _buildSummaryCard(m.name, total, isDark, methodId: m.id!, isSelected: isSelected),
           );
         }).toList(),
       );
@@ -429,10 +437,11 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
           itemBuilder: (context, index) {
             final m = appMethods[index];
             final total = _methodTotals[m.id] ?? 0.0;
+            final isSelected = _selectedMethodId == m.id;
             return Container(
               width: 240,
               margin: const EdgeInsets.only(left: 12),
-              child: _buildSummaryCard(m.name, total, isDark),
+              child: _buildSummaryCard(m.name, total, isDark, methodId: m.id!, isSelected: isSelected),
             );
           },
         ),
@@ -440,47 +449,67 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     );
   }
 
-  Widget _buildSummaryCard(String name, double total, bool isDark) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF0F172A) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.blue.withOpacity(0.2)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          )
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
+  Widget _buildSummaryCard(String name, double total, bool isDark, {int? methodId, bool isSelected = false}) {
+    final borderColor = isSelected ? Colors.blue : Colors.blue.withOpacity(0.2);
+    final bgColor = isSelected
+        ? Colors.blue.withOpacity(0.08)
+        : (isDark ? const Color(0xFF0F172A) : Colors.white);
+
+    return GestureDetector(
+      onTap: methodId == null ? null : () {
+        setState(() {
+          // Toggle: tap again to deselect
+          _selectedMethodId = (_selectedMethodId == methodId) ? null : methodId;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: borderColor, width: isSelected ? 2 : 1),
+          boxShadow: [
+            BoxShadow(
+              color: isSelected ? Colors.blue.withOpacity(0.12) : Colors.black.withOpacity(0.04),
+              blurRadius: isSelected ? 12 : 8,
+              offset: const Offset(0, 4),
+            )
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(isSelected ? 0.2 : 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.account_balance_wallet_rounded, color: Colors.blue, size: 20),
             ),
-            child: const Icon(Icons.account_balance_wallet_rounded, color: Colors.blue, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(name, 
-                  maxLines: 1, 
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold)),
-                Text('${total.toStringAsFixed(2)} ₪', 
-                  style: const TextStyle(color: Colors.blue, fontSize: 18, fontWeight: FontWeight.w900)),
-              ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(name, 
+                    maxLines: 1, 
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: isSelected ? Colors.blue : Colors.grey,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    )),
+                  Text('${total.toStringAsFixed(2)} ₪', 
+                    style: const TextStyle(color: Colors.blue, fontSize: 18, fontWeight: FontWeight.w900)),
+                ],
+              ),
             ),
-          ),
-        ],
+            if (isSelected)
+              const Icon(Icons.check_circle_rounded, color: Colors.blue, size: 18),
+          ],
+        ),
       ),
     );
   }
