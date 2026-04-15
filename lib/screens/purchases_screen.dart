@@ -16,6 +16,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   final _merchantController = TextEditingController();
   final _amountController = TextEditingController();
   final _notesController = TextEditingController();
+  DateTime _selectedDate = DateTime.now();
   
   List<PaymentMethod> _purchaseMethods = [];
   PaymentMethod? _selectedMethod;
@@ -149,6 +150,15 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     try {
       final db = context.read<DatabaseService>();
       final now = DateTime.now();
+      // Combine selected date with current time for precise ordering
+      final purchaseDateTime = DateTime(
+        _selectedDate.year,
+        _selectedDate.month,
+        _selectedDate.day,
+        now.hour,
+        now.minute,
+        now.second,
+      );
 
       final purchase = Purchase(
         merchantName: _merchantController.text.trim(),
@@ -156,7 +166,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         paymentSource: _selectedMethod?.type == 'app' ? 'APP' : 'CASH',
         paymentMethodId: _selectedMethod?.id,
         notes: _notesController.text.trim(),
-        createdAt: now.toIso8601String(),
+        createdAt: purchaseDateTime.toIso8601String(),
       );
 
       await db.insertPurchase(purchase);
@@ -164,6 +174,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       _merchantController.clear();
       _amountController.clear();
       _notesController.clear();
+      // Note: _selectedDate is NOT cleared to facilitate multiple entries for the same date
       
       await _loadData();
       
@@ -398,10 +409,53 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     final formItems = [
       Expanded(flex: isMobile ? 0 : 2, child: _buildInput('اسم المورد', _merchantController, Icons.business, isDark, fontSize: 16)),
       if (isMobile) const SizedBox(height: 16),
-      if (!isMobile) const SizedBox(width: 20),
+      if (!isMobile) const SizedBox(width: 12),
       Expanded(flex: isMobile ? 0 : 1, child: _buildInput('المبلغ', _amountController, Icons.payments, isDark, isNumeric: true, fontSize: 16)),
       if (isMobile) const SizedBox(height: 16),
-      if (!isMobile) const SizedBox(width: 20),
+      if (!isMobile) const SizedBox(width: 12),
+      // Date Picker Field
+      Expanded(
+        flex: isMobile ? 0 : 1,
+        child: InkWell(
+          onTap: () async {
+            final picked = await showDatePicker(
+              context: context,
+              initialDate: _selectedDate,
+              firstDate: DateTime(2020),
+              lastDate: DateTime(2101),
+              builder: (context, child) {
+                return Theme(
+                  data: Theme.of(context).copyWith(
+                    colorScheme: ColorScheme.light(
+                      primary: Colors.orange[800]!,
+                      onPrimary: Colors.white,
+                      surface: isDark ? const Color(0xFF1E293B) : Colors.white,
+                      onSurface: isDark ? Colors.white : Colors.black,
+                    ),
+                  ),
+                  child: child!,
+                );
+              },
+            );
+            if (picked != null) {
+              setState(() => _selectedDate = picked);
+            }
+          },
+          child: InputDecorator(
+            decoration: InputDecoration(
+              labelText: 'التاريخ',
+              labelStyle: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 14),
+              prefixIcon: const Icon(Icons.calendar_today, size: 20),
+            ),
+            child: Text(
+              DateFormat('yyyy/MM/dd').format(_selectedDate),
+              style: TextStyle(fontSize: 16, color: isDark ? Colors.white : Colors.black),
+            ),
+          ),
+        ),
+      ),
+      if (isMobile) const SizedBox(height: 16),
+      if (!isMobile) const SizedBox(width: 12),
       Expanded(
         flex: isMobile ? 0 : 2,
         child: DropdownButtonFormField<PaymentMethod>(
