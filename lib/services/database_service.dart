@@ -697,31 +697,29 @@ class DatabaseService {
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     final db = await database;
 
-    // إجمالي المبيعات على التطبيق = فواتير مدفوعة بطريقة دفع بنكي (app) نوعها SALE
-    final appSales = await db.rawQuery(
+    // إجمالي المبيعات على التطبيق = كل الفواتير المدفوعة (PAID) بطريقة دفع بنكي (app)
+    // تشمل فواتير البيع وفواتير تسديد الديون
+    final appSalesQuery = await db.rawQuery(
       '''SELECT SUM(i.amount) as t FROM invoices i
          JOIN payment_methods pm ON i.payment_method_id = pm.id
          WHERE i.created_at LIKE ? AND i.payment_status IN ('PAID','paid')
-         AND pm.type = 'app' AND i.type = 'SALE' AND i.deleted_at IS NULL''',
+         AND pm.type = 'app' AND i.deleted_at IS NULL''',
       ['$today%'],
     );
+    final double appSalesTotal = (appSalesQuery.first['t'] as num?)?.toDouble() ?? 0.0;
 
-    // إجمالي الدين على التطبيق = فواتير مدفوعة بطريقة بنكي (تسديد ديون) - الغير مدفوعة بنكي
-    // = مدفوعات بنكية (DEBT_PAYMENT/DEPOSIT transactions) - فواتير غير مدفوعة بنكي
-    final appDebtPaid = await db.rawQuery(
-      '''SELECT SUM(t.amount) as t FROM transactions t
-         JOIN payment_methods pm ON t.payment_method_id = pm.id
-         WHERE t.created_at LIKE ? AND t.type IN ('DEBT_PAYMENT','DEPOSIT')
-         AND pm.type = 'app' AND t.deleted_at IS NULL''',
-      ['$today%'],
-    );
-    final appUnpaid = await db.rawQuery(
+    // إجمالي الفواتير غير المدفوعة بطريقة بنكي (UNPAID / دين آجل)
+    final appUnpaidQuery = await db.rawQuery(
       '''SELECT SUM(i.amount) as t FROM invoices i
          JOIN payment_methods pm ON i.payment_method_id = pm.id
-         WHERE i.created_at LIKE ? AND i.payment_status IN ('UNPAID','pending')
-         AND pm.type = 'app' AND i.type = 'SALE' AND i.deleted_at IS NULL''',
+         WHERE i.created_at LIKE ? AND i.payment_status IN ('UNPAID','pending','PARTIAL')
+         AND pm.type = 'app' AND i.deleted_at IS NULL''',
       ['$today%'],
     );
+    final double appUnpaidTotal = (appUnpaidQuery.first['t'] as num?)?.toDouble() ?? 0.0;
+
+    // إجمالي الدين على التطبيق = إجمالي المبيعات على التطبيق - إجمالي الفواتير غير المدفوعة بنكي
+    final double appDebt = appSalesTotal - appUnpaidTotal;
 
     // إجمالي الديون الكاش = إجمالي السحب الكاش
     final cashWithdrawals = await db.rawQuery(
@@ -739,17 +737,14 @@ class DatabaseService {
       ['$today%'],
     );
 
-    final double paidApp  = (appDebtPaid.first['t'] as num?)?.toDouble() ?? 0.0;
-    final double unpaidApp = (appUnpaid.first['t'] as num?)?.toDouble() ?? 0.0;
-
     return {
-      'app_sales':        (appSales.first['t'] as num?)?.toDouble() ?? 0.0,
-      'app_debt':         paidApp - unpaidApp,   // يمكن أن يكون سالباً
+      'app_sales':        appSalesTotal,
+      'app_debt':         appDebt,
       'cash_withdrawals': (cashWithdrawals.first['t'] as num?)?.toDouble() ?? 0.0,
       'cash_purchases':   (cashPurchases.first['t'] as num?)?.toDouble() ?? 0.0,
       'app_purchases':    (appPurchases.first['t'] as num?)?.toDouble() ?? 0.0,
-      // legacy keys kept for backward compat
-      'app_debt_repayment': paidApp,
+      // legacy key
+      'app_debt_repayment': appSalesTotal,
     };
   }
 
