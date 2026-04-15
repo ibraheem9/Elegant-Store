@@ -485,7 +485,20 @@ class DatabaseService {
       if (c.balance > 0) totalDebts += c.balance;
       else if (c.balance < 0) totalDeposits += c.balance.abs();
     }
-    return {'total_customers': customersCount, 'total_debts': totalDebts, 'total_balances': totalDeposits};
+    final unpaidNonPermanentCount = Sqflite.firstIntValue(await db.rawQuery('''
+      SELECT COUNT(*) FROM users 
+      WHERE role = 'CUSTOMER' 
+      AND is_permanent_customer = 0 
+      AND balance > 0 
+      AND deleted_at IS NULL
+    ''')) ?? 0;
+
+    return {
+      'total_customers': customersCount,
+      'total_debts': totalDebts,
+      'total_balances': totalDeposits,
+      'unpaid_non_permanent_count': unpaidNonPermanentCount,
+    };
   }
 
   Future<User?> getLastSyncedUser() async {
