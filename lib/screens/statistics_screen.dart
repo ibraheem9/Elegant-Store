@@ -13,16 +13,19 @@ class StatisticsScreen extends StatefulWidget {
 }
 
 class _StatisticsScreenState extends State<StatisticsScreen> {
+  // ── Selected date (defaults to today) ─────────────────────────────────────
+  DateTime _selectedDate = DateTime.now();
+
   // ── Manual inputs ──────────────────────────────────────────────────────────
   final _todayCashController = TextEditingController();
 
   // ── Auto-calculated ────────────────────────────────────────────────────────
-  double _appSales        = 0.0; // فواتير مدفوعة بنكياً (SALE)
-  double _appDebt         = 0.0; // مدفوعات بنكية - غير مدفوعة بنكي
-  double _cashWithdrawals = 0.0; // إجمالي السحب الكاش (= ديون الكاش)
-  double _cashPurchases   = 0.0; // مشتريات كاش
-  double _appPurchases    = 0.0; // مشتريات تطبيق
-  double _yesterdayCash   = 0.0; // صندوق الأمس (تلقائي من DB)
+  double _appSales        = 0.0;
+  double _appDebt         = 0.0;
+  double _cashWithdrawals = 0.0;
+  double _cashPurchases   = 0.0;
+  double _appPurchases    = 0.0;
+  double _yesterdayCash   = 0.0;
 
   bool _isLoading = false;
   DailyStatistics? _savedStats;
@@ -41,14 +44,17 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   }
 
   Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _savedStats = null;
+      _todayCashController.clear();
+    });
     final db = context.read<DatabaseService>();
 
-    final detailedStats  = await db.getDetailedTodayStats();
-    final savedStats     = await db.getTodayStatistics();
-    final yesterdayCash  = await db.getYesterdayCashInBox();
-    final now            = DateTime.now();
-    final monthly        = await db.getMonthlySales(now.year, now.month);
+    final detailedStats = await db.getDetailedTodayStats(date: _selectedDate);
+    final savedStats    = await db.getTodayStatistics(date: _selectedDate);
+    final yesterdayCash = await db.getYesterdayCashInBox(date: _selectedDate);
+    final monthly       = await db.getMonthlySales(_selectedDate.year, _selectedDate.month);
 
     setState(() {
       _appSales        = detailedStats['app_sales']        ?? 0.0;
@@ -65,6 +71,20 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       }
       _isLoading = false;
     });
+  }
+
+  Future<void> _pickDate(BuildContext context) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      locale: const Locale('ar'),
+    );
+    if (picked != null && picked != _selectedDate) {
+      setState(() => _selectedDate = picked);
+      await _loadData();
+    }
   }
 
   // ── Derived values ─────────────────────────────────────────────────────────
@@ -93,7 +113,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final now = DateTime.now();
 
     final stats = DailyStatistics(
-      statisticDate:           DateFormat('yyyy-MM-dd').format(now),
+      statisticDate:           DateFormat('yyyy-MM-dd').format(_selectedDate),
       yesterdayCashInBox:      _yesterdayCash,
       todayCashInBox:          double.tryParse(_todayCashController.text) ?? 0.0,
       totalCashDebtRepayment:  0.0, // سداد ديون كاش ملغي
@@ -102,7 +122,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       totalAppPurchases:       _appPurchases,
       totalSalesCash:          _cashSales,
       totalSalesCredit:        _appSales,
-      createdAt:               now.toIso8601String(),
+      createdAt:               _selectedDate.toIso8601String(),
     );
 
     await db.insertDailyStatistics(stats);
@@ -178,16 +198,65 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   }
 
   Widget _buildHeader(bool isDark) {
-    return Column(
+    final isToday = DateFormat('yyyy-MM-dd').format(_selectedDate) ==
+        DateFormat('yyyy-MM-dd').format(DateTime.now());
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('إحصائيات ونهاية اليوم',
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900,
-                color: isDark ? Colors.white : const Color(0xFF0F172A))),
-        const SizedBox(height: 4),
-        Text(
-          'مراجعة وتأكيد المبالغ المالية ليوم: ${DateFormat('dd-MM-yyyy EEEE', 'ar').format(DateTime.now())}',
-          style: TextStyle(color: isDark ? Colors.white60 : const Color(0xFF64748B)),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('إحصائيات ونهاية اليوم',
+                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900,
+                      color: isDark ? Colors.white : const Color(0xFF0F172A))),
+              const SizedBox(height: 4),
+              Text(
+                'مراجعة وتأكيد المبالغ المالية ليوم: ${DateFormat('dd-MM-yyyy EEEE', 'ar').format(_selectedDate)}',
+                style: TextStyle(color: isDark ? Colors.white60 : const Color(0xFF64748B)),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 16),
+        // ── Date picker button ──
+        InkWell(
+          onTap: () => _pickDate(context),
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: isToday
+                  ? Colors.blue.withOpacity(0.1)
+                  : Colors.orange.withOpacity(0.15),
+              border: Border.all(
+                color: isToday ? Colors.blue : Colors.orange,
+                width: 1.5,
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.calendar_today_rounded,
+                    size: 18,
+                    color: isToday ? Colors.blue : Colors.orange),
+                const SizedBox(width: 8),
+                Text(
+                  isToday
+                      ? 'اليوم'
+                      : DateFormat('dd/MM/yyyy').format(_selectedDate),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: isToday ? Colors.blue : Colors.orange,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(Icons.arrow_drop_down_rounded,
+                    color: isToday ? Colors.blue : Colors.orange),
+              ],
+            ),
+          ),
         ),
       ],
     );

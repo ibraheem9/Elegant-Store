@@ -693,8 +693,9 @@ class DatabaseService {
     return await db.query('edit_history', where: 'target_id = ? AND target_type = ?', whereArgs: [targetId, type], orderBy: 'created_at DESC');
   }
 
-  Future<Map<String, double>> getDetailedTodayStats() async {
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+  /// [date] defaults to today if null.
+  Future<Map<String, double>> getDetailedTodayStats({DateTime? date}) async {
+    final today = DateFormat('yyyy-MM-dd').format(date ?? DateTime.now());
     final db = await database;
 
     // إجمالي المبيعات على التطبيق = كل الفواتير المدفوعة (PAID) بطريقة دفع بنكي (app)
@@ -749,16 +750,18 @@ class DatabaseService {
     };
   }
 
-  Future<DailyStatistics?> getTodayStatistics() async {
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+  /// [date] defaults to today if null.
+  Future<DailyStatistics?> getTodayStatistics({DateTime? date}) async {
+    final today = DateFormat('yyyy-MM-dd').format(date ?? DateTime.now());
     final db = await database;
     final r = await db.query('daily_statistics', where: 'statistic_date = ?', whereArgs: [today]);
     return r.isNotEmpty ? DailyStatistics.fromMap(r.first) : null;
   }
 
-  /// Returns the today_cash_in_box value saved for yesterday, or 0 if none.
-  Future<double> getYesterdayCashInBox() async {
-    final yesterday = DateFormat('yyyy-MM-dd').format(DateTime.now().subtract(const Duration(days: 1)));
+  /// Returns the today_cash_in_box saved for the day before [date] (defaults to yesterday).
+  Future<double> getYesterdayCashInBox({DateTime? date}) async {
+    final ref = date ?? DateTime.now();
+    final yesterday = DateFormat('yyyy-MM-dd').format(ref.subtract(const Duration(days: 1)));
     final db = await database;
     final r = await db.query('daily_statistics',
         columns: ['today_cash_in_box'],
