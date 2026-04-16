@@ -90,7 +90,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   // ── Derived values ─────────────────────────────────────────────────────────
 
   /// إجمالي البيع كاش = صندوق اليوم - صندوق الأمس
+  /// إذا لم يُدخل صندوق اليوم بعد → صفر
+  bool get _cashEntered => _todayCashController.text.trim().isNotEmpty;
+
   double get _cashSales {
+    if (!_cashEntered) return 0.0;
     final today = double.tryParse(_todayCashController.text) ?? 0.0;
     return today - _yesterdayCash;
   }
@@ -99,6 +103,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   double get _totalPurchases => _cashPurchases + _appPurchases;
 
   /// إجمالي البيع الكلي = مبيعات تطبيق + بيع كاش
+  /// إذا لم يُدخل صندوق اليوم → يُعرض صفر للكاش وفقط مبيعات التطبيق
   double get _totalSales => _appSales + _cashSales;
 
   // ── Save ───────────────────────────────────────────────────────────────────
