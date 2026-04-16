@@ -71,14 +71,22 @@ class AuthService extends ChangeNotifier {
         _currentUser = User.fromMap(r.first);
         _isLoggedIn = true;
         notifyListeners();
-        // Attempt sync only if online
-        if (!await _syncService.checkConnectivity()) {
-          dev.log('Offline, skipping initial sync during session init.', name: 'AuthService');
-        } else {
-          _syncService.performFullSync().catchError((e) {
-            dev.log('Session init sync failed: $e', name: 'AuthService');
-          });
-        }
+        // Fire-and-forget sync — never block startup
+        Future.microtask(() async {
+          try {
+            final isOnline = await _syncService.checkConnectivity()
+                .timeout(const Duration(seconds: 3), onTimeout: () => false);
+            if (isOnline) {
+              _syncService.performFullSync().catchError((e) {
+                dev.log('Session init sync failed: $e', name: 'AuthService');
+              });
+            } else {
+              dev.log('Offline, skipping initial sync during session init.', name: 'AuthService');
+            }
+          } catch (e) {
+            dev.log('Connectivity check failed: $e', name: 'AuthService');
+          }
+        });
       }
     }
   }

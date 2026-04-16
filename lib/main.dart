@@ -52,12 +52,28 @@ void main() async {
   await dbService.initDatabase();
   final prefs = await SharedPreferences.getInstance();
   
-  // Initialize Notifications
-  await NotificationService.init();
+  // Initialize Notifications (with timeout to prevent hang on Android)
+  try {
+    await NotificationService.init().timeout(
+      const Duration(seconds: 5),
+      onTimeout: () => debugPrint('NotificationService.init timed out, continuing...'),
+    );
+  } catch (e) {
+    debugPrint('NotificationService.init failed: $e');
+  }
 
   final syncService = SyncService(dbService, prefs);
   final authService = AuthService(dbService, syncService);
-  await authService.initSession();
+  
+  // initSession with timeout to prevent splash screen hang
+  try {
+    await authService.initSession().timeout(
+      const Duration(seconds: 8),
+      onTimeout: () => debugPrint('initSession timed out, continuing with cached state...'),
+    );
+  } catch (e) {
+    debugPrint('initSession failed: $e');
+  }
 
   if (!Platform.isWindows) {
     await Workmanager().initialize(
