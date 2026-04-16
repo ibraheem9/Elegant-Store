@@ -89,10 +89,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
           inv.type != 'WITHDRAWAL'
         ).toList();
 
-        // Paid tab: exclude permanent customers and cash withdrawals
+        // Paid tab: all paid invoices (sales + debt payments) for all customers, exclude cash withdrawals
         _paidInvoices = allInvoices.where((inv) =>
           (inv.paymentStatus == 'PAID' || inv.paymentStatus == 'paid' || inv.paymentStatus == 'PARTIAL') &&
-          inv.customerIsPermanent == 0 &&
           inv.type != 'WITHDRAWAL'
         ).toList();
 
