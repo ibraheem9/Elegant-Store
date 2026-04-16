@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -58,7 +59,10 @@ void main() async {
   try {
     await dbService.initDatabase().timeout(
       const Duration(seconds: 10),
-      onTimeout: () => debugPrint('initDatabase timed out'),
+      onTimeout: () {
+        debugPrint('initDatabase timed out');
+        throw TimeoutException('initDatabase timed out');
+      },
     );
   } catch (e) {
     debugPrint('initDatabase failed: $e');
@@ -125,7 +129,7 @@ void _initWorkmanager() {
         constraints: Constraints(
           networkType: NetworkType.connected,
         ),
-        existingWorkPolicy: ExistingWorkPolicy.keep,
+        existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
       ).timeout(const Duration(seconds: 5), onTimeout: () {
         debugPrint('Workmanager.registerPeriodicTask timed out');
       });
