@@ -167,16 +167,8 @@ class AuthService extends ChangeNotifier {
         }
 
         notifyListeners();
-
-        // Trigger initial background sync only if online
-        if (!await _syncService.checkConnectivity()) {
-          dev.log('Offline, skipping initial sync after online login.', name: 'AuthService');
-        } else {
-          _syncService.performFullSync(isInitialSync: true).catchError((e) {
-            dev.log('Initial sync error: $e', name: 'AuthService');
-          });
-        }
-
+        // Initial sync is triggered by LoginScreen on first login so the UI
+        // can display a loading message. Subsequent logins use session init sync.
         return true;
       }
       dev.log('Server rejected login: ${response.statusCode} - ${response.data}', name: 'AuthService');

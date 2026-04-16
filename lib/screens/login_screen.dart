@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
+import '../services/sync_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -17,6 +19,9 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
   bool _keepMeLoggedIn = false;
   bool _showBiometricIcon = false;
+
+  /// Status message shown while the initial sync runs after first login
+  String? _syncStatusMessage;
 
   @override
   void initState() {
@@ -47,30 +52,66 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  /// Returns true if this is the very first login (no previous sync has completed).
+  Future<bool> _isFirstLogin() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('last_sync_time') == null;
+  }
+
   Future<void> _login() async {
     if (_usernameController.text.isEmpty || _passwordController.text.isEmpty) {
       _showError('يرجى إدخال اسم المستخدم وكلمة المرور');
       return;
     }
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _syncStatusMessage = null;
+    });
 
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
-      bool success = await authService.login(
-        _usernameController.text,
+      final syncService = Provider.of<SyncService>(context, listen: false);
+
+      final bool firstLogin = await _isFirstLogin();
+
+      // Step 1: Online API authentication
+      final bool success = await authService.login(
+        _usernameController.text.trim(),
         _passwordController.text,
         saveSession: _keepMeLoggedIn,
       );
 
       if (!success) {
         _showError('خطأ في اسم المستخدم أو كلمة المرور');
+        return;
       }
+
+      // Step 2: On first login, await the initial sync so the dashboard has data
+      if (firstLogin && mounted) {
+        setState(() => _syncStatusMessage = 'جاري تحميل بيانات المتجر...');
+        try {
+          await syncService.performFullSync(isInitialSync: true).timeout(
+            const Duration(seconds: 60),
+            onTimeout: () {
+              debugPrint('Initial sync timed out after 60s, continuing anyway');
+            },
+          );
+        } catch (e) {
+          // Sync failure must not block login — the user can sync manually later
+          debugPrint('Initial sync failed on first login: $e');
+        }
+      }
+
+      // Navigation is handled automatically by Consumer<AuthService> in main.dart
     } catch (e) {
       _showError('خطأ: $e');
     } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _isLoading = false;
+          _syncStatusMessage = null;
+        });
       }
     }
   }
@@ -208,11 +249,30 @@ class _LoginScreenState extends State<LoginScreen> {
                                 : const Text('دخول للنظام', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
                           ),
                         ),
+                        // Show sync progress on first login
+                        if (_syncStatusMessage != null) ...[  
+                          const SizedBox(height: 16),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Color(0xFF1E3A8A)),
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                _syncStatusMessage!,
+                                style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Color(0xFF475569)),
+                              ),
+                            ],
+                          ),
+                        ],
                         const SizedBox(height: 20),
-                        Text(
-                          'الحساب الافتراضي: ibraheem (123)',
-                          style: TextStyle(color: Colors.grey[500], fontSize: 12),
-                        ),
                       ],
                     ),
                   ),
