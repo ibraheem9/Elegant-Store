@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:workmanager/workmanager.dart';
@@ -41,15 +40,30 @@ void callbackDispatcher() {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await initializeDateFormatting('ar_SA', null);
+
+  // Initialize date formatting (fast, no network)
+  try {
+    await initializeDateFormatting('ar_SA', null);
+  } catch (e) {
+    debugPrint('initializeDateFormatting failed: $e');
+  }
   
   if (Platform.isWindows) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }
 
+  // Initialize database (local SQLite, should be fast)
   final dbService = DatabaseService();
-  await dbService.initDatabase();
+  try {
+    await dbService.initDatabase().timeout(
+      const Duration(seconds: 10),
+      onTimeout: () => debugPrint('initDatabase timed out'),
+    );
+  } catch (e) {
+    debugPrint('initDatabase failed: $e');
+  }
+
   final prefs = await SharedPreferences.getInstance();
   
   // Initialize Notifications (with timeout to prevent hang on Android)
@@ -75,20 +89,9 @@ void main() async {
     debugPrint('initSession failed: $e');
   }
 
+  // Initialize Workmanager (Android background tasks) — fire-and-forget to avoid blocking
   if (!Platform.isWindows) {
-    await Workmanager().initialize(
-      callbackDispatcher,
-      isInDebugMode: false,
-    );
-    
-    await Workmanager().registerPeriodicTask(
-      "1",
-      syncTaskName,
-      frequency: const Duration(minutes: 15),
-      constraints: Constraints(
-        networkType: NetworkType.connected,
-      ),
-    );
+    _initWorkmanager();
   }
 
   runApp(
@@ -102,6 +105,34 @@ void main() async {
       child: const ElegantStoreApp(),
     ),
   );
+}
+
+/// Initialize Workmanager in the background without blocking app startup.
+void _initWorkmanager() {
+  Future.microtask(() async {
+    try {
+      await Workmanager().initialize(
+        callbackDispatcher,
+        isInDebugMode: false,
+      ).timeout(const Duration(seconds: 5), onTimeout: () {
+        debugPrint('Workmanager.initialize timed out');
+      });
+
+      await Workmanager().registerPeriodicTask(
+        "1",
+        syncTaskName,
+        frequency: const Duration(minutes: 15),
+        constraints: Constraints(
+          networkType: NetworkType.connected,
+        ),
+        existingWorkPolicy: ExistingWorkPolicy.keep,
+      ).timeout(const Duration(seconds: 5), onTimeout: () {
+        debugPrint('Workmanager.registerPeriodicTask timed out');
+      });
+    } catch (e) {
+      debugPrint('Workmanager init failed: $e');
+    }
+  });
 }
 
 class ElegantStoreApp extends StatelessWidget {
@@ -129,13 +160,15 @@ class ElegantStoreApp extends StatelessWidget {
         builder: (context, authService, _) {
           WidgetsBinding.instance.addPostFrameCallback((_) async {
             if (authService.isLoggedIn && authService.currentUser != null) {
-               // 1. Fix local data ownership before sync
-               await context.read<DatabaseService>().fixLocalDataOwnership(authService.currentUser!);
+               // Fix local data ownership (fire-and-forget)
+               context.read<DatabaseService>()
+                   .fixLocalDataOwnership(authService.currentUser!)
+                   .catchError((e) => debugPrint('fixLocalDataOwnership failed: $e'));
 
-               // 2. Schedule notifications
+               // Schedule notifications
                NotificationService.scheduleDailyCheck(context.read<DatabaseService>());
 
-               // 3. Trigger initial sync
+               // Trigger initial sync (fire-and-forget)
                context.read<SyncService>().performFullSync(isInitialSync: true).catchError((e) {
                  debugPrint('Initial sync failed: $e');
                });
