@@ -706,6 +706,19 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Widget _buildInvoiceForm(bool isMobile, bool isDark) {
+    final formFields = [
+      Expanded(flex: isMobile ? 0 : 2, child: _buildCustomerField()),
+      if (isMobile) const SizedBox(height: 16),
+      if (!isMobile) const SizedBox(width: 16),
+      Expanded(flex: isMobile ? 0 : 1, child: _buildAmountField()),
+      if (isMobile) const SizedBox(height: 16),
+      if (!isMobile) const SizedBox(width: 16),
+      Expanded(flex: isMobile ? 0 : 1, child: _buildPaymentMethodField()),
+      if (isMobile) const SizedBox(height: 16),
+      if (!isMobile) const SizedBox(width: 16),
+      Expanded(flex: isMobile ? 0 : 1, child: _buildDateField()),
+    ];
+
     return Container(
       padding: EdgeInsets.all(isMobile ? 20 : 32),
       decoration: BoxDecoration(
@@ -719,36 +732,14 @@ class _SalesScreenState extends State<SalesScreen> {
         children: [
           const Text('إدخال فاتورة جديدة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           const SizedBox(height: 24),
-          if (isMobile) ...[
-            _buildCustomerField(),
-            const SizedBox(height: 8),
-            _buildBalancePreview(),
-            const SizedBox(height: 16),
-            _buildAmountField(),
-            const SizedBox(height: 16),
-            _buildPaymentMethodField(),
-            const SizedBox(height: 16),
-            _buildDateField(),
-            const SizedBox(height: 16),
-            _buildNotesField(),
-          ] else ...[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: _buildCustomerField()),
-                const SizedBox(width: 16),
-                Expanded(child: _buildAmountField()),
-                const SizedBox(width: 16),
-                Expanded(child: _buildPaymentMethodField()),
-                const SizedBox(width: 16),
-                Expanded(child: _buildDateField()),
-              ],
-            ),
-            const SizedBox(height: 8),
-            _buildBalancePreview(),
-            const SizedBox(height: 16),
-            _buildNotesField(),
-          ],
+          if (isMobile) 
+            ...formFields.map((e) => e is Expanded ? e.child : e).toList()
+          else 
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: formFields),
+          const SizedBox(height: 8),
+          _buildBalancePreview(),
+          const SizedBox(height: 16),
+          _buildNotesField(),
           const SizedBox(height: 32),
           _buildActionButtons(isMobile),
         ],
@@ -780,6 +771,7 @@ class _SalesScreenState extends State<SalesScreen> {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      margin: const EdgeInsets.only(top: 8),
       decoration: BoxDecoration(
         color: isDebt ? Colors.red.withOpacity(0.07) : Colors.green.withOpacity(0.07),
         borderRadius: BorderRadius.circular(10),

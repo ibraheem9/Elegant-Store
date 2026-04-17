@@ -120,18 +120,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final themeNotifier = context.watch<ThemeNotifier>();
     final isDark = themeNotifier.themeMode == ThemeMode.dark;
     final auth = context.read<AuthService>();
+    final size = MediaQuery.of(context).size;
+    final bool isMobile = size.width < 700;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
+        padding: EdgeInsets.all(isMobile ? 16 : 32),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'الإعدادات والتحكم', 
               style: TextStyle(
-                fontSize: 32, 
+                fontSize: isMobile ? 24 : 32, 
                 fontWeight: FontWeight.w900, 
                 color: isDark ? const Color(0xFFDCEFFF) : const Color(0xFF0F172A)
               )
@@ -139,9 +141,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 32),
 
             _buildSection('الملف الشخصي', isDark, [
-              _buildTextField('الاسم الكامل', _nameController, Icons.person, isDark),
-              const SizedBox(height: 16),
-              _buildTextField('اسم المستخدم', _usernameController, Icons.alternate_email, isDark),
+              _buildResponsiveInputs(isMobile, isDark, [
+                _buildTextField('الاسم الكامل', _nameController, Icons.person, isDark),
+                _buildTextField('اسم المستخدم', _usernameController, Icons.alternate_email, isDark),
+              ]),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
@@ -159,9 +162,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             const SizedBox(height: 32),
             _buildSection('تغيير كلمة المرور', isDark, [
-              _buildTextField('كلمة المرور الحالية', _currentPasswordController, Icons.lock_outline, isDark, obscure: true),
-              const SizedBox(height: 16),
-              _buildTextField('كلمة المرور الجديدة', _newPasswordController, Icons.lock_reset, isDark, obscure: true),
+              _buildResponsiveInputs(isMobile, isDark, [
+                _buildTextField('كلمة المرور الحالية', _currentPasswordController, Icons.lock_outline, isDark, obscure: true),
+                _buildTextField('كلمة المرور الجديدة', _newPasswordController, Icons.lock_reset, isDark, obscure: true),
+              ]),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
@@ -242,6 +246,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildResponsiveInputs(bool isMobile, bool isDark, List<Widget> children) {
+    if (isMobile) {
+      return Column(
+        children: children.expand((w) => [w, const SizedBox(height: 16)]).toList()..removeLast(),
+      );
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children.expand((w) => [Expanded(child: w), const SizedBox(width: 16)]).toList()..removeLast(),
     );
   }
 

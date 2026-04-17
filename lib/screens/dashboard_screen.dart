@@ -112,7 +112,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       backgroundColor: const Color(0xFF0F172A),
       child: Column(
         children: [
-          _buildSidebarHeader(),
+          // Logo hidden as requested: اخفي الشعار منها
+          const SizedBox(height: 60), 
           Expanded(
             child: ListView(
               padding: EdgeInsets.zero,
@@ -134,7 +135,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
-          _buildUserCard(true, isDark),
+          // Raised to be fully visible: رفع لاعلى لانه لا يظهر بشكل كامل
+          SafeArea(
+            top: false,
+            child: _buildUserCard(true, isDark),
+          ),
         ],
       ),
     );
@@ -206,22 +211,69 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildBottomNav(ThemeData theme, AuthService auth) {
-    return NavigationBar(
-      selectedIndex: _selectedIndex > 3 ? 0 : _selectedIndex,
-      onDestinationSelected: (index) {
-        if (index == 4) {
-          _scaffoldKey.currentState?.openDrawer();
-        } else {
-          setState(() => _selectedIndex = index);
-        }
-      },
-      destinations: const [
-        NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard_rounded), label: 'الرئيسية'),
-        NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long_rounded), label: 'البيع'),
-        NavigationDestination(icon: Icon(Icons.bar_chart_outlined), selectedIcon: Icon(Icons.bar_chart_rounded), label: 'الإحصائيات'),
-        NavigationDestination(icon: Icon(Icons.people_alt_outlined), selectedIcon: Icon(Icons.people_alt_rounded), label: 'الزبائن'),
-        NavigationDestination(icon: Icon(Icons.menu_rounded), label: 'المزيد'),
-      ],
+    // Current mapping in _getScreen:
+    // 0: الرئيسية (Dashboard)
+    // 1: البيع (Sales)
+    // 2: الإحصائيات (Statistics)
+    // 3: المشتريات (Purchases)
+    // 4: الزبائن (Customers)
+    
+    // Desired Order (Right to Left in Arabic Layout):
+    // [0] البيع (Sales) - Screen 1
+    // [1] الزبائن (Customers) - Screen 4
+    // [2] الرئيسية (Home) - Screen 0
+    // [3] إحصائيات اليوم (Stats) - Screen 2
+    // [4] المشتريات (Purchases) - Screen 3
+
+    int getNavIndex() {
+      switch (_selectedIndex) {
+        case 1: return 0; // Sales
+        case 4: return 1; // Customers
+        case 0: return 2; // Home
+        case 2: return 3; // Stats
+        case 3: return 4; // Purchases
+        default: return 2; // Default to Home
+      }
+    }
+
+    return NavigationBarTheme(
+      data: NavigationBarThemeData(
+        indicatorColor: Colors.blue.withOpacity(0.2),
+        labelTextStyle: MaterialStateProperty.resolveWith((states) {
+          if (states.contains(MaterialState.selected)) {
+            return const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue);
+          }
+          return const TextStyle(fontSize: 12, color: Colors.grey);
+        }),
+        iconTheme: MaterialStateProperty.resolveWith((states) {
+          if (states.contains(MaterialState.selected)) {
+            return const IconThemeData(color: Colors.blue);
+          }
+          return const IconThemeData(color: Colors.grey);
+        }),
+      ),
+      child: NavigationBar(
+        selectedIndex: getNavIndex(),
+        onDestinationSelected: (index) {
+          int targetScreen;
+          switch (index) {
+            case 0: targetScreen = 1; break; // Sales
+            case 1: targetScreen = 4; break; // Customers
+            case 2: targetScreen = 0; break; // Home
+            case 3: targetScreen = 2; break; // Stats
+            case 4: targetScreen = 3; break; // Purchases
+            default: targetScreen = 0;
+          }
+          setState(() => _selectedIndex = targetScreen);
+        },
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long_rounded), label: 'البيع'),
+          NavigationDestination(icon: Icon(Icons.people_alt_outlined), selectedIcon: Icon(Icons.people_alt_rounded), label: 'الزبائن'),
+          NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard_rounded), label: 'الرئيسية'),
+          NavigationDestination(icon: Icon(Icons.bar_chart_outlined), selectedIcon: Icon(Icons.bar_chart_rounded), label: 'الإحصائيات'),
+          NavigationDestination(icon: Icon(Icons.shopping_cart_outlined), selectedIcon: Icon(Icons.shopping_cart_rounded), label: 'المشتريات'),
+        ],
+      ),
     );
   }
 

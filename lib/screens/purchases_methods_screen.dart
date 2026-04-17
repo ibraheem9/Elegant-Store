@@ -47,6 +47,8 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final size = MediaQuery.of(context).size;
+    final bool isMobile = size.width < 700;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -57,18 +59,18 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
         backgroundColor: Colors.orange[800],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(32.0),
+        padding: EdgeInsets.all(isMobile ? 16.0 : 32.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'طرق دفع المشتريات',
-              style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A)),
+              style: TextStyle(fontSize: isMobile ? 24 : 32, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A)),
             ),
             const SizedBox(height: 8),
             Text(
               'إدارة الوسائل المستخدمة لدفع مستحقات الموردين والمصروفات العامة',
-              style: TextStyle(fontSize: 16, color: isDark ? Colors.white60 : const Color(0xFF64748B)),
+              style: TextStyle(fontSize: isMobile ? 14 : 16, color: isDark ? Colors.white60 : const Color(0xFF64748B)),
             ),
             const SizedBox(height: 32),
             Expanded(
@@ -77,9 +79,9 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
                 : _methods.isEmpty 
                   ? Center(child: Text('لا يوجد طرق دفع مشتريات مسجلة', style: TextStyle(color: isDark ? Colors.white30 : Colors.grey)))
                   : GridView.builder(
-                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
                         maxCrossAxisExtent: 400,
-                        mainAxisExtent: 180,
+                        mainAxisExtent: isMobile ? 160 : 180,
                         crossAxisSpacing: 20,
                         mainAxisSpacing: 20,
                       ),
@@ -185,43 +187,45 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: isDark ? const Color(0xFF1E293B) : Colors.transparent)),
             title: Text(method == null ? 'إضافة وسيلة دفع للمشتريات' : 'تعديل وسيلة الدفع', style: TextStyle(color: isDark ? Colors.white : Colors.black)),
             content: SizedBox(
-              width: 400,
+              width: 450,
               child: Form(
                 key: _formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextFormField(
-                      controller: _nameController,
-                      style: TextStyle(color: isDark ? Colors.white : Colors.black),
-                      decoration: InputDecoration(
-                        labelText: 'اسم الوسيلة (مثلاً: كاش، تطبيق إبراهيم، ...)',
-                        labelStyle: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: _nameController,
+                        style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                        decoration: InputDecoration(
+                          labelText: 'اسم الوسيلة (مثلاً: كاش، تطبيق إبراهيم، ...)',
+                          labelStyle: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
+                        ),
+                        validator: (v) => v == null || v.isEmpty ? 'مطلوب' : null,
                       ),
-                      validator: (v) => v == null || v.isEmpty ? 'مطلوب' : null,
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      value: _selectedType,
-                      dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-                      style: TextStyle(color: isDark ? Colors.white : Colors.black),
-                      decoration: InputDecoration(
-                        labelText: 'نوع الوسيلة',
-                        labelStyle: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        value: _selectedType,
+                        dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                        style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                        decoration: InputDecoration(
+                          labelText: 'نوع الوسيلة',
+                          labelStyle: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
+                        ),
+                        items: _types.map((t) => DropdownMenuItem(value: t['value'], child: Text(t['label']!))).toList(),
+                        onChanged: (v) => setDialogState(() => _selectedType = v!),
                       ),
-                      items: _types.map((t) => DropdownMenuItem(value: t['value'], child: Text(t['label']!))).toList(),
-                      onChanged: (v) => setDialogState(() => _selectedType = v!),
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _descController,
-                      style: TextStyle(color: isDark ? Colors.white : Colors.black),
-                      decoration: InputDecoration(
-                        labelText: 'ملاحظات',
-                        labelStyle: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _descController,
+                        style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                        decoration: InputDecoration(
+                          labelText: 'ملاحظات',
+                          labelStyle: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

@@ -146,6 +146,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
     final balanceController = TextEditingController(text: customer?.balance.toString() ?? '0');
     bool isPermanent = customer == null ? true : (customer.isPermanentCustomer == 1);
     bool isUnlimited = customer?.creditLimit == -1;
+    String? nameError;
 
     showDialog(
       context: context,
@@ -160,11 +161,18 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildDialogField('الاسم الكامل', nameController, Icons.person_outline, onChanged: (val) => setDialogState(() {})),
+                  _buildDialogField('الاسم الكامل', nameController, Icons.person_outline, 
+                    errorText: nameError,
+                    onChanged: (val) {
+                      setDialogState(() {
+                        nameError = null;
+                      });
+                    }
+                  ),
                   _buildDialogField('اللقب', nicknameController, Icons.badge_outlined),
                   _buildDialogField('رقم الهاتف', phoneController, Icons.phone_android),
                   _buildDialogField('أسماء التحويلات', transferNamesController, Icons.swap_horiz_rounded),
-                  _buildDialogField('ملاحظات إضافية', notesController, Icons.note_alt_outlined, maxLines: 2, onChanged: (val) => setDialogState(() {})),
+                  _buildDialogField('ملاحظات إضافية', notesController, Icons.note_alt_outlined, maxLines: 2),
                   
                   const Divider(),
                   SwitchListTile(
@@ -192,9 +200,24 @@ class _CustomersScreenState extends State<CustomersScreen> {
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
             ElevatedButton(
               onPressed: () async {
-                if (nameController.text.isEmpty) return;
+                if (nameController.text.isEmpty) {
+                  setDialogState(() => nameError = 'يرجى إدخال اسم الزبون');
+                  return;
+                }
                 final db = context.read<DatabaseService>();
                 final auth = context.read<AuthService>();
+                
+                // Block duplicate customer names
+                if (customer == null) {
+                  final duplicates = await db.findCustomersByName(nameController.text.trim());
+                  if (duplicates.isNotEmpty) {
+                    setDialogState(() {
+                      nameError = 'يوجد زبون بنفس الاسم بالفعل';
+                    });
+                    return;
+                  }
+                }
+
                 double limit = isUnlimited ? -1 : (double.tryParse(limitController.text) ?? 100.0);
 
                 final userData = User(
@@ -215,20 +238,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 );
 
                 if (customer == null) {
-                  // Block duplicate customer names
-                  final duplicates = await db.findCustomersByName(nameController.text.trim());
-                  if (duplicates.isNotEmpty) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('يوجد زبون بنفس الاسم «${nameController.text.trim()}» بالفعل'),
-                          backgroundColor: Colors.orange,
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    }
-                    return;
-                  }
                   await db.insertUser(userData, '123');
                 } else {
                   await db.updateUser(userData, customer);
@@ -622,7 +631,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
     Navigator.push(context, MaterialPageRoute(builder: (_) => CustomerDetailsScreen(customer: customer))).then((_) => _loadCustomers());
   }
 
-  Widget _buildDialogField(String label, TextEditingController controller, IconData icon, {bool isNumeric = false, int maxLines = 1, Function(String)? onChanged, bool obscure = false}) {
+  Widget _buildDialogField(String label, TextEditingController controller, IconData icon, {bool isNumeric = false, int maxLines = 1, Function(String)? onChanged, bool obscure = false, String? errorText}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: TextField(
@@ -636,6 +645,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
           prefixIcon: Icon(icon, size: 20, color: Colors.blue),
           filled: true,
           fillColor: Colors.grey[50],
+          errorText: errorText,
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
         ),
       ),

@@ -272,33 +272,25 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle('إدخال يدوي', Icons.edit_note_rounded, Colors.green, isDark),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            // صندوق الأمس — تلقائي من DB
-            Expanded(
-              child: _buildAutoDisplay(
-                'إجمالي الصندوق أمس (تلقائي)',
-                _yesterdayCash,
-                Icons.history_rounded,
-                Colors.blueGrey,
-                isDark,
-              ),
-            ),
-            const SizedBox(width: 16),
-            // صندوق اليوم — يدوي قابل للتعديل
-            Expanded(
-              child: _buildManualInput(
-                'إجمالي الصندوق اليوم',
-                _todayCashController,
-                Icons.account_balance_wallet_rounded,
-                Colors.green,
-                isDark,
-                onChanged: (_) => setState(() {}),
-              ),
-            ),
-          ],
+        _sectionTitle('المطابقة النقدية', Icons.account_balance_rounded, Colors.green, isDark),
+        const SizedBox(height: 16),
+        // صندوق الأمس — تلقائي
+        _buildAutoDisplay(
+          'إجمالي الصندوق أمس (تلقائي)',
+          _yesterdayCash,
+          Icons.history_rounded,
+          Colors.blueGrey,
+          isDark,
+        ),
+        const SizedBox(height: 16),
+        // صندوق اليوم — يدوي
+        _buildManualInput(
+          'إجمالي الصندوق اليوم (الفصلي)',
+          _todayCashController,
+          Icons.account_balance_wallet_rounded,
+          Colors.green,
+          isDark,
+          onChanged: (_) => setState(() {}),
         ),
       ],
     );
@@ -309,7 +301,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle('بيانات تلقائية', Icons.auto_graph_rounded, Colors.blue, isDark),
+        _sectionTitle('بيانات تلقائية من النظام', Icons.auto_graph_rounded, Colors.blue, isDark),
         const SizedBox(height: 12),
         GridView.count(
           crossAxisCount: isSmall ? 1 : 2,
@@ -317,7 +309,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           physics: const NeverScrollableScrollPhysics(),
           crossAxisSpacing: 16,
           mainAxisSpacing: 16,
-          childAspectRatio: 3.8,
+          childAspectRatio: isSmall ? 2.8 : 3.8,
           children: [
             _buildAutoDisplay('إجمالي المبيعات على التطبيق',   _appSales,        Icons.phonelink_ring_rounded,        Colors.blue,    isDark),
             _buildAutoDisplay('إجمالي الدين على التطبيق',      _appDebt,         Icons.account_balance_rounded,       Colors.purple,  isDark),
@@ -335,7 +327,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle('ملخص اليوم', Icons.summarize_rounded, Colors.teal, isDark),
+        _sectionTitle('ملخص العمليات', Icons.summarize_rounded, Colors.teal, isDark),
         const SizedBox(height: 12),
         GridView.count(
           crossAxisCount: isSmall ? 1 : 3,
@@ -343,7 +335,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           physics: const NeverScrollableScrollPhysics(),
           crossAxisSpacing: 16,
           mainAxisSpacing: 16,
-          childAspectRatio: 2.8,
+          childAspectRatio: isSmall ? 2.2 : 2.8,
           children: [
             _buildDerivedCard('إجمالي البيع كاش',    _cashSales,      Colors.green,  isDark,
                 subtitle: 'صندوق اليوم - صندوق الأمس'),
@@ -481,25 +473,33 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   Widget _buildManualInput(String label, TextEditingController controller,
       IconData icon, Color color, bool isDark, {ValueChanged<String>? onChanged}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E293B) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.4), width: 1.5),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.5), width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
       ),
       child: TextField(
         controller: controller,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         onChanged: onChanged,
-        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold,
+        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900,
             color: isDark ? Colors.white : Colors.black),
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13),
-          prefixIcon: Icon(icon, color: color),
+          labelStyle: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 14),
+          prefixIcon: Icon(icon, color: color, size: 28),
           border: InputBorder.none,
           suffixText: '₪',
-          suffixStyle: TextStyle(color: color, fontWeight: FontWeight.bold),
+          suffixStyle: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 20),
+          contentPadding: const EdgeInsets.symmetric(vertical: 8),
         ),
       ),
     );
@@ -509,26 +509,33 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final isNegative = value < 0;
     final displayColor = isNegative ? Colors.redAccent : color;
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: displayColor.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: displayColor.withOpacity(0.2)),
+        color: displayColor.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: displayColor.withOpacity(0.3), width: 1.5),
       ),
       child: Row(children: [
-        Icon(icon, color: displayColor, size: 26),
-        const SizedBox(width: 14),
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: displayColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: displayColor, size: 28),
+        ),
+        const SizedBox(width: 16),
         Expanded(child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(label, style: TextStyle(color: displayColor, fontWeight: FontWeight.bold, fontSize: 11)),
+            Text(label, style: TextStyle(color: displayColor, fontWeight: FontWeight.bold, fontSize: 12)),
             Text('${value.toStringAsFixed(2)} ₪',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900,
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900,
                     color: isDark ? Colors.white : const Color(0xFF0F172A))),
           ],
         )),
-        const Icon(Icons.lock_outline_rounded, color: Colors.grey, size: 14),
+        const Icon(Icons.lock_outline_rounded, color: Colors.grey, size: 16),
       ]),
     );
   }
