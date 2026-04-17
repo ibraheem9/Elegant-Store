@@ -73,7 +73,11 @@ class SyncService extends ChangeNotifier {
       baseUrl: ApiConfig.baseUrl,
       connectTimeout: const Duration(seconds: 30),
       receiveTimeout: const Duration(seconds: 60),
-      headers: {'Accept': 'application/json'},
+      headers: {
+        'Accept': 'application/json',
+        // ModSecurity on the server blocks requests with no User-Agent (HTTP 406)
+        'User-Agent': 'ElegantStore/1.0 (Dart/3.5; Android)',
+      },
     ));
 
     _dio.interceptors.add(InterceptorsWrapper(

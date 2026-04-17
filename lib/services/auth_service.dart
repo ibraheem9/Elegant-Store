@@ -17,8 +17,14 @@ class AuthService extends ChangeNotifier {
   final LocalAuthentication _localAuth = LocalAuthentication();
   final Dio _dio = Dio(BaseOptions(
     baseUrl: ApiConfig.baseUrl,
-    headers: {'Accept': 'application/json'},
+    headers: {
+      'Accept': 'application/json',
+      // A proper User-Agent is required — the server's ModSecurity blocks
+      // requests with no User-Agent (returns HTTP 406).
+      'User-Agent': 'ElegantStore/1.0 (Dart/3.5; Android)',
+    },
     connectTimeout: const Duration(seconds: 10),
+    receiveTimeout: const Duration(seconds: 15),
   ));
   
   User? _currentUser;
@@ -171,7 +177,10 @@ class AuthService extends ChangeNotifier {
         // can display a loading message. Subsequent logins use session init sync.
         return true;
       }
-      dev.log('Server rejected login: ${response.statusCode} - ${response.data}', name: 'AuthService');
+      dev.log(
+        'Server rejected login: HTTP ${response.statusCode} → ${response.data}',
+        name: 'AuthService',
+      );
       return false;
     } on DioException catch (e) {
       dev.log('Online login failed (Network): ${e.message}', name: 'AuthService');
