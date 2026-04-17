@@ -437,7 +437,7 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
     final isDark = theme.brightness == Brightness.dark;
     final size = MediaQuery.of(context).size;
     final isMobile = size.width < 650;
-    int crossAxisCount = (size.width > 1400) ? 4 : (size.width > 900 ? 2 : 1);
+    int crossAxisCount = (size.width > 1400) ? 4 : 2;
     final db = context.read<DatabaseService>();
 
     return Consumer<SyncService>(
@@ -477,9 +477,9 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
                     crossAxisCount: crossAxisCount,
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    mainAxisSpacing: 20,
-                    crossAxisSpacing: 20,
-                    childAspectRatio: isMobile ? 2.2 : 1.5,
+                    mainAxisSpacing: 14,
+                    crossAxisSpacing: 14,
+                    childAspectRatio: isMobile ? 1.05 : 1.5,
                     children: [
                       _buildStatCard('إجمالي الديون القائمة', '${stats['total_debts'].toStringAsFixed(2)} ₪', Icons.money_off_rounded, const Color(0xFFEF4444), isDark),
                       _buildStatCard('إجمالي الأرصدة المودعة', '${stats['total_balances'].toStringAsFixed(2)} ₪', Icons.account_balance_rounded, const Color(0xFF10B981), isDark),
@@ -671,28 +671,42 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
   Widget _buildStatCard(String title, String value, IconData icon, Color color, bool isDark, {VoidCallback? onTap}) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF0F172A) : Colors.white, 
-          borderRadius: BorderRadius.circular(20),
+          color: isDark ? const Color(0xFF0F172A) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
-          boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))],
+          boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 3))],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-              child: Icon(icon, color: color, size: 24),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+              child: Icon(icon, color: color, size: 20),
             ),
-            const SizedBox(height: 16),
-            Text(title, style: TextStyle(fontSize: 13, color: isDark ? Colors.white54 : Colors.grey[600], fontWeight: FontWeight.w500)),
+            const SizedBox(height: 10),
+            Text(
+              title,
+              style: TextStyle(fontSize: 11, color: isDark ? Colors.white54 : Colors.grey[600], fontWeight: FontWeight.w500),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.start,
+            ),
             const SizedBox(height: 4),
-            FittedBox(child: Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A)))),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A)),
+              ),
+            ),
           ],
         ),
       ),

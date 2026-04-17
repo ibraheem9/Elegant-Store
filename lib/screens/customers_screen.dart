@@ -215,6 +215,20 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 );
 
                 if (customer == null) {
+                  // Block duplicate customer names
+                  final duplicates = await db.findCustomersByName(nameController.text.trim());
+                  if (duplicates.isNotEmpty) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('يوجد زبون بنفس الاسم «${nameController.text.trim()}» بالفعل'),
+                          backgroundColor: Colors.orange,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
+                    return;
+                  }
                   await db.insertUser(userData, '123');
                 } else {
                   await db.updateUser(userData, customer);

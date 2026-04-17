@@ -996,6 +996,16 @@ class DatabaseService {
     return counts;
   }
 
+  /// Returns customers with the given name (for duplicate check before insert).
+  Future<List<User>> findCustomersByName(String name) async {
+    final db = await database;
+    final rows = await db.rawQuery(
+      "SELECT * FROM users WHERE name = ? AND role = 'CUSTOMER' AND deleted_at IS NULL LIMIT 1",
+      [name.trim()],
+    );
+    return rows.map((r) => User.fromMap(r)).toList();
+  }
+
   /// Returns customers whose name appears more than once (local duplicates).
   Future<List<Map<String, dynamic>>> getDuplicateCustomers() async {
     final db = await database;
@@ -1084,7 +1094,38 @@ class DatabaseService {
         }
       }
 
-      // 3. Insert new record — skip if server is telling us it is deleted
+      // 3. For CUSTOMER users: merge by name to prevent duplicates
+      if (table == 'users' && sanitizedData['role'] == 'CUSTOMER' && !isDeletedOnServer) {
+        final name = sanitizedData['name'];
+        if (name != null && name.toString().trim().isNotEmpty) {
+          final byName = await txn.rawQuery(
+            "SELECT * FROM users WHERE name = ? AND role = 'CUSTOMER' AND deleted_at IS NULL LIMIT 1",
+            [name.toString().trim()],
+          );
+          if (byName.isNotEmpty) {
+            final existingId = byName.first['id'] as int;
+            final existingVersion = byName.first['version'] as int? ?? 0;
+            final incomingVersion = sanitizedData['version'] as int? ?? 0;
+            // Re-link all invoices and transactions to the surviving record
+            await txn.rawUpdate(
+              'UPDATE invoices SET user_id = ? WHERE user_id = ?',
+              [existingId, existingId],
+            );
+            await txn.rawUpdate(
+              'UPDATE transactions SET buyer_id = ? WHERE buyer_id = (SELECT id FROM users WHERE uuid = ? LIMIT 1)',
+              [existingId, uuid],
+            );
+            // Update the surviving record with server data if server version is newer
+            if (incomingVersion >= existingVersion) {
+              sanitizedData.remove('password');
+              await txn.update('users', sanitizedData, where: 'id = ?', whereArgs: [existingId]);
+            }
+            return existingId;
+          }
+        }
+      }
+
+      // 4. Insert new record — skip if server is telling us it is deleted
       // (no point creating a record locally that is already deleted on server)
       if (isDeletedOnServer) return -1;
 
