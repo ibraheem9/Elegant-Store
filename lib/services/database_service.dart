@@ -32,7 +32,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: (db, version) async {
         await _createTables(db);
         await _createTriggers(db);
@@ -57,6 +57,10 @@ class DatabaseService {
             "UPDATE payment_methods SET created_at = ? WHERE created_at IS NULL OR created_at = ''",
             [now],
           );
+        }
+        if (oldVersion < 4) {
+          // Add yesterday_cash_in_box to daily_statistics if missing
+          try { await db.execute('ALTER TABLE daily_statistics ADD COLUMN yesterday_cash_in_box REAL NOT NULL DEFAULT 0'); } catch (_) {}
         }
       },
     );
@@ -567,7 +571,7 @@ class DatabaseService {
 
   Future<List<PaymentMethod>> getPaymentMethods({String? category}) async {
     final db = await database;
-    String where = 'is_active = 1'; List<dynamic> args = [];
+    String where = 'is_active = 1 AND deleted_at IS NULL'; List<dynamic> args = [];
     if (category != null) { where += ' AND category = ?'; args.add(category); }
     final r = await db.query('payment_methods', where: where, whereArgs: args, orderBy: 'sort_order ASC');
     return r.map((m) => PaymentMethod.fromMap(m)).toList();
@@ -603,8 +607,11 @@ class DatabaseService {
     final existing = await db.query('payment_methods', where: 'id = ?', whereArgs: [id], limit: 1);
     int currentVersion = existing.isNotEmpty ? (existing.first['version'] as int? ?? 0) : 0;
 
+    // Set deleted_at so the soft-delete is included in the push payload and
+    // propagated to the server during the next sync.
     return await db.update('payment_methods', {
       'is_active': 0,
+      'deleted_at': now,
       'is_synced': 0,
       'version': currentVersion + 1,
       'updated_at': now
