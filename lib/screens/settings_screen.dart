@@ -97,8 +97,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _toggleBiometric(bool enabled) async {
     final auth = context.read<AuthService>();
     if (enabled) {
-      bool authenticated = await auth.authenticateWithBiometrics();
-      if (authenticated) {
+      final LoginResult result = await auth.authenticateWithBiometrics();
+      if (result == LoginResult.success) {
          await auth.setBiometricEnabled(true);
          setState(() => _biometricEnabled = true);
          _showSnackBar('تم تفعيل الدخول بالبصمة بنجاح', Colors.green);
