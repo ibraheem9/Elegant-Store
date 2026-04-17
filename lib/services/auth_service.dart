@@ -11,6 +11,15 @@ import 'database_service.dart';
 import 'sync_service.dart';
 import 'dart:developer' as dev;
 
+/// Result of a login attempt.
+enum LoginResult {
+  success,
+  wrongCredentials,
+  customerNotAllowed,
+  networkError,
+  unknownError,
+}
+
 class AuthService extends ChangeNotifier {
   final DatabaseService _dbService;
   final SyncService _syncService;
@@ -97,7 +106,7 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<bool> login(String username, String password, {bool saveSession = false}) async {
+  Future<LoginResult> login(String username, String password, {bool saveSession = false}) async {
     try {
       dev.log('Attempting online login for user: $username', name: 'AuthService');
       final response = await _dio.post('login', data: {
@@ -126,7 +135,7 @@ class AuthService extends ChangeNotifier {
 
         if (userData == null || _token == null) {
           dev.log('Login response missing user data or token', name: 'AuthService');
-          return false;
+          return LoginResult.unknownError;
         }
 
         final prefs = await SharedPreferences.getInstance();
@@ -140,7 +149,7 @@ class AuthService extends ChangeNotifier {
 
         final now = DateTime.now().toIso8601String();
 
-        // Prepare data for HQ Sync
+        // Prepare data for local DB
         final Map<String, dynamic> localUserDataMap = {
           'uuid': userData['uuid'],
           'parent_id': userData['parent_id'],
@@ -155,7 +164,7 @@ class AuthService extends ChangeNotifier {
           'is_synced': 1,
         };
 
-        // Fix: Capture the local auto-incremented ID
+        // Capture the local auto-incremented ID
         final int localId = await _dbService.upsertFromSync('users', localUserDataMap);
         localUserDataMap['id'] = localId;
 
@@ -175,33 +184,39 @@ class AuthService extends ChangeNotifier {
         notifyListeners();
         // Initial sync is triggered by LoginScreen on first login so the UI
         // can display a loading message. Subsequent logins use session init sync.
-        return true;
+        return LoginResult.success;
       }
+
       dev.log(
         'Server rejected login: HTTP ${response.statusCode} → ${response.data}',
         name: 'AuthService',
       );
-      return false;
+      return LoginResult.wrongCredentials;
     } on DioException catch (e) {
       dev.log('Online login failed (Network): ${e.message}', name: 'AuthService');
-      // Offline fallback
+
+      // Offline fallback — only allowed if this is the same user who last logged in
       final prefs = await SharedPreferences.getInstance();
       final lastUser = prefs.getString('last_logged_username');
 
       if (lastUser == username) {
         final localUser = await _dbService.authenticate(username, password);
         if (localUser != null) {
+          // Block CUSTOMER from offline login too
+          if (localUser.role == 'CUSTOMER') {
+            return LoginResult.customerNotAllowed;
+          }
           dev.log('Offline fallback successful for $username', name: 'AuthService');
           _currentUser = localUser;
           _isLoggedIn = true;
           notifyListeners();
-          return true;
+          return LoginResult.success;
         }
       }
-      return false;
+      return LoginResult.networkError;
     } catch (e) {
       dev.log('Login error (Exception): $e', name: 'AuthService', error: e);
-      return false;
+      return LoginResult.unknownError;
     }
   }
 
@@ -272,12 +287,12 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<bool> authenticateWithBiometrics() async {
+  Future<LoginResult> authenticateWithBiometrics() async {
     try {
       final bool canAuthenticate = await _localAuth.canCheckBiometrics || await _localAuth.isDeviceSupported();
       if (!canAuthenticate) {
         dev.log('Biometrics not available or device not supported.', name: 'AuthService');
-        return false;
+        return LoginResult.unknownError;
       }
 
       final bool authenticated = await _localAuth.authenticate(
@@ -297,10 +312,10 @@ class AuthService extends ChangeNotifier {
           return await login(username, password);
         }
       }
-      return false;
+      return LoginResult.wrongCredentials;
     } catch (e) {
       dev.log('Biometric authentication failed: $e', name: 'AuthService');
-      return false;
+      return LoginResult.unknownError;
     }
   }
 

@@ -75,16 +75,28 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final bool firstLogin = await _isFirstLogin();
 
-      // Step 1: Online API authentication
-      final bool success = await authService.login(
+      // Step 1: Online API authentication (always online on first login)
+      final LoginResult result = await authService.login(
         _usernameController.text.trim(),
         _passwordController.text,
         saveSession: _keepMeLoggedIn,
       );
 
-      if (!success) {
-        _showError('خطأ في اسم المستخدم أو كلمة المرور');
-        return;
+      switch (result) {
+        case LoginResult.success:
+          break; // continue to sync step below
+        case LoginResult.customerNotAllowed:
+          _showError('هذا الحساب لا يملك صلاحية الدخول للتطبيق');
+          return;
+        case LoginResult.wrongCredentials:
+          _showError('خطأ في اسم المستخدم أو كلمة المرور');
+          return;
+        case LoginResult.networkError:
+          _showError('لا يوجد اتصال بالإنترنت. يرجى الاتصال للدخول لأول مرة');
+          return;
+        case LoginResult.unknownError:
+          _showError('حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى');
+          return;
       }
 
       // Step 2: On first login, await the initial sync so the dashboard has data
@@ -120,13 +132,13 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
-      bool success = await authService.authenticateWithBiometrics();
-      if (!success && mounted) {
-        // If it failed (user cancelled or other reason), we don't necessarily show an error 
-        // because they can still type their password.
+      final LoginResult result = await authService.authenticateWithBiometrics();
+      if (result == LoginResult.customerNotAllowed && mounted) {
+        _showError('هذا الحساب لا يملك صلاحية الدخول للتطبيق');
       }
+      // Other failures are silent — user can still type their password
     } catch (e) {
-       // Silent fail for auto-trigger
+      // Silent fail for auto-trigger
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);

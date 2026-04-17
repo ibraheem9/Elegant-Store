@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../services/sync_service.dart';
 
@@ -597,28 +598,29 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
         ),
-        const SizedBox(height: 12),
-
-        // ── Reset Local Data ──────────────────────────────────────────────
-        OutlinedButton.icon(
-          onPressed: (_isSyncing || _isResetting) ? null : _confirmAndReset,
-          icon: _isResetting
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.red),
-                )
-              : const Icon(Icons.delete_sweep_rounded, color: Colors.red),
-          label: Text(
-            _isResetting ? 'جاري المسح...' : 'مسح البيانات المحلية وإعادة التهيئة',
-            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 14),
+        // ── Reset Local Data (DEVELOPER only) ─────────────────────────────────────
+        if (context.read<AuthService>().isDeveloper()) ...[  
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: (_isSyncing || _isResetting) ? null : _confirmAndReset,
+            icon: _isResetting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.red),
+                  )
+                : const Icon(Icons.delete_sweep_rounded, color: Colors.red),
+            label: Text(
+              _isResetting ? 'جاري المسح...' : 'مسح البيانات المحلية وإعادة التهيئة',
+              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 14),
+            ),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: Colors.red, width: 1.5),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
           ),
-          style: OutlinedButton.styleFrom(
-            side: const BorderSide(color: Colors.red, width: 1.5),
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          ),
-        ),
+        ],
       ],
     );
   }

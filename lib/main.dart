@@ -160,29 +160,54 @@ class ElegantStoreApp extends StatelessWidget {
       ],
       supportedLocales: const [Locale('ar', 'SA')],
       locale: const Locale('ar', 'SA'),
-      home: Consumer<AuthService>(
-        builder: (context, authService, _) {
-          WidgetsBinding.instance.addPostFrameCallback((_) async {
-            if (authService.isLoggedIn && authService.currentUser != null) {
-               // Fix local data ownership (fire-and-forget)
-               context.read<DatabaseService>()
-                   .fixLocalDataOwnership(authService.currentUser!)
-                   .catchError((e) => debugPrint('fixLocalDataOwnership failed: $e'));
-
-               // Schedule notifications
-               NotificationService.scheduleDailyCheck(context.read<DatabaseService>());
-
-               // Trigger initial sync (fire-and-forget)
-               context.read<SyncService>().performFullSync(isInitialSync: true).catchError((e) {
-                 debugPrint('Initial sync failed: $e');
-               });
-            }
-          });
-
-          if (authService.isLoggedIn) return const DashboardScreen();
-          return const LoginScreen();
-        },
-      ),
+      home: const _AppHome(),
     );
+  }
+}
+
+/// Stateful home widget that ensures post-login side effects (sync, notifications)
+/// are triggered exactly once per login session, not on every Consumer rebuild.
+class _AppHome extends StatefulWidget {
+  const _AppHome({Key? key}) : super(key: key);
+
+  @override
+  State<_AppHome> createState() => _AppHomeState();
+}
+
+class _AppHomeState extends State<_AppHome> {
+  /// Tracks whether we have already fired the post-login side effects for the
+  /// current session so we don't repeat them on every notifyListeners() call.
+  bool _postLoginDone = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final authService = context.watch<AuthService>();
+
+    if (authService.isLoggedIn && authService.currentUser != null) {
+      if (!_postLoginDone) {
+        _postLoginDone = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+
+          // Fix local data ownership (fire-and-forget)
+          context.read<DatabaseService>()
+              .fixLocalDataOwnership(authService.currentUser!)
+              .catchError((e) => debugPrint('fixLocalDataOwnership failed: $e'));
+
+          // Schedule daily notifications check
+          NotificationService.scheduleDailyCheck(context.read<DatabaseService>());
+
+          // Background sync on session restore (not first login — LoginScreen handles that)
+          context.read<SyncService>().performFullSync().catchError((e) {
+            debugPrint('Session restore sync failed: $e');
+          });
+        });
+      }
+      return const DashboardScreen();
+    }
+
+    // User logged out — reset flag so side effects fire again on next login
+    _postLoginDone = false;
+    return const LoginScreen();
   }
 }
