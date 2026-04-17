@@ -32,7 +32,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: (db, version) async {
         await _createTables(db);
         await _createTriggers(db);
@@ -48,6 +48,15 @@ class DatabaseService {
           try { await db.execute('ALTER TABLE payment_methods ADD COLUMN deleted_at TEXT'); } catch (_) {}
           try { await db.execute('ALTER TABLE payment_methods ADD COLUMN created_at TEXT'); } catch (_) {}
           try { await db.execute('ALTER TABLE daily_statistics ADD COLUMN deleted_at TEXT'); } catch (_) {}
+        }
+        if (oldVersion < 3) {
+          // Ensure created_at column exists and backfill NULLs
+          try { await db.execute('ALTER TABLE payment_methods ADD COLUMN created_at TEXT'); } catch (_) {}
+          final now = DateTime.now().toIso8601String();
+          await db.execute(
+            "UPDATE payment_methods SET created_at = ? WHERE created_at IS NULL OR created_at = ''",
+            [now],
+          );
         }
       },
     );
@@ -254,6 +263,7 @@ class DatabaseService {
         'sort_order': m['sort_order'],
         'is_active': 1,
         'version': 1,
+        'created_at': now,
         'updated_at': now,
         'is_synced': 0
       });
@@ -272,6 +282,7 @@ class DatabaseService {
         'sort_order': m['sort_order'],
         'is_active': 1,
         'version': 1,
+        'created_at': now,
         'updated_at': now,
         'is_synced': 0
       });
@@ -569,6 +580,7 @@ class DatabaseService {
     map.remove('id');
     map['uuid'] = (m.uuid.isEmpty) ? _uuid.v4() : m.uuid;
     map['version'] = 1;
+    map.putIfAbsent('created_at', () => now);
     map['updated_at'] = now;
     map['is_synced'] = 0;
     return await db.insert('payment_methods', map);

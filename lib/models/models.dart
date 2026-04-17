@@ -123,6 +123,7 @@ class PaymentMethod {
   final int isActive;
   final int sortOrder;
   final int version;
+  final String createdAt;
   final String updatedAt;
   final int isSynced;
 
@@ -137,9 +138,11 @@ class PaymentMethod {
     this.isActive = 1,
     this.sortOrder = 0,
     this.version = 1,
+    String? createdAt,
     String? updatedAt,
     this.isSynced = 0,
-  }) : this.updatedAt = updatedAt ?? DateTime.now().toIso8601String();
+  })  : this.createdAt = createdAt ?? DateTime.now().toIso8601String(),
+        this.updatedAt = updatedAt ?? DateTime.now().toIso8601String();
 
   Map<String, dynamic> toMap() {
     return {
@@ -153,6 +156,7 @@ class PaymentMethod {
       'is_active': isActive,
       'sort_order': sortOrder,
       'version': version,
+      'created_at': createdAt,
       'updated_at': updatedAt,
       'is_synced': isSynced,
     };
@@ -170,6 +174,7 @@ class PaymentMethod {
       isActive: map['is_active'] ?? 1,
       sortOrder: map['sort_order'] ?? 0,
       version: map['version'] ?? 1,
+      createdAt: map['created_at'],
       updatedAt: map['updated_at'] ?? '',
       isSynced: map['is_synced'] ?? 0,
     );
@@ -193,6 +198,7 @@ class PaymentMethod {
       isActive: isActive,
       sortOrder: sortOrder ?? this.sortOrder,
       version: version,
+      createdAt: createdAt,
       updatedAt: updatedAt,
       isSynced: isSynced,
     );
