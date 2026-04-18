@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/auth_service.dart';
+import 'add_edit_customer_form.dart';
 
 class CustomersScreen extends StatefulWidget {
   final bool showBackButton;
@@ -133,129 +134,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
     }
   }
 
-  void _showAddOrEditCustomerDialog({User? customer}) {
-    final nameController = TextEditingController(text: customer?.name ?? '');
-    final nicknameController = TextEditingController(text: customer?.nickname ?? '');
-    final phoneController = TextEditingController(text: customer?.phone ?? '');
-    final transferNamesController = TextEditingController(text: customer?.transferNames ?? '');
-    final notesController = TextEditingController(text: customer?.notes ?? '');
-    
-    final limitController = TextEditingController(
-      text: customer == null ? '100' : (customer.creditLimit == -1 ? '' : customer.creditLimit?.toString() ?? '100')
-    );
-    final balanceController = TextEditingController(text: customer?.balance.toString() ?? '0');
-    bool isPermanent = customer == null ? true : (customer.isPermanentCustomer == 1);
-    bool isUnlimited = customer?.creditLimit == -1;
-    String? nameError;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          title: Text(customer == null ? 'إضافة زبون جديد' : 'تعديل بيانات الزبون', style: const TextStyle(fontWeight: FontWeight.bold)),
-          content: SingleChildScrollView(
-            child: SizedBox(
-              width: 450,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildDialogField('الاسم الكامل', nameController, Icons.person_outline, 
-                    errorText: nameError,
-                    onChanged: (val) {
-                      setDialogState(() {
-                        nameError = null;
-                      });
-                    }
-                  ),
-                  _buildDialogField('اللقب', nicknameController, Icons.badge_outlined),
-                  _buildDialogField('رقم الهاتف', phoneController, Icons.phone_android),
-                  _buildDialogField('أسماء التحويلات', transferNamesController, Icons.swap_horiz_rounded),
-                  _buildDialogField('ملاحظات إضافية', notesController, Icons.note_alt_outlined, maxLines: 2),
-                  
-                  const Divider(),
-                  SwitchListTile(
-                    title: const Text('زبون دائم', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                    value: isPermanent,
-                    onChanged: (val) => setDialogState(() => isPermanent = val),
-                  ),
-                  if (isPermanent) ...[
-                    CheckboxListTile(
-                      title: const Text('دين غير محدود (Verified)', style: TextStyle(fontSize: 14)),
-                      value: isUnlimited,
-                      activeColor: Colors.blue,
-                      onChanged: (val) => setDialogState(() => isUnlimited = val ?? false),
-                    ),
-                    if (!isUnlimited)
-                      _buildDialogField('سقف الدين (₪)', limitController, Icons.speed, isNumeric: true),
-                  ],
-                  if (customer != null) 
-                    _buildDialogField('تصحيح الرصيد الحالي (₪)', balanceController, Icons.account_balance_wallet, isNumeric: true),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-            ElevatedButton(
-              onPressed: () async {
-                if (nameController.text.isEmpty) {
-                  setDialogState(() => nameError = 'يرجى إدخال اسم الزبون');
-                  return;
-                }
-                final db = context.read<DatabaseService>();
-                final auth = context.read<AuthService>();
-                
-                // Block duplicate customer names
-                if (customer == null) {
-                  final duplicates = await db.findCustomersByName(nameController.text.trim());
-                  if (duplicates.isNotEmpty) {
-                    setDialogState(() {
-                      nameError = 'يوجد زبون بنفس الاسم بالفعل';
-                    });
-                    return;
-                  }
-                }
-
-                double limit = isUnlimited ? -1 : (double.tryParse(limitController.text) ?? 100.0);
-
-                final userData = User(
-                  id: customer?.id,
-                  uuid: customer?.uuid ?? '',
-                  parentId: customer?.parentId ?? auth.currentUser?.getStoreManagerIdLocal(),
-                  username: customer?.username ?? 'cust_${DateTime.now().millisecondsSinceEpoch}',
-                  name: nameController.text.trim(),
-                  nickname: nicknameController.text.trim(),
-                  phone: phoneController.text.trim(),
-                  role: 'CUSTOMER',
-                  isPermanentCustomer: isPermanent ? 1 : 0,
-                  creditLimit: isPermanent ? limit : 0.0,
-                  balance: customer != null ? (double.tryParse(balanceController.text) ?? customer.balance) : 0.0,
-                  transferNames: transferNamesController.text.trim(),
-                  notes: notesController.text.trim(),
-                  createdAt: customer?.createdAt ?? DateTime.now().toIso8601String(),
-                );
-
-                if (customer == null) {
-                  await db.insertUser(userData, '123');
-                } else {
-                  await db.updateUser(userData, customer);
-                }
-                
-                if (mounted) {
-                  Navigator.pop(context);
-                  _loadCustomers();
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-              child: const Text('حفظ البيانات', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -294,7 +172,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'add_cust',
-        onPressed: () => _showAddOrEditCustomerDialog(),
+        onPressed: () async {
+          final saved = await showAddEditCustomerForm(context);
+          if (saved) _loadCustomers();
+        },
         backgroundColor: const Color(0xFF0F172A),
         icon: const Icon(Icons.person_add_alt_1_rounded, color: Colors.white, size: 20),
         label: const Text('إضافة زبون', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
@@ -519,7 +400,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         TextButton.icon(
-          onPressed: () => _showAddOrEditCustomerDialog(customer: customer),
+          onPressed: () async {
+            final saved = await showAddEditCustomerForm(context, customer: customer);
+            if (saved) _loadCustomers();
+          },
           icon: const Icon(Icons.edit_outlined, size: 14),
           label: const Text('تعديل', style: TextStyle(fontSize: 11)),
           style: TextButton.styleFrom(foregroundColor: Colors.orange, padding: const EdgeInsets.symmetric(horizontal: 8)),
@@ -607,7 +491,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
               )),
               DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
                 IconButton(icon: const Icon(Icons.info_outline, color: Colors.blue, size: 18), onPressed: () => _navigateToCustomerDetails(c)),
-                IconButton(icon: const Icon(Icons.edit_outlined, color: Colors.orange, size: 18), onPressed: () => _showAddOrEditCustomerDialog(customer: c)),
+                IconButton(icon: const Icon(Icons.edit_outlined, color: Colors.orange, size: 18), onPressed: () async {
+                  final saved = await showAddEditCustomerForm(context, customer: c);
+                  if (saved) _loadCustomers();
+                }),
                 IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18), onPressed: () => _deleteCustomer(c)),
               ])),
             ])).toList(),
@@ -631,26 +518,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
     Navigator.push(context, MaterialPageRoute(builder: (_) => CustomerDetailsScreen(customer: customer))).then((_) => _loadCustomers());
   }
 
-  Widget _buildDialogField(String label, TextEditingController controller, IconData icon, {bool isNumeric = false, int maxLines = 1, Function(String)? onChanged, bool obscure = false, String? errorText}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: TextField(
-        controller: controller,
-        maxLines: maxLines,
-        onChanged: onChanged,
-        obscureText: obscure,
-        keyboardType: isNumeric ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: Icon(icon, size: 20, color: Colors.blue),
-          filled: true,
-          fillColor: Colors.grey[50],
-          errorText: errorText,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-        ),
-      ),
-    );
-  }
 }
 
 class CustomerDetailsScreen extends StatefulWidget {
