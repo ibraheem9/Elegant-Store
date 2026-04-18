@@ -4,7 +4,14 @@ import 'package:crypto/crypto.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:pointycastle/export.dart';
+import 'package:pointycastle/asn1/asn1_parser.dart';
+import 'package:pointycastle/asn1/primitives/asn1_bit_string.dart';
+import 'package:pointycastle/asn1/primitives/asn1_integer.dart';
+import 'package:pointycastle/asn1/primitives/asn1_sequence.dart';
+import 'package:pointycastle/asymmetric/api.dart';
+import 'package:pointycastle/digests/sha256.dart';
+import 'package:pointycastle/signers/rsa_signer.dart';
+import 'package:pointycastle/api.dart' show PublicKeyParameter;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LicenseService
@@ -17,16 +24,16 @@ import 'package:pointycastle/export.dart';
 //   4. Persist the verified license in encrypted secure storage so the check
 //      survives app restarts without re-entry.
 //
-// License format (JSON, then Base64-encoded):
+// License format:
+//   Base64(JSON_payload) + "." + Base64(RSA_PKCS1v15_SHA256_signature)
+//
+// JSON payload:
 //   {
 //     "hardware_id": "<sha256 of device identifiers>",
 //     "customer":    "<customer name>",
 //     "issued_at":   "<ISO-8601 date>",
-//     "expires_at":  "<ISO-8601 date | null for perpetual>"
+//     "expires_at":  "<ISO-8601 date | empty string for perpetual>"
 //   }
-//
-// The license code the customer receives is:
-//   Base64(JSON_payload) + "." + Base64(RSA_signature_of_JSON_payload)
 // ─────────────────────────────────────────────────────────────────────────────
 
 enum LicenseStatus {
@@ -73,6 +80,7 @@ JQIDAQAB
   final _secureStorage = const FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
     iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+    wOptions: WindowsOptions(),
   );
 
   // ── Public API ─────────────────────────────────────────────────────────────
@@ -120,11 +128,8 @@ JQIDAQAB
         return const LicenseResult(status: LicenseStatus.invalidSignature);
       }
 
-      final payloadB64 = parts[0];
-      final sigB64 = parts[1];
-
-      final payloadBytes = base64Decode(_normalizeBase64(payloadB64));
-      final sigBytes = base64Decode(_normalizeBase64(sigB64));
+      final payloadBytes = base64Decode(_normalizeBase64(parts[0]));
+      final sigBytes = base64Decode(_normalizeBase64(parts[1]));
 
       // 2. Verify RSA-SHA256 signature
       if (!_verifySignature(payloadBytes, sigBytes)) {
@@ -179,28 +184,46 @@ JQIDAQAB
       signer.init(false, PublicKeyParameter<RSAPublicKey>(publicKey));
       final rsaSig = RSASignature(signature);
       return signer.verifySignature(payload, rsaSig);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('LicenseService _verifySignature error: $e');
       return false;
     }
   }
 
+  /// Parses an RSA public key from a PEM-encoded PKCS#8 SubjectPublicKeyInfo.
+  /// Compatible with pointycastle 3.9.x.
   RSAPublicKey _parsePublicKey(String pem) {
+    // Strip PEM headers/footers and decode base64
     final stripped = pem
         .replaceAll('-----BEGIN PUBLIC KEY-----', '')
         .replaceAll('-----END PUBLIC KEY-----', '')
         .replaceAll('\n', '')
+        .replaceAll('\r', '')
         .trim();
-    final derBytes = base64Decode(stripped);
-    final asn1Parser = ASN1Parser(Uint8List.fromList(derBytes));
-    final topSeq = asn1Parser.nextObject() as ASN1Sequence;
-    final bitString = topSeq.elements![1] as ASN1BitString;
-    final innerParser =
-        ASN1Parser(Uint8List.fromList(bitString.stringValues!));
+
+    final derBytes = Uint8List.fromList(base64Decode(stripped));
+
+    // Outer SEQUENCE: [ AlgorithmIdentifier, BIT STRING ]
+    final outerParser = ASN1Parser(derBytes);
+    final outerSeq = outerParser.nextObject() as ASN1Sequence;
+
+    // BIT STRING: valueBytes includes the unused-bits prefix byte (always 0x00)
+    // Skip the first byte to get the inner public key DER
+    final bitString = outerSeq.elements![1] as ASN1BitString;
+    final bitStringValueBytes = bitString.valueBytes!;
+    // The first byte of valueBytes is the unused-bits indicator (0x00 for keys)
+    final innerDer = Uint8List.fromList(
+      bitStringValueBytes.sublist(1),
+    );
+
+    // Inner SEQUENCE: [ modulus INTEGER, publicExponent INTEGER ]
+    final innerParser = ASN1Parser(innerDer);
     final innerSeq = innerParser.nextObject() as ASN1Sequence;
-    final modulus =
-        (innerSeq.elements![0] as ASN1Integer).integer!;
-    final exponent =
-        (innerSeq.elements![1] as ASN1Integer).integer!;
+
+    // ASN1Integer.integer is the BigInt property in pointycastle 3.9.x
+    final modulus = (innerSeq.elements![0] as ASN1Integer).integer!;
+    final exponent = (innerSeq.elements![1] as ASN1Integer).integer!;
+
     return RSAPublicKey(modulus, exponent);
   }
 
@@ -211,7 +234,7 @@ JQIDAQAB
     try {
       if (defaultTargetPlatform == TargetPlatform.android) {
         final info = await deviceInfo.androidInfo;
-        parts.add(info.id);           // Android hardware serial
+        parts.add(info.id);
         parts.add(info.brand);
         parts.add(info.model);
         parts.add(info.hardware);
@@ -244,7 +267,6 @@ JQIDAQAB
   }
 
   String _normalizeBase64(String s) {
-    // Add padding if needed
     final mod = s.length % 4;
     if (mod == 2) return '$s==';
     if (mod == 3) return '$s=';
