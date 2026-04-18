@@ -36,7 +36,8 @@ class DatabaseService {
       onCreate: (db, version) async {
         await _createTables(db);
         await _createTriggers(db);
-        await _seedInitialData(db);
+        // No seed data — fresh installs start with a completely empty database.
+        // All data is created by the user or pulled from the server via sync.
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -249,49 +250,7 @@ class DatabaseService {
     ''');
   }
 
-  Future<void> _seedInitialData(Database db) async {
-    final now = DateTime.now().toIso8601String();
-    final initialSaleMethods = [
-      {'name': 'نقدي (كاش)', 'type': 'cash', 'sort_order': 1},
-      {'name': 'تطبيق بنكي', 'type': 'app', 'sort_order': 2},
-      {'name': 'دين (أجل)', 'type': 'deferred', 'sort_order': 3},
-      {'name': 'غير مدفوع', 'type': 'unpaid', 'sort_order': 4},
-      {'name': 'رصيد المحفظة', 'type': 'credit_balance', 'sort_order': 5},
-    ];
-    for (var m in initialSaleMethods) {
-      await db.insert('payment_methods', {
-        'uuid': _uuid.v4(),
-        'name': m['name'],
-        'type': m['type'],
-        'category': 'SALE',
-        'sort_order': m['sort_order'],
-        'is_active': 1,
-        'version': 1,
-        'created_at': now,
-        'updated_at': now,
-        'is_synced': 0
-      });
-    }
-
-    final initialPurchaseMethods = [
-      {'name': 'كاش من الصندوق', 'type': 'cash', 'sort_order': 1},
-      {'name': 'دفع عبر التطبيق', 'type': 'app', 'sort_order': 2},
-    ];
-    for (var m in initialPurchaseMethods) {
-      await db.insert('payment_methods', {
-        'uuid': _uuid.v4(),
-        'name': m['name'],
-        'type': m['type'],
-        'category': 'PURCHASE',
-        'sort_order': m['sort_order'],
-        'is_active': 1,
-        'version': 1,
-        'created_at': now,
-        'updated_at': now,
-        'is_synced': 0
-      });
-    }
-  }
+  // _seedInitialData removed — fresh installs start with an empty database.
 
   // --- Methods ---
 
