@@ -184,7 +184,7 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 400,
-        mainAxisExtent: 220,
+        mainAxisExtent: 250,
         crossAxisSpacing: 20,
         mainAxisSpacing: 20,
       ),

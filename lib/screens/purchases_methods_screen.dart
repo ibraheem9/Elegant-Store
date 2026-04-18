@@ -71,6 +71,8 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
             ? 'تم تفعيل "${method.name}" — ستظهر في المشتريات'
             : 'تم إيقاف "${method.name}" — لن تظهر في المشتريات'),
         backgroundColor: updated.isActive == 1 ? Colors.green : Colors.orange,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -125,7 +127,7 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
                           gridDelegate:
                               SliverGridDelegateWithMaxCrossAxisExtent(
                             maxCrossAxisExtent: 400,
-                            mainAxisExtent: isMobile ? 190 : 210,
+                            mainAxisExtent: isMobile ? 250 : 270,
                             crossAxisSpacing: 20,
                             mainAxisSpacing: 20,
                           ),
@@ -226,6 +228,8 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: isDark ? Colors.white : const Color(0xFF0F172A)),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 4),
             Text(
@@ -438,6 +442,13 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
                 if (mounted) {
                   Navigator.pop(context);
                   _refreshMethods();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('تم الحذف بنجاح'),
+                      backgroundColor: Colors.orange,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
                 }
               },
               child: const Text('حذف',
