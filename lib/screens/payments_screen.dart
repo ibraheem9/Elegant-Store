@@ -537,8 +537,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
           return _buildInvoicesTable(displayed, isDark, isUnpaidTab,
               hasMore: hasMore,
               totalCount: invoices.length,
-              displayCount: displayCount,
-              isUnpaidTab: isUnpaidTab);
+              displayCount: displayCount);
         } else {
           return Column(
             children: [
@@ -574,7 +573,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   }
 
   Widget _buildInvoicesTable(List<Invoice> invoices, bool isDark, bool isUnpaidTab,
-      {bool hasMore = false, int totalCount = 0, int displayCount = 0, bool isUnpaidTab2 = false}) {
+      {bool hasMore = false, int totalCount = 0, int displayCount = 0}) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(32),
       child: Column(
