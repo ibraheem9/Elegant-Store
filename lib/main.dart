@@ -13,8 +13,10 @@ import 'services/auth_service.dart';
 import 'services/theme_service.dart';
 import 'services/notification_service.dart';
 import 'services/sync_service.dart';
+import 'services/license_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
+import 'screens/license_gate_screen.dart';
 import 'core/config/app_themes.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -98,6 +100,9 @@ void main() async {
     _initWorkmanager();
   }
 
+  // Check license before showing the app
+  final licenseResult = await LicenseService.instance.checkStoredLicense();
+
   runApp(
     MultiProvider(
       providers: [
@@ -106,7 +111,7 @@ void main() async {
         ChangeNotifierProvider<AuthService>(create: (_) => authService),
         ChangeNotifierProvider<ThemeNotifier>(create: (_) => ThemeNotifier()),
       ],
-      child: const ElegantStoreApp(),
+      child: ElegantStoreApp(isLicensed: licenseResult.isValid),
     ),
   );
 }
@@ -139,13 +144,27 @@ void _initWorkmanager() {
   });
 }
 
-class ElegantStoreApp extends StatelessWidget {
-  const ElegantStoreApp({Key? key}) : super(key: key);
+class ElegantStoreApp extends StatefulWidget {
+  final bool isLicensed;
+  const ElegantStoreApp({Key? key, required this.isLicensed}) : super(key: key);
+
+  @override
+  State<ElegantStoreApp> createState() => _ElegantStoreAppState();
+}
+
+class _ElegantStoreAppState extends State<ElegantStoreApp> {
+  late bool _isLicensed;
+
+  @override
+  void initState() {
+    super.initState();
+    _isLicensed = widget.isLicensed;
+  }
 
   @override
   Widget build(BuildContext context) {
     final themeNotifier = context.watch<ThemeNotifier>();
-    
+
     return MaterialApp(
       title: 'Elegant Store',
       navigatorKey: navigatorKey,
@@ -160,7 +179,11 @@ class ElegantStoreApp extends StatelessWidget {
       ],
       supportedLocales: const [Locale('ar', 'SA')],
       locale: const Locale('ar', 'SA'),
-      home: const _AppHome(),
+      home: _isLicensed
+          ? const _AppHome()
+          : LicenseGateScreen(
+              onLicenseActivated: () => setState(() => _isLicensed = true),
+            ),
     );
   }
 }
