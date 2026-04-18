@@ -528,11 +528,27 @@ class DatabaseService {
     });
   }
 
+  /// Returns only ACTIVE, non-deleted payment methods.
+  /// Use this for sales, invoices, and payment screens where only
+  /// usable methods should be offered to the user.
   Future<List<PaymentMethod>> getPaymentMethods({String? category}) async {
     final db = await database;
-    String where = 'is_active = 1 AND deleted_at IS NULL'; List<dynamic> args = [];
+    String where = 'is_active = 1 AND deleted_at IS NULL';
+    List<dynamic> args = [];
     if (category != null) { where += ' AND category = ?'; args.add(category); }
-    final r = await db.query('payment_methods', where: where, whereArgs: args, orderBy: 'sort_order ASC');
+    final r = await db.query('payment_methods', where: where, whereArgs: args.isEmpty ? null : args, orderBy: 'sort_order ASC');
+    return r.map((m) => PaymentMethod.fromMap(m)).toList();
+  }
+
+  /// Returns ALL non-deleted payment methods (active AND inactive).
+  /// Use this for management screens and purchases where the user
+  /// needs to see and manage every method, including deactivated ones.
+  Future<List<PaymentMethod>> getAllPaymentMethods({String? category}) async {
+    final db = await database;
+    String where = 'deleted_at IS NULL';
+    List<dynamic> args = [];
+    if (category != null) { where += ' AND category = ?'; args.add(category); }
+    final r = await db.query('payment_methods', where: where, whereArgs: args.isEmpty ? null : args, orderBy: 'sort_order ASC');
     return r.map((m) => PaymentMethod.fromMap(m)).toList();
   }
 
@@ -560,20 +576,19 @@ class DatabaseService {
     }, where: 'id = ?', whereArgs: [m.id]);
   }
 
+  /// Soft-deletes a payment method by setting deleted_at.
+  /// Does NOT change is_active — active/inactive state is independent
+  /// of whether the method has been deleted.
   Future<int> deletePaymentMethod(int id) async {
     final db = await database;
     final now = DateTime.now().toIso8601String();
     final existing = await db.query('payment_methods', where: 'id = ?', whereArgs: [id], limit: 1);
     int currentVersion = existing.isNotEmpty ? (existing.first['version'] as int? ?? 0) : 0;
-
-    // Set deleted_at so the soft-delete is included in the push payload and
-    // propagated to the server during the next sync.
     return await db.update('payment_methods', {
-      'is_active': 0,
       'deleted_at': now,
       'is_synced': 0,
       'version': currentVersion + 1,
-      'updated_at': now
+      'updated_at': now,
     }, where: 'id = ?', whereArgs: [id]);
   }
 

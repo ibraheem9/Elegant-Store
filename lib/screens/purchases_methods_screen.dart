@@ -7,7 +7,8 @@ class PurchasesMethodsScreen extends StatefulWidget {
   const PurchasesMethodsScreen({Key? key}) : super(key: key);
 
   @override
-  State<PurchasesMethodsScreen> createState() => _PurchasesMethodsScreenState();
+  State<PurchasesMethodsScreen> createState() =>
+      _PurchasesMethodsScreenState();
 }
 
 class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
@@ -33,7 +34,8 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
     setState(() => _isLoading = true);
     try {
       final db = context.read<DatabaseService>();
-      final m = await db.getPaymentMethods(category: 'PURCHASE');
+      // Management screen: show ALL non-deleted methods (active + inactive)
+      final m = await db.getAllPaymentMethods(category: 'PURCHASE');
       setState(() {
         _methods = m;
         _isLoading = false;
@@ -41,6 +43,36 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
     } catch (e) {
       setState(() => _isLoading = false);
     }
+  }
+
+  // ── Toggle active/inactive ─────────────────────────────────────────────
+
+  Future<void> _toggleActive(PaymentMethod method) async {
+    final db = context.read<DatabaseService>();
+    final updated = PaymentMethod(
+      id: method.id,
+      uuid: method.uuid,
+      storeManagerId: method.storeManagerId,
+      name: method.name,
+      type: method.type,
+      category: method.category,
+      description: method.description,
+      isActive: method.isActive == 1 ? 0 : 1,
+      sortOrder: method.sortOrder,
+      version: method.version,
+      createdAt: method.createdAt,
+      isSynced: 0,
+    );
+    await db.updatePaymentMethod(updated);
+    _refreshMethods();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(updated.isActive == 1
+            ? 'تم تفعيل "${method.name}" — ستظهر في المشتريات'
+            : 'تم إيقاف "${method.name}" — لن تظهر في المشتريات'),
+        backgroundColor: updated.isActive == 1 ? Colors.green : Colors.orange,
+      ),
+    );
   }
 
   @override
@@ -54,7 +86,8 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showMethodDialog(),
-        label: const Text('إضافة وسيلة دفع للمشتريات', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        label: const Text('إضافة وسيلة دفع للمشتريات',
+            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
         icon: const Icon(Icons.add_business_rounded, color: Colors.white),
         backgroundColor: Colors.orange[800],
       ),
@@ -65,32 +98,43 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
           children: [
             Text(
               'طرق دفع المشتريات',
-              style: TextStyle(fontSize: isMobile ? 24 : 32, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A)),
+              style: TextStyle(
+                  fontSize: isMobile ? 24 : 32,
+                  fontWeight: FontWeight.w900,
+                  color: isDark ? Colors.white : const Color(0xFF0F172A)),
             ),
             const SizedBox(height: 8),
             Text(
-              'إدارة الوسائل المستخدمة لدفع مستحقات الموردين والمصروفات العامة',
-              style: TextStyle(fontSize: isMobile ? 14 : 16, color: isDark ? Colors.white60 : const Color(0xFF64748B)),
+              'إدارة الوسائل المستخدمة لدفع مستحقات الموردين. الطرق غير الفعّالة لن تظهر عند تسجيل مشتريات جديدة.',
+              style: TextStyle(
+                  fontSize: isMobile ? 14 : 16,
+                  color: isDark ? Colors.white60 : const Color(0xFF64748B)),
             ),
             const SizedBox(height: 32),
             Expanded(
-              child: _isLoading 
-                ? const Center(child: CircularProgressIndicator())
-                : _methods.isEmpty 
-                  ? Center(child: Text('لا يوجد طرق دفع مشتريات مسجلة', style: TextStyle(color: isDark ? Colors.white30 : Colors.grey)))
-                  : GridView.builder(
-                      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 400,
-                        mainAxisExtent: isMobile ? 160 : 180,
-                        crossAxisSpacing: 20,
-                        mainAxisSpacing: 20,
-                      ),
-                      itemCount: _methods.length,
-                      itemBuilder: (context, index) {
-                        final method = _methods[index];
-                        return _buildMethodCard(method, isDark);
-                      },
-                    ),
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _methods.isEmpty
+                      ? Center(
+                          child: Text('لا يوجد طرق دفع مشتريات مسجلة',
+                              style: TextStyle(
+                                  color: isDark
+                                      ? Colors.white30
+                                      : Colors.grey)))
+                      : GridView.builder(
+                          gridDelegate:
+                              SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 400,
+                            mainAxisExtent: isMobile ? 190 : 210,
+                            crossAxisSpacing: 20,
+                            mainAxisSpacing: 20,
+                          ),
+                          itemCount: _methods.length,
+                          itemBuilder: (context, index) {
+                            final method = _methods[index];
+                            return _buildMethodCard(method, isDark);
+                          },
+                        ),
             ),
           ],
         ),
@@ -99,8 +143,8 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
   }
 
   Widget _buildMethodCard(PaymentMethod method, bool isDark) {
-    IconData icon;
-    Color color;
+    final IconData icon;
+    final Color color;
 
     if (method.type == 'cash') {
       icon = Icons.money_rounded;
@@ -110,58 +154,121 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
       color = Colors.blue;
     }
 
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF0F172A) : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
+    final bool isInactive = method.isActive != 1;
+
+    return Opacity(
+      opacity: isInactive ? 0.65 : 1.0,
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF0F172A) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isInactive
+                ? Colors.orange.withOpacity(0.5)
+                : (isDark
+                    ? const Color(0xFF1E293B)
+                    : const Color(0xFFE2E8F0)),
+            width: isInactive ? 1.5 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, size: 24, color: color),
                 ),
-                child: Icon(icon, size: 24, color: color),
-              ),
-              const Spacer(),
-              IconButton(
-                icon: Icon(Icons.edit_outlined, size: 20, color: isDark ? Colors.white60 : const Color(0xFF64748B)),
-                onPressed: () => _showMethodDialog(method: method),
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline_rounded, size: 20, color: Colors.redAccent),
-                onPressed: () => _confirmDelete(method),
-              ),
-            ],
-          ),
-          const Spacer(),
-          Text(
-            method.name,
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : const Color(0xFF0F172A)),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            method.type == 'cash' ? 'كاش (نقدي)' : 'تطبيق إلكتروني',
-            style: TextStyle(fontSize: 13, color: color, fontWeight: FontWeight.w600),
-          ),
-          if (method.description != null && method.description!.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                if (isInactive)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text('غير فعّال',
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.orange,
+                            fontWeight: FontWeight.bold)),
+                  ),
+                const Spacer(),
+                IconButton(
+                  icon: Icon(Icons.edit_outlined,
+                      size: 20,
+                      color: isDark
+                          ? Colors.white60
+                          : const Color(0xFF64748B)),
+                  onPressed: () => _showMethodDialog(method: method),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline_rounded,
+                      size: 20, color: Colors.redAccent),
+                  onPressed: () => _confirmDelete(method),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              method.name,
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : const Color(0xFF0F172A)),
+            ),
             const SizedBox(height: 4),
             Text(
-              method.description!,
-              style: TextStyle(fontSize: 12, color: isDark ? Colors.white30 : const Color(0xFF94A3B8)),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              method.type == 'cash' ? 'كاش (نقدي)' : 'تطبيق إلكتروني',
+              style: TextStyle(
+                  fontSize: 13, color: color, fontWeight: FontWeight.w600),
+            ),
+            if (method.description != null &&
+                method.description!.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                method.description!,
+                style: TextStyle(
+                    fontSize: 12,
+                    color: isDark
+                        ? Colors.white30
+                        : const Color(0xFF94A3B8)),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+            const Spacer(),
+            // Toggle active/inactive switch
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  isInactive ? 'إيقاف المشتريات' : 'فعّال في المشتريات',
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: isInactive ? Colors.orange : Colors.green,
+                      fontWeight: FontWeight.bold),
+                ),
+                Switch.adaptive(
+                  value: !isInactive,
+                  activeColor: Colors.green,
+                  inactiveThumbColor: Colors.orange,
+                  onChanged: (_) => _toggleActive(method),
+                ),
+              ],
             ),
           ],
-        ],
+        ),
       ),
     );
   }
@@ -184,8 +291,18 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
             backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: isDark ? const Color(0xFF1E293B) : Colors.transparent)),
-            title: Text(method == null ? 'إضافة وسيلة دفع للمشتريات' : 'تعديل وسيلة الدفع', style: TextStyle(color: isDark ? Colors.white : Colors.black)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(
+                    color: isDark
+                        ? const Color(0xFF1E293B)
+                        : Colors.transparent)),
+            title: Text(
+                method == null
+                    ? 'إضافة وسيلة دفع للمشتريات'
+                    : 'تعديل وسيلة الدفع',
+                style: TextStyle(
+                    color: isDark ? Colors.white : Colors.black)),
             content: SizedBox(
               width: 450,
               child: Form(
@@ -196,32 +313,52 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
                     children: [
                       TextFormField(
                         controller: _nameController,
-                        style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                        style: TextStyle(
+                            color: isDark ? Colors.white : Colors.black),
                         decoration: InputDecoration(
-                          labelText: 'اسم الوسيلة (مثلاً: كاش، تطبيق إبراهيم، ...)',
-                          labelStyle: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
+                          labelText:
+                              'اسم الوسيلة (مثلاً: كاش، تطبيق إبراهيم، ...)',
+                          labelStyle: TextStyle(
+                              color: isDark
+                                  ? Colors.white70
+                                  : Colors.black87),
                         ),
-                        validator: (v) => v == null || v.isEmpty ? 'مطلوب' : null,
+                        validator: (v) =>
+                            v == null || v.isEmpty ? 'مطلوب' : null,
                       ),
                       const SizedBox(height: 16),
                       DropdownButtonFormField<String>(
                         value: _selectedType,
-                        dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-                        style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                        dropdownColor:
+                            isDark ? const Color(0xFF1E293B) : Colors.white,
+                        style: TextStyle(
+                            color: isDark ? Colors.white : Colors.black),
                         decoration: InputDecoration(
                           labelText: 'نوع الوسيلة',
-                          labelStyle: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
+                          labelStyle: TextStyle(
+                              color: isDark
+                                  ? Colors.white70
+                                  : Colors.black87),
                         ),
-                        items: _types.map((t) => DropdownMenuItem(value: t['value'], child: Text(t['label']!))).toList(),
-                        onChanged: (v) => setDialogState(() => _selectedType = v!),
+                        items: _types
+                            .map((t) => DropdownMenuItem(
+                                value: t['value'],
+                                child: Text(t['label']!)))
+                            .toList(),
+                        onChanged: (v) =>
+                            setDialogState(() => _selectedType = v!),
                       ),
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: _descController,
-                        style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                        style: TextStyle(
+                            color: isDark ? Colors.white : Colors.black),
                         decoration: InputDecoration(
                           labelText: 'ملاحظات',
-                          labelStyle: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
+                          labelStyle: TextStyle(
+                              color: isDark
+                                  ? Colors.white70
+                                  : Colors.black87),
                         ),
                       ),
                     ],
@@ -230,7 +367,13 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: Text('إلغاء', style: TextStyle(color: isDark ? Colors.white60 : Colors.black54))),
+              TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('إلغاء',
+                      style: TextStyle(
+                          color: isDark
+                              ? Colors.white60
+                              : Colors.black54))),
               ElevatedButton(
                 onPressed: () async {
                   if (_formKey.currentState!.validate()) {
@@ -243,20 +386,20 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
                       description: _descController.text,
                       isActive: method?.isActive ?? 1,
                     );
-
                     if (method == null) {
                       await db.insertPaymentMethod(newMethod);
                     } else {
                       await db.updatePaymentMethod(newMethod);
                     }
-                    
                     if (mounted) {
                       Navigator.pop(context);
                       _refreshMethods();
                     }
                   }
                 },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], foregroundColor: Colors.white),
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange[800],
+                    foregroundColor: Colors.white),
                 child: const Text('حفظ'),
               ),
             ],
@@ -273,19 +416,32 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
         final isDark = Theme.of(context).brightness == Brightness.dark;
         return AlertDialog(
           backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
-          title: Text('تأكيد الحذف', style: TextStyle(color: isDark ? Colors.white : Colors.black)),
-          content: Text('هل أنت متأكد من حذف "${method.name}"؟', style: TextStyle(color: isDark ? Colors.white70 : Colors.black87)),
+          title: Text('تأكيد الحذف',
+              style: TextStyle(
+                  color: isDark ? Colors.white : Colors.black)),
+          content: Text('هل أنت متأكد من حذف "${method.name}"؟',
+              style: TextStyle(
+                  color: isDark ? Colors.white70 : Colors.black87)),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: Text('إلغاء', style: TextStyle(color: isDark ? Colors.white60 : Colors.black54))),
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('إلغاء',
+                    style: TextStyle(
+                        color: isDark
+                            ? Colors.white60
+                            : Colors.black54))),
             TextButton(
               onPressed: () async {
-                await context.read<DatabaseService>().deletePaymentMethod(method.id!);
+                await context
+                    .read<DatabaseService>()
+                    .deletePaymentMethod(method.id!);
                 if (mounted) {
                   Navigator.pop(context);
                   _refreshMethods();
                 }
               },
-              child: const Text('حذف', style: TextStyle(color: Colors.red)),
+              child: const Text('حذف',
+                  style: TextStyle(color: Colors.red)),
             ),
           ],
         );
