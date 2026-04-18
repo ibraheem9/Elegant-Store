@@ -1,13 +1,9 @@
-import 'dart:convert';
-import 'dart:io';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/database_service.dart';
 import '../services/auth_service.dart';
+import '../services/export_service.dart';
 import '../services/theme_service.dart';
 import '../services/notification_service.dart';
 import '../models/models.dart';
@@ -24,10 +20,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _usernameController = TextEditingController();
   final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
-  
+
   bool _notificationsEnabled = true;
   bool _biometricEnabled = false;
   bool _canCheckBiometrics = false;
+  bool _isExporting = false;
   TimeOfDay _notificationTime = const TimeOfDay(hour: 10, minute: 0);
 
   @override
@@ -40,7 +37,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final auth = context.read<AuthService>();
     _nameController.text = auth.currentUser?.name ?? '';
     _usernameController.text = auth.currentUser?.username ?? '';
-    
+
     final prefs = await SharedPreferences.getInstance();
     final canBio = await auth.canCheckBiometrics();
     final bioEnabled = await auth.isBiometricEnabled;
@@ -52,43 +49,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
       String? timeStr = prefs.getString('notification_time');
       if (timeStr != null) {
         final parts = timeStr.split(':');
-        _notificationTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+        _notificationTime = TimeOfDay(
+            hour: int.parse(parts[0]), minute: int.parse(parts[1]));
       }
     });
   }
 
   Future<void> _updateProfile() async {
     final auth = context.read<AuthService>();
-    final success = await auth.updateProfile(_nameController.text, _usernameController.text);
+    final success = await auth.updateProfile(
+        _nameController.text, _usernameController.text);
     if (success) {
       _showSnackBar('تم تحديث الملف الشخصي بنجاح', Colors.green);
     } else {
-      _showSnackBar('فشل تحديث الملف الشخصي. تأكد من الاتصال بالإنترنت.', Colors.red);
+      _showSnackBar(
+          'فشل تحديث الملف الشخصي. تأكد من الاتصال بالإنترنت.', Colors.red);
     }
   }
 
   Future<void> _changePassword() async {
-     if (_newPasswordController.text.length < 3) {
-       _showSnackBar('كلمة المرور قصيرة جداً', Colors.red);
-       return;
-     }
-     final auth = context.read<AuthService>();
-     final success = await auth.changePassword(_currentPasswordController.text, _newPasswordController.text);
-     if (success) {
-       _currentPasswordController.clear();
-       _newPasswordController.clear();
-       _showSnackBar('تم تغيير كلمة المرور بنجاح', Colors.green);
-     } else {
-       _showSnackBar('فشل تغيير كلمة المرور. تأكد من كلمة المرور الحالية والاتصال.', Colors.red);
-     }
+    if (_newPasswordController.text.length < 3) {
+      _showSnackBar('كلمة المرور قصيرة جداً', Colors.red);
+      return;
+    }
+    final auth = context.read<AuthService>();
+    final success = await auth.changePassword(
+        _currentPasswordController.text, _newPasswordController.text);
+    if (success) {
+      _currentPasswordController.clear();
+      _newPasswordController.clear();
+      _showSnackBar('تم تغيير كلمة المرور بنجاح', Colors.green);
+    } else {
+      _showSnackBar(
+          'فشل تغيير كلمة المرور. تأكد من كلمة المرور الحالية والاتصال.',
+          Colors.red);
+    }
   }
 
   Future<void> _saveNotificationSettings(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('notifications_enabled', enabled);
-    await prefs.setString('notification_time', "${_notificationTime.hour}:${_notificationTime.minute}");
+    await prefs.setString('notification_time',
+        "${_notificationTime.hour}:${_notificationTime.minute}");
     setState(() => _notificationsEnabled = enabled);
-    
+
     if (enabled) {
       NotificationService.scheduleDailyCheck(context.read<DatabaseService>());
     }
@@ -99,11 +103,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (enabled) {
       final LoginResult result = await auth.authenticateWithBiometrics();
       if (result == LoginResult.success) {
-         await auth.setBiometricEnabled(true);
-         setState(() => _biometricEnabled = true);
-         _showSnackBar('تم تفعيل الدخول بالبصمة بنجاح', Colors.green);
+        await auth.setBiometricEnabled(true);
+        setState(() => _biometricEnabled = true);
+        _showSnackBar('تم تفعيل الدخول بالبصمة بنجاح', Colors.green);
       } else {
-         _showSnackBar('فشل التحقق من البصمة. يرجى تسجيل الدخول أولاً.', Colors.red);
+        _showSnackBar(
+            'فشل التحقق من البصمة. يرجى تسجيل الدخول أولاً.', Colors.red);
       }
     } else {
       await auth.setBiometricEnabled(false);
@@ -111,9 +116,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  void _showSnackBar(String msg, Color color) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: color));
+  // ─────────────────────────────────────────────────────────────────────────
+  // EXPORT
+  // ─────────────────────────────────────────────────────────────────────────
+
+  Future<void> _exportData() async {
+    setState(() => _isExporting = true);
+    try {
+      final db = context.read<DatabaseService>();
+      final exportService = ExportService(db);
+      final filePath = await exportService.exportAndShare();
+      if (mounted) {
+        _showSnackBar(
+          'تم تصدير البيانات بنجاح ✓',
+          Colors.green,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnackBar('فشل التصدير: $e', Colors.red);
+      }
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
   }
+
+  void _showSnackBar(String msg, Color color) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(msg), backgroundColor: color));
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // BUILD
+  // ─────────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -131,19 +166,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'الإعدادات والتحكم', 
+              'الإعدادات والتحكم',
               style: TextStyle(
-                fontSize: isMobile ? 24 : 32, 
-                fontWeight: FontWeight.w900, 
-                color: isDark ? const Color(0xFFDCEFFF) : const Color(0xFF0F172A)
-              )
+                fontSize: isMobile ? 24 : 32,
+                fontWeight: FontWeight.w900,
+                color: isDark
+                    ? const Color(0xFFDCEFFF)
+                    : const Color(0xFF0F172A),
+              ),
             ),
             const SizedBox(height: 32),
 
+            // ── Profile ───────────────────────────────────────────────────
             _buildSection('الملف الشخصي', isDark, [
               _buildResponsiveInputs(isMobile, isDark, [
-                _buildTextField('الاسم الكامل', _nameController, Icons.person, isDark),
-                _buildTextField('اسم المستخدم', _usernameController, Icons.alternate_email, isDark),
+                _buildTextField('الاسم الكامل', _nameController,
+                    Icons.person, isDark),
+                _buildTextField('اسم المستخدم', _usernameController,
+                    Icons.alternate_email, isDark),
               ]),
               const SizedBox(height: 24),
               SizedBox(
@@ -153,18 +193,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF0B74FF),
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text('تحديث البيانات', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  child: const Text('تحديث البيانات',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold)),
                 ),
               ),
             ]),
 
             const SizedBox(height: 32),
+
+            // ── Change Password ───────────────────────────────────────────
             _buildSection('تغيير كلمة المرور', isDark, [
               _buildResponsiveInputs(isMobile, isDark, [
-                _buildTextField('كلمة المرور الحالية', _currentPasswordController, Icons.lock_outline, isDark, obscure: true),
-                _buildTextField('كلمة المرور الجديدة', _newPasswordController, Icons.lock_reset, isDark, obscure: true),
+                _buildTextField('كلمة المرور الحالية',
+                    _currentPasswordController, Icons.lock_outline, isDark,
+                    obscure: true),
+                _buildTextField('كلمة المرور الجديدة',
+                    _newPasswordController, Icons.lock_reset, isDark,
+                    obscure: true),
               ]),
               const SizedBox(height: 24),
               SizedBox(
@@ -174,61 +224,109 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.orange,
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text('تغيير كلمة المرور', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  child: const Text('تغيير كلمة المرور',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold)),
                 ),
               ),
             ]),
 
             const SizedBox(height: 32),
+
+            // ── Security ──────────────────────────────────────────────────
             _buildSection('الحماية والأمان', isDark, [
-               if (_canCheckBiometrics)
+              if (_canCheckBiometrics)
                 SwitchListTile(
-                  title: const Text('تفعيل الدخول ببصمة الإصبع', style: TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: const Text('استخدم البصمة لتسجيل الدخول السريع بدلاً من كلمة المرور'),
+                  title: const Text('تفعيل الدخول ببصمة الإصبع',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text(
+                      'استخدم البصمة لتسجيل الدخول السريع بدلاً من كلمة المرور'),
                   value: _biometricEnabled,
                   onChanged: _toggleBiometric,
                   activeColor: Colors.green,
-                  secondary: const Icon(Icons.fingerprint, color: Colors.green),
+                  secondary:
+                      const Icon(Icons.fingerprint, color: Colors.green),
                 )
-               else
-                 const ListTile(
-                   title: Text('البصمة غير مدعومة'),
-                   subtitle: Text('جهازك لا يدعم المصادقة الحيوية أو لم يتم إعدادها'),
-                   leading: Icon(Icons.fingerprint, color: Colors.grey),
-                 ),
+              else
+                const ListTile(
+                  title: Text('البصمة غير مدعومة'),
+                  subtitle: Text(
+                      'جهازك لا يدعم المصادقة الحيوية أو لم يتم إعدادها'),
+                  leading: Icon(Icons.fingerprint, color: Colors.grey),
+                ),
             ]),
 
             const SizedBox(height: 32),
+
+            // ── System & Notifications ────────────────────────────────────
             _buildSection('النظام والتنبيهات', isDark, [
               SwitchListTile(
                 title: Text(
-                  'الوضع الداكن (Dark Mode)', 
-                  style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)
+                  'الوضع الداكن (Dark Mode)',
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black),
                 ),
                 value: isDark,
                 onChanged: (val) => themeNotifier.toggleTheme(val),
-                secondary: Icon(Icons.dark_mode, color: isDark ? const Color(0xFF00E5FF) : Colors.grey),
+                secondary: Icon(Icons.dark_mode,
+                    color: isDark
+                        ? const Color(0xFF00E5FF)
+                        : Colors.grey),
               ),
               const Divider(),
               SwitchListTile(
-                title: const Text('تفعيل تنبيهات الديون والتحصيل', style: TextStyle(fontWeight: FontWeight.bold)),
+                title: const Text('تفعيل تنبيهات الديون والتحصيل',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
                 value: _notificationsEnabled,
                 onChanged: _saveNotificationSettings,
                 activeColor: const Color(0xFF0B74FF),
               ),
             ]),
 
+            const SizedBox(height: 32),
+
+            // ── Data Export ───────────────────────────────────────────────
+            _buildSection('تصدير البيانات', isDark, [
+              ListTile(
+                leading: _isExporting
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.download_rounded,
+                        color: Color(0xFF0B74FF), size: 28),
+                title: const Text(
+                  'تصدير قاعدة البيانات (JSON)',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: const Text(
+                  'تصدير جميع البيانات (مستخدمون، فواتير، معاملات، مشتريات، إحصائيات) كملف JSON مترابط يمكن استخدامه لاستعادة أي قاعدة بيانات.',
+                ),
+                onTap: _isExporting ? null : _exportData,
+              ),
+            ]),
+
+            // ── Developer Tools ───────────────────────────────────────────
             if (auth.isDeveloper()) ...[
               const SizedBox(height: 32),
               _buildSection('إدارة متقدمة (للمطور)', isDark, [
                 ListTile(
-                  title: const Text('إعادة ضبط حالة المزامنة', style: TextStyle(fontWeight: FontWeight.bold)),
-                  leading: const Icon(Icons.sync_problem, color: Colors.blue),
+                  title: const Text('إعادة ضبط حالة المزامنة',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  leading:
+                      const Icon(Icons.sync_problem, color: Colors.blue),
                   onTap: () async {
-                    await context.read<DatabaseService>().resetSyncStatus();
-                    _showSnackBar('تمت إعادة ضبط المزامنة', Colors.blue);
+                    await context
+                        .read<DatabaseService>()
+                        .resetSyncStatus();
+                    _showSnackBar(
+                        'تمت إعادة ضبط المزامنة', Colors.blue);
                   },
                 ),
               ]),
@@ -239,7 +337,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: TextButton.icon(
                 onPressed: () => auth.logout(),
                 icon: const Icon(Icons.logout, color: Colors.red),
-                label: const Text('تسجيل الخروج', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 18)),
+                label: const Text('تسجيل الخروج',
+                    style: TextStyle(
+                        color: Colors.red,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18)),
               ),
             ),
             const SizedBox(height: 64),
@@ -249,31 +351,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildResponsiveInputs(bool isMobile, bool isDark, List<Widget> children) {
+  // ─────────────────────────────────────────────────────────────────────────
+  // HELPERS
+  // ─────────────────────────────────────────────────────────────────────────
+
+  Widget _buildResponsiveInputs(
+      bool isMobile, bool isDark, List<Widget> children) {
     if (isMobile) {
       return Column(
-        children: children.expand((w) => [w, const SizedBox(height: 16)]).toList()..removeLast(),
+        children: children
+            .expand((w) => [w, const SizedBox(height: 16)])
+            .toList()
+          ..removeLast(),
       );
     }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: children.expand((w) => [Expanded(child: w), const SizedBox(width: 16)]).toList()..removeLast(),
+      children: children
+          .expand(
+              (w) => [Expanded(child: w), const SizedBox(width: 16)])
+          .toList()
+        ..removeLast(),
     );
   }
 
-  Widget _buildSection(String title, bool isDark, List<Widget> children) {
+  Widget _buildSection(
+      String title, bool isDark, List<Widget> children) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF0F172A) : Colors.white, 
-        borderRadius: BorderRadius.circular(24), 
-        border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0))
+        color: isDark ? const Color(0xFF0F172A) : Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+            color: isDark
+                ? const Color(0xFF1E293B)
+                : const Color(0xFFE2E8F0)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0B74FF))),
+          Text(title,
+              style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0B74FF))),
           const SizedBox(height: 24),
           ...children,
         ],
@@ -281,21 +403,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildTextField(String label, TextEditingController controller, IconData icon, bool isDark, {bool obscure = false}) {
+  Widget _buildTextField(String label, TextEditingController controller,
+      IconData icon, bool isDark,
+      {bool obscure = false}) {
     return TextField(
       controller: controller,
       obscureText: obscure,
       style: TextStyle(color: isDark ? Colors.white : Colors.black),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: isDark ? Colors.grey : Colors.black54),
+        labelStyle:
+            TextStyle(color: isDark ? Colors.grey : Colors.black54),
         prefixIcon: Icon(icon, color: const Color(0xFF0B74FF)),
         filled: true,
-        fillColor: isDark ? const Color(0xFF071028) : Colors.transparent,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        fillColor:
+            isDark ? const Color(0xFF071028) : Colors.transparent,
+        border:
+            OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+          borderSide: BorderSide(
+              color: isDark
+                  ? const Color(0xFF1E293B)
+                  : const Color(0xFFE2E8F0)),
         ),
       ),
     );
