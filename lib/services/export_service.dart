@@ -220,13 +220,13 @@ class ExportService {
   }
 
   Future<void> _shareFile(String filePath) async {
+    // share_plus v10 API: Share.shareXFiles (static method)
+    // Note: SharePlus.instance.share / ShareParams are only available in v11+
     final XFile xFile = XFile(filePath, mimeType: 'application/json');
-    await SharePlus.instance.share(
-      ShareParams(
-        files: [xFile],
-        subject: 'Elegant Store — Database Export',
-        text: 'ملف تصدير قاعدة بيانات متجر Elegant Store',
-      ),
+    await Share.shareXFiles(
+      [xFile],
+      subject: 'Elegant Store — Database Export',
+      text: 'ملف تصدير قاعدة بيانات متجر Elegant Store',
     );
   }
 }
