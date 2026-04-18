@@ -23,6 +23,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
   String _sortBy = "name"; // name, balance, createdAt, permanent
   bool _isAscending = true;
 
+  // Pagination
+  static const int _pageSize = 20;
+  int _displayCount = _pageSize;
+
   @override
   void initState() {
     super.initState();
@@ -95,7 +99,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
             (c.phone != null && c.phone!.contains(query)) ||
             (c.transferNames != null && db.normalizeArabic(c.transferNames!).contains(searchNormalized)))
           .toList();
-      _applySort(); 
+      _applySort();
+      _displayCount = _pageSize; // Reset pagination on search
     });
   }
 
@@ -296,16 +301,43 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
   Widget _buildCustomerGrid(Size size, bool isDark) {
     int crossAxisCount = (size.width > 1400) ? 4 : (size.width > 1000 ? 3 : (size.width > 650 ? 2 : 1));
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: crossAxisCount,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        mainAxisExtent: 175,
-      ),
-      itemCount: _filteredCustomers.length,
-      itemBuilder: (context, index) => _buildCustomerCard(_filteredCustomers[index], isDark),
+    final displayed = _filteredCustomers.take(_displayCount).toList();
+    final hasMore = _filteredCustomers.length > _displayCount;
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          sliver: SliverGrid(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _buildCustomerCard(displayed[index], isDark),
+              childCount: displayed.length,
+            ),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+              mainAxisExtent: 175,
+            ),
+          ),
+        ),
+        if (hasMore)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: TextButton.icon(
+                  onPressed: () => setState(() => _displayCount += _pageSize),
+                  icon: const Icon(Icons.expand_more_rounded, color: Colors.blue),
+                  label: Text(
+                    'تحميل المزيد (متبقي ${_filteredCustomers.length - _displayCount})',
+                    style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        const SliverToBoxAdapter(child: SizedBox(height: 100)),
+      ],
     );
   }
 
@@ -420,39 +452,43 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
   Widget _buildCustomerTable(Size size, bool isDark) {
     bool isCompact = size.width < 1000;
+    final displayed = _filteredCustomers.take(_displayCount).toList();
+    final hasMore = _filteredCustomers.length > _displayCount;
 
     return SingleChildScrollView(
       scrollDirection: Axis.vertical, 
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Container(
-          constraints: BoxConstraints(minWidth: size.width - 64),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF0F172A) : Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
-          ),
-          child: DataTable(
-            sortColumnIndex: _getSortColumnIndex(),
-            sortAscending: _isAscending,
-            columnSpacing: isCompact ? 12 : 24,
-            horizontalMargin: 16,
-            dataRowMaxHeight: 80, 
-            dataRowMinHeight: 60,
-            headingRowColor: MaterialStateProperty.all(isDark ? const Color(0xFF1E293B) : Colors.grey[50]),
-            columns: [
-              DataColumn(
-                label: const Text('معلومات الزبون', style: TextStyle(fontWeight: FontWeight.bold)),
-                onSort: (_, __) => _onSort('name'),
+      child: Column(
+        children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Container(
+              constraints: BoxConstraints(minWidth: size.width - 64),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
               ),
-              DataColumn(
-                label: const Text('الحساب', style: TextStyle(fontWeight: FontWeight.bold)),
-                onSort: (_, __) => _onSort('balance'),
-              ),
-              const DataColumn(label: Text('الإجراءات', style: TextStyle(fontWeight: FontWeight.bold))),
-            ],
-            rows: _filteredCustomers.map((c) => DataRow(cells: [
+              child: DataTable(
+                sortColumnIndex: _getSortColumnIndex(),
+                sortAscending: _isAscending,
+                columnSpacing: isCompact ? 12 : 24,
+                horizontalMargin: 16,
+                dataRowMaxHeight: 80, 
+                dataRowMinHeight: 60,
+                headingRowColor: MaterialStateProperty.all(isDark ? const Color(0xFF1E293B) : Colors.grey[50]),
+                columns: [
+                  DataColumn(
+                    label: const Text('معلومات الزبون', style: TextStyle(fontWeight: FontWeight.bold)),
+                    onSort: (_, __) => _onSort('name'),
+                  ),
+                  DataColumn(
+                    label: const Text('الحساب', style: TextStyle(fontWeight: FontWeight.bold)),
+                    onSort: (_, __) => _onSort('balance'),
+                  ),
+                  const DataColumn(label: Text('الإجراءات', style: TextStyle(fontWeight: FontWeight.bold))),
+                ],
+                rows: displayed.map((c) => DataRow(cells: [
               DataCell(Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8.0),
                 child: Column(
@@ -498,8 +534,22 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18), onPressed: () => _deleteCustomer(c)),
               ])),
             ])).toList(),
+              ),
+            ),
           ),
-        ),
+          if (hasMore)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: TextButton.icon(
+                onPressed: () => setState(() => _displayCount += _pageSize),
+                icon: const Icon(Icons.expand_more_rounded, color: Colors.blue),
+                label: Text(
+                  'تحميل المزيد (متبقي ${_filteredCustomers.length - _displayCount})',
+                  style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -532,6 +582,10 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   bool _isLoading = true;
   late User _currentCustomer;
   double _calculatedBalance = 0.0;
+
+  // Pagination for invoices list
+  static const int _invoicePageSize = 20;
+  int _invoiceDisplayCount = _invoicePageSize;
 
   @override
   void initState() {
@@ -758,13 +812,17 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     if (_invoices.isEmpty) return Center(child: Text('لا توجد فواتير مسجلة', style: TextStyle(color: isDark ? Colors.white30 : Colors.grey)));
     
     final sortedInvoices = List<Invoice>.from(_invoices)..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final displayed = sortedInvoices.take(_invoiceDisplayCount).toList();
+    final hasMore = sortedInvoices.length > _invoiceDisplayCount;
 
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: sortedInvoices.length,
-      itemBuilder: (context, index) {
-        final inv = sortedInvoices[index];
+    return Column(
+      children: [
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: displayed.length,
+          itemBuilder: (context, index) {
+        final inv = displayed[index];
         bool isPaid = inv.paymentStatus == 'PAID' || inv.paymentStatus == 'paid';
         bool isPartial = inv.paymentStatus == 'PARTIAL';
         bool isDeposit = inv.type == 'DEPOSIT';
@@ -848,7 +906,21 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
             ],
           ),
         );
-      },
+          },
+        ),
+        if (hasMore)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: TextButton.icon(
+              onPressed: () => setState(() => _invoiceDisplayCount += _invoicePageSize),
+              icon: const Icon(Icons.expand_more_rounded, color: Colors.blue),
+              label: Text(
+                'تحميل المزيد (متبقي ${sortedInvoices.length - _invoiceDisplayCount})',
+                style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

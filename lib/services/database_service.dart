@@ -267,6 +267,186 @@ class DatabaseService {
     return r.map((m) => User.fromMap(m)).toList();
   }
 
+  // ── Paginated customers ──────────────────────────────────────────────────
+
+  /// Returns [pageSize] customers starting at [offset], filtered by [query].
+  Future<List<User>> getCustomersPaged({
+    int offset = 0,
+    int pageSize = 20,
+    String query = '',
+  }) async {
+    final db = await database;
+    final q = normalizeArabic(query.trim());
+    if (q.isEmpty) {
+      final r = await db.query(
+        'users',
+        where: "role = 'CUSTOMER' AND deleted_at IS NULL",
+        orderBy: 'name ASC',
+        limit: pageSize,
+        offset: offset,
+      );
+      return r.map((m) => User.fromMap(m)).toList();
+    }
+    final like = '%$q%';
+    final r = await db.rawQuery(
+      '''
+      SELECT * FROM users
+      WHERE role = 'CUSTOMER' AND deleted_at IS NULL
+        AND (
+          REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(name,
+            'أ','ا'),'إ','ا'),'آ','ا'),'ة','ه'),'ى','ي'),'ئ','ي'),'ؤ','و'),'ء','') LIKE ?
+          OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(nickname,''),
+            'أ','ا'),'إ','ا'),'آ','ا'),'ة','ه'),'ى','ي'),'ئ','ي'),'ؤ','و'),'ء','') LIKE ?
+          OR COALESCE(phone,'') LIKE ?
+          OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(transfer_names,''),
+            'أ','ا'),'إ','ا'),'آ','ا'),'ة','ه'),'ى','ي'),'ئ','ي'),'ؤ','و'),'ء','') LIKE ?
+        )
+      ORDER BY name ASC
+      LIMIT ? OFFSET ?
+      ''',
+      [like, like, like, like, pageSize, offset],
+    );
+    return r.map((m) => User.fromMap(m)).toList();
+  }
+
+  /// Total count of customers matching [query] — used to know when to stop loading.
+  Future<int> getCustomersCount({String query = ''}) async {
+    final db = await database;
+    final q = normalizeArabic(query.trim());
+    if (q.isEmpty) {
+      final r = await db.rawQuery(
+        "SELECT COUNT(*) as cnt FROM users WHERE role = 'CUSTOMER' AND deleted_at IS NULL",
+      );
+      return Sqflite.firstIntValue(r) ?? 0;
+    }
+    final like = '%$q%';
+    final r = await db.rawQuery(
+      '''
+      SELECT COUNT(*) as cnt FROM users
+      WHERE role = 'CUSTOMER' AND deleted_at IS NULL
+        AND (
+          REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(name,
+            'أ','ا'),'إ','ا'),'آ','ا'),'ة','ه'),'ى','ي'),'ئ','ي'),'ؤ','و'),'ء','') LIKE ?
+          OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(nickname,''),
+            'أ','ا'),'إ','ا'),'آ','ا'),'ة','ه'),'ى','ي'),'ئ','ي'),'ؤ','و'),'ء','') LIKE ?
+          OR COALESCE(phone,'') LIKE ?
+          OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(transfer_names,''),
+            'أ','ا'),'إ','ا'),'آ','ا'),'ة','ه'),'ى','ي'),'ئ','ي'),'ؤ','و'),'ء','') LIKE ?
+        )
+      ''',
+      [like, like, like, like],
+    );
+    return Sqflite.firstIntValue(r) ?? 0;
+  }
+
+  // ── Paginated customer invoices ───────────────────────────────────────────
+
+  /// Returns [pageSize] invoices for a customer starting at [offset].
+  Future<List<Invoice>> getCustomerInvoicesPaged(
+    int userId, {
+    int offset = 0,
+    int pageSize = 20,
+  }) async {
+    final db = await database;
+    final r = await db.rawQuery(
+      '''
+      SELECT i.*, u.name as customer_name, pm.name as method_name
+      FROM invoices i
+      JOIN users u ON i.user_id = u.id
+      LEFT JOIN payment_methods pm ON i.payment_method_id = pm.id
+      WHERE i.user_id = ? AND i.deleted_at IS NULL
+      ORDER BY i.created_at DESC
+      LIMIT ? OFFSET ?
+      ''',
+      [userId, pageSize, offset],
+    );
+    return r.map((m) => Invoice.fromMap(m)).toList();
+  }
+
+  /// Total invoice count for a customer.
+  Future<int> getCustomerInvoicesCount(int userId) async {
+    final db = await database;
+    final r = await db.rawQuery(
+      'SELECT COUNT(*) as cnt FROM invoices WHERE user_id = ? AND deleted_at IS NULL',
+      [userId],
+    );
+    return Sqflite.firstIntValue(r) ?? 0;
+  }
+
+  // ── Paginated paid invoices (payments review screen) ─────────────────────
+
+  /// Returns [pageSize] paid/partial invoices starting at [offset].
+  /// Optionally filters by [methodId] and date range.
+  Future<List<Invoice>> getPaidInvoicesPaged({
+    int offset = 0,
+    int pageSize = 20,
+    int? methodId,
+    DateTime? start,
+    DateTime? end,
+  }) async {
+    final db = await database;
+    String where =
+        "i.deleted_at IS NULL AND (i.payment_status = 'PAID' OR i.payment_status = 'paid' OR i.payment_status = 'PARTIAL') AND i.type != 'WITHDRAWAL'";
+    final List<dynamic> args = [];
+    if (methodId != null) {
+      where += ' AND i.payment_method_id = ?';
+      args.add(methodId);
+    }
+    if (start != null) {
+      where += ' AND i.created_at >= ?';
+      args.add(start.toIso8601String());
+    }
+    if (end != null) {
+      where += ' AND i.created_at <= ?';
+      args.add(end.toIso8601String());
+    }
+    args.addAll([pageSize, offset]);
+    final r = await db.rawQuery(
+      '''
+      SELECT i.*, u.name as customer_name, u.nickname as customer_nickname,
+             u.is_permanent_customer as customer_is_permanent,
+             pm.name as method_name
+      FROM invoices i
+      JOIN users u ON i.user_id = u.id
+      LEFT JOIN payment_methods pm ON i.payment_method_id = pm.id
+      WHERE $where
+      ORDER BY i.created_at DESC
+      LIMIT ? OFFSET ?
+      ''',
+      args,
+    );
+    return r.map((m) => Invoice.fromMap(m)).toList();
+  }
+
+  /// Total count of paid invoices matching the given filters.
+  Future<int> getPaidInvoicesCount({
+    int? methodId,
+    DateTime? start,
+    DateTime? end,
+  }) async {
+    final db = await database;
+    String where =
+        "deleted_at IS NULL AND (payment_status = 'PAID' OR payment_status = 'paid' OR payment_status = 'PARTIAL') AND type != 'WITHDRAWAL'";
+    final List<dynamic> args = [];
+    if (methodId != null) {
+      where += ' AND payment_method_id = ?';
+      args.add(methodId);
+    }
+    if (start != null) {
+      where += ' AND created_at >= ?';
+      args.add(start.toIso8601String());
+    }
+    if (end != null) {
+      where += ' AND created_at <= ?';
+      args.add(end.toIso8601String());
+    }
+    final r = await db.rawQuery(
+      'SELECT COUNT(*) as cnt FROM invoices WHERE $where',
+      args,
+    );
+    return Sqflite.firstIntValue(r) ?? 0;
+  }
+
   Future<List<User>> getAccountants() async {
     final db = await database;
     final r = await db.query('users', where: "role = 'ACCOUNTANT' AND deleted_at IS NULL");

@@ -29,6 +29,11 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   bool _isAscending = false;
   int? _selectedMethodId; // null = show all, non-null = filter by method
 
+  // Pagination
+  static const int _pageSize = 20;
+  int _paidDisplayCount = _pageSize;
+  int _unpaidDisplayCount = _pageSize;
+
   @override
   void initState() {
     super.initState();
@@ -60,7 +65,11 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   }
 
   Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _paidDisplayCount = _pageSize;
+      _unpaidDisplayCount = _pageSize;
+    });
     try {
       final db = context.read<DatabaseService>();
       final rawMethods = await db.getPaymentMethods(category: 'SALE');
@@ -518,51 +527,98 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
       return Center(child: Text(isUnpaidTab ? 'لا توجد فواتير معلقة' : 'لا توجد فواتير مدفوعة في هذه الفترة'));
     }
 
+    final displayCount = isUnpaidTab ? _unpaidDisplayCount : _paidDisplayCount;
+    final displayed = invoices.take(displayCount).toList();
+    final hasMore = invoices.length > displayCount;
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        // threshold for table view: if we have enough width to show a decent table
         if (constraints.maxWidth > 950) {
-          return _buildInvoicesTable(invoices, isDark, isUnpaidTab);
+          return _buildInvoicesTable(displayed, isDark, isUnpaidTab,
+              hasMore: hasMore,
+              totalCount: invoices.length,
+              displayCount: displayCount,
+              isUnpaidTab: isUnpaidTab);
         } else {
-          return ListView.builder(
-            padding: EdgeInsets.all(isMobile ? 16 : 32),
-            itemCount: invoices.length,
-            itemBuilder: (context, index) {
-              final inv = invoices[index];
-              return _buildInvoiceCard(inv, isDark, isUnpaidTab, isMobile);
-            },
+          return Column(
+            children: [
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: EdgeInsets.all(isMobile ? 16 : 32),
+                itemCount: displayed.length,
+                itemBuilder: (context, index) {
+                  return _buildInvoiceCard(displayed[index], isDark, isUnpaidTab, isMobile);
+                },
+              ),
+              if (hasMore)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: TextButton.icon(
+                    onPressed: () => setState(() {
+                      if (isUnpaidTab) _unpaidDisplayCount += _pageSize;
+                      else _paidDisplayCount += _pageSize;
+                    }),
+                    icon: const Icon(Icons.expand_more_rounded, color: Colors.blue),
+                    label: Text(
+                      'تحميل المزيد (متبقي ${invoices.length - displayCount})',
+                      style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+            ],
           );
         }
       }
     );
   }
 
-  Widget _buildInvoicesTable(List<Invoice> invoices, bool isDark, bool isUnpaidTab) {
+  Widget _buildInvoicesTable(List<Invoice> invoices, bool isDark, bool isUnpaidTab,
+      {bool hasMore = false, int totalCount = 0, int displayCount = 0, bool isUnpaidTab2 = false}) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(32),
-      child: Container(
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF0F172A) : Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: DataTable(
-            headingRowColor: MaterialStateProperty.all(isDark ? const Color(0xFF1E293B) : Colors.grey[50]),
-            dataRowHeight: 80,
-            columnSpacing: 24,
-            columns: [
-              const DataColumn(label: Text('الوقت والتاريخ', style: TextStyle(fontWeight: FontWeight.bold))),
-              const DataColumn(label: Text('المشتري', style: TextStyle(fontWeight: FontWeight.bold))),
-              const DataColumn(label: Text('المبلغ', style: TextStyle(fontWeight: FontWeight.bold))),
-              const DataColumn(label: Text('طريقة الدفع', style: TextStyle(fontWeight: FontWeight.bold))),
-              const DataColumn(label: Text('النوع/الحالة', style: TextStyle(fontWeight: FontWeight.bold))),
-              if (isUnpaidTab) const DataColumn(label: Text('إجراءات التسوية', style: TextStyle(fontWeight: FontWeight.bold))),
-            ],
-            rows: invoices.map((inv) => _buildInvoiceDataRow(inv, isDark, isUnpaidTab)).toList(),
+      child: Column(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF0F172A) : Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: DataTable(
+                headingRowColor: MaterialStateProperty.all(isDark ? const Color(0xFF1E293B) : Colors.grey[50]),
+                dataRowHeight: 80,
+                columnSpacing: 24,
+                columns: [
+                  const DataColumn(label: Text('الوقت والتاريخ', style: TextStyle(fontWeight: FontWeight.bold))),
+                  const DataColumn(label: Text('المشتري', style: TextStyle(fontWeight: FontWeight.bold))),
+                  const DataColumn(label: Text('المبلغ', style: TextStyle(fontWeight: FontWeight.bold))),
+                  const DataColumn(label: Text('طريقة الدفع', style: TextStyle(fontWeight: FontWeight.bold))),
+                  const DataColumn(label: Text('النوع/الحالة', style: TextStyle(fontWeight: FontWeight.bold))),
+                  if (isUnpaidTab) const DataColumn(label: Text('إجراءات التسوية', style: TextStyle(fontWeight: FontWeight.bold))),
+                ],
+                rows: invoices.map((inv) => _buildInvoiceDataRow(inv, isDark, isUnpaidTab)).toList(),
+              ),
+            ),
           ),
-        ),
+          if (hasMore)
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: TextButton.icon(
+                onPressed: () => setState(() {
+                  if (isUnpaidTab) _unpaidDisplayCount += _pageSize;
+                  else _paidDisplayCount += _pageSize;
+                }),
+                icon: const Icon(Icons.expand_more_rounded, color: Colors.blue),
+                label: Text(
+                  'تحميل المزيد (متبقي ${totalCount - displayCount})',
+                  style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

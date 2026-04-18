@@ -49,6 +49,10 @@ class _SalesScreenState extends State<SalesScreen> {
   bool _isLoading = false;
   bool _isDataLoading = true;
 
+  // ── Invoice table pagination ─────────────────────────────────────────────
+  static const int _invoicePageSize = 20;
+  int _invoiceDisplayCount = _invoicePageSize;
+
   @override
   void initState() {
     super.initState();
@@ -141,6 +145,8 @@ class _SalesScreenState extends State<SalesScreen> {
         return matchesName || matchesAmount || matchesMethod;
       }).toList();
       _applySort();
+      // Reset pagination when filter changes
+      _invoiceDisplayCount = _invoicePageSize;
     });
   }
 
@@ -948,108 +954,128 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Widget _buildInvoiceCards(bool isDark) {
-    if (_filteredInvoices.isEmpty) return const Center(child: Padding(padding: EdgeInsets.all(32), child: Text('لا يوجد نتائج')));
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: _filteredInvoices.length,
-      itemBuilder: (context, index) {
-        final inv = _filteredInvoices[index];
-        bool isDeposit = inv.type == 'DEPOSIT';
-        bool isWithdrawal = inv.type == 'WITHDRAWAL';
-        Color cardColor = isDeposit
-            ? Colors.green.withOpacity(0.1)
-            : isWithdrawal
-                ? Colors.orange.withOpacity(0.08)
-                : (isDark ? const Color(0xFF0F172A) : Colors.white);
-        Color borderColor = isDeposit
-            ? Colors.green.withOpacity(0.3)
-            : isWithdrawal
-                ? Colors.orange.withOpacity(0.4)
-                : (isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0));
-        Color nameColor = isDeposit ? Colors.green[800]! : isWithdrawal ? Colors.orange[800]! : Colors.blue;
-
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: cardColor,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: borderColor, width: (isDeposit || isWithdrawal) ? 2 : 1),
+    if (_filteredInvoices.isEmpty) {
+      return const Center(child: Padding(padding: EdgeInsets.all(32), child: Text('لا يوجد نتائج')));
+    }
+    final displayedInvoices = _filteredInvoices.take(_invoiceDisplayCount).toList();
+    final hasMore = _filteredInvoices.length > _invoiceDisplayCount;
+    return Column(
+      children: [
+        ...displayedInvoices.map((inv) => _buildSingleInvoiceCard(inv, isDark)),
+        if (hasMore)
+          Padding(
+            padding: const EdgeInsets.only(top: 12, bottom: 8),
+            child: TextButton.icon(
+              onPressed: () => setState(() => _invoiceDisplayCount += _invoicePageSize),
+              icon: const Icon(Icons.expand_more_rounded, color: Colors.blue),
+              label: Text(
+                'تحميل المزيد (متبقي ${_filteredInvoices.length - _invoiceDisplayCount})',
+                style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+              ),
+            ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      ],
+    );
+  }
+
+  Widget _buildSingleInvoiceCard(Invoice inv, bool isDark) {
+    bool isDeposit = inv.type == 'DEPOSIT';
+    bool isWithdrawal = inv.type == 'WITHDRAWAL';
+    Color cardColor = isDeposit
+        ? Colors.green.withOpacity(0.1)
+        : isWithdrawal
+            ? Colors.orange.withOpacity(0.08)
+            : (isDark ? const Color(0xFF0F172A) : Colors.white);
+    Color borderColor = isDeposit
+        ? Colors.green.withOpacity(0.3)
+        : isWithdrawal
+            ? Colors.orange.withOpacity(0.4)
+            : (isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0));
+    Color nameColor = isDeposit ? Colors.green[800]! : isWithdrawal ? Colors.orange[800]! : Colors.blue;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor, width: (isDeposit || isWithdrawal) ? 2 : 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: InkWell(
-                      onTap: () => _navigateToCustomerDetails(inv.userId),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(inv.customerName ?? 'عابر', style: TextStyle(color: nameColor, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
-                          if (isDeposit) Text('فاتورة تسديد ديون', style: TextStyle(color: Colors.green[700], fontSize: 10, fontWeight: FontWeight.bold)),
-                          if (isWithdrawal) Row(children: [
-                            Icon(Icons.account_balance_wallet, size: 11, color: Colors.orange[700]),
-                            const SizedBox(width: 3),
-                            Text('سحب كاش من الصندوق', style: TextStyle(color: Colors.orange[700], fontSize: 10, fontWeight: FontWeight.bold)),
-                          ]),
-                        ],
-                      ),
-                    ),
+              Expanded(
+                child: InkWell(
+                  onTap: () => _navigateToCustomerDetails(inv.userId),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(inv.customerName ?? 'عابر', style: TextStyle(color: nameColor, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
+                      if (isDeposit) Text('فاتورة تسديد ديون', style: TextStyle(color: Colors.green[700], fontSize: 10, fontWeight: FontWeight.bold)),
+                      if (isWithdrawal) Row(children: [
+                        Icon(Icons.account_balance_wallet, size: 11, color: Colors.orange[700]),
+                        const SizedBox(width: 3),
+                        Text('سحب كاش من الصندوق', style: TextStyle(color: Colors.orange[700], fontSize: 10, fontWeight: FontWeight.bold)),
+                      ]),
+                    ],
                   ),
-                  Text('${inv.amount} ₪', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: nameColor)),
-                ],
+                ),
               ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(inv.invoiceDate, style: TextStyle(color: isDeposit ? Colors.green[700]!.withOpacity(0.7) : isWithdrawal ? Colors.orange[700]!.withOpacity(0.7) : Colors.grey[500], fontSize: 12)),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: (isDeposit ? Colors.green : isWithdrawal ? Colors.orange : Colors.blue).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(isWithdrawal ? 'سحب نقدي' : (inv.methodName ?? '-'),
-                      style: TextStyle(fontSize: 10, color: isDeposit ? Colors.green[800] : isWithdrawal ? Colors.orange[800] : Colors.blue, fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
-              const Divider(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  IconButton(icon: Icon(Icons.history, color: isDeposit ? Colors.green[700] : isWithdrawal ? Colors.orange[700] : Colors.grey, size: 20), onPressed: () => _showEditHistory(inv.id!)),
-                  IconButton(icon: Icon(Icons.edit, color: isDeposit ? Colors.green : isWithdrawal ? Colors.orange : Colors.orange, size: 20), onPressed: () => _showEditInvoiceDialog(inv)),
-                  IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), onPressed: () => _deleteInvoice(inv)),
-                ],
-              )
+              Text('${inv.amount} ₪', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: nameColor)),
             ],
           ),
-        );
-      },
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(inv.invoiceDate, style: TextStyle(color: isDeposit ? Colors.green[700]!.withOpacity(0.7) : isWithdrawal ? Colors.orange[700]!.withOpacity(0.7) : Colors.grey[500], fontSize: 12)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: (isDeposit ? Colors.green : isWithdrawal ? Colors.orange : Colors.blue).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(isWithdrawal ? 'سحب نقدي' : (inv.methodName ?? '-'),
+                  style: TextStyle(fontSize: 10, color: isDeposit ? Colors.green[800] : isWithdrawal ? Colors.orange[800] : Colors.blue, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+          const Divider(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              IconButton(icon: Icon(Icons.history, color: isDeposit ? Colors.green[700] : isWithdrawal ? Colors.orange[700] : Colors.grey, size: 20), onPressed: () => _showEditHistory(inv.id!)),
+              IconButton(icon: Icon(Icons.edit, color: isDeposit ? Colors.green : isWithdrawal ? Colors.orange : Colors.orange, size: 20), onPressed: () => _showEditInvoiceDialog(inv)),
+              IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), onPressed: () => _deleteInvoice(inv)),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildTodaySalesTable(bool isDark) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(color: isDark ? const Color(0xFF0F172A) : Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0))),
-      child: DataTable(
-        sortColumnIndex: _sortColumnIndex,
-        sortAscending: _isAscending,
-        columns: [
-          DataColumn(label: const Text('المشتري'), onSort: (i, _) => _onSort(i)),
-          DataColumn(label: const Text('التاريخ'), onSort: (i, _) => _onSort(i)),
-          DataColumn(label: const Text('المبلغ'), onSort: (i, _) => _onSort(i)),
-          DataColumn(label: const Text('طريقة الدفع'), onSort: (i, _) => _onSort(i)),
-          const DataColumn(label: Text('الإجراءات')),
-        ],
-        rows: _filteredInvoices.map((inv) {
+    final displayedInvoices = _filteredInvoices.take(_invoiceDisplayCount).toList();
+    final hasMore = _filteredInvoices.length > _invoiceDisplayCount;
+    return Column(
+      children: [
+        Container(
+          width: double.infinity,
+          decoration: BoxDecoration(color: isDark ? const Color(0xFF0F172A) : Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0))),
+          child: DataTable(
+            sortColumnIndex: _sortColumnIndex,
+            sortAscending: _isAscending,
+            columns: [
+              DataColumn(label: const Text('المشتري'), onSort: (i, _) => _onSort(i)),
+              DataColumn(label: const Text('التاريخ'), onSort: (i, _) => _onSort(i)),
+              DataColumn(label: const Text('المبلغ'), onSort: (i, _) => _onSort(i)),
+              DataColumn(label: const Text('طريقة الدفع'), onSort: (i, _) => _onSort(i)),
+              const DataColumn(label: Text('الإجراءات')),
+            ],
+            rows: displayedInvoices.map((inv) {
           bool isDeposit = inv.type == 'DEPOSIT';
           bool isWithdrawal = inv.type == 'WITHDRAWAL';
           Color rowNameColor = isDeposit ? Colors.green[800]! : isWithdrawal ? Colors.orange[800]! : Colors.blue;
@@ -1088,7 +1114,21 @@ class _SalesScreenState extends State<SalesScreen> {
             ]
           );
         }).toList(),
-      ),
+          ),
+        ),
+        if (hasMore)
+          Padding(
+            padding: const EdgeInsets.only(top: 12, bottom: 8),
+            child: TextButton.icon(
+              onPressed: () => setState(() => _invoiceDisplayCount += _invoicePageSize),
+              icon: const Icon(Icons.expand_more_rounded, color: Colors.blue),
+              label: Text(
+                'تحميل المزيد (متبقي ${_filteredInvoices.length - _invoiceDisplayCount})',
+                style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
