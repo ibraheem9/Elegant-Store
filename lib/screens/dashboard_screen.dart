@@ -394,27 +394,57 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildNotificationIcon(bool isDark) {
     return Consumer<DatabaseService>(
-      builder: (context, db, _) => FutureBuilder<Map<String, dynamic>>(
-        future: db.getGlobalStats(),
+      builder: (context, db, _) => FutureBuilder<int>(
+        future: db.getSmartNotificationsCount(),
         builder: (context, snap) {
-          bool hasAlert = (snap.data?['unpaid_non_permanent_count'] ?? 0) > 0;
+          final count = snap.data ?? 0;
           return Stack(
             children: [
               InkWell(
-                onTap: () {
-                   Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsScreen()));
+                onTap: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                  );
+                  // Rebuild badge after returning from notifications
+                  if (mounted) setState(() {});
                 },
                 borderRadius: BorderRadius.circular(20),
                 child: Container(
-                  padding: const EdgeInsets.all(8), 
-                  decoration: BoxDecoration(color: isDark ? const Color(0xFF1E293B) : Colors.grey[100], shape: BoxShape.circle), 
-                  child: Icon(Icons.notifications_none_rounded, color: isDark ? const Color(0xFF00E5FF) : const Color(0xFF64748B), size: 22)
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E293B) : Colors.grey[100],
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    count > 0 ? Icons.notifications_rounded : Icons.notifications_none_rounded,
+                    color: count > 0 ? Colors.orange : (isDark ? const Color(0xFF00E5FF) : const Color(0xFF64748B)),
+                    size: 22,
+                  ),
                 ),
               ),
-              if (hasAlert) Positioned(right: 2, top: 2, child: Container(width: 10, height: 10, decoration: BoxDecoration(color: Colors.red, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)))),
+              if (count > 0)
+                Positioned(
+                  right: 2,
+                  top: 2,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 1.5),
+                    ),
+                    child: Text(
+                      count > 99 ? '99+' : '$count',
+                      style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
             ],
           );
-        }
+        },
       ),
     );
   }

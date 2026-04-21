@@ -1316,3 +1316,93 @@ class DatabaseService {
     }
   }
 }
+
+  // Smart Notifications
+  Future<List<Map<String, dynamic>>> getSmartNotifications() async {
+    final db = await database;
+    final List<Map<String, dynamic>> notifications = [];
+
+    // 1. Unpaid invoices for customers with real positive balance (actual debt)
+    final debtCustomers = await db.rawQuery('''
+      SELECT u.id, u.name, u.nickname, u.balance, u.credit_limit,
+             COUNT(i.id) as unpaid_count,
+             SUM(i.amount) as unpaid_total
+      FROM users u
+      JOIN invoices i ON i.user_id = u.id
+        AND i.deleted_at IS NULL
+        AND i.type = 'SALE'
+        AND i.payment_status IN ('UNPAID', 'DEFERRED')
+      WHERE u.role = 'CUSTOMER'
+        AND u.deleted_at IS NULL
+        AND u.balance > 0
+      GROUP BY u.id
+      ORDER BY u.balance DESC
+    ''');
+
+    for (final row in debtCustomers) {
+      notifications.add({
+        'type': 'UNPAID_INVOICES',
+        'customerId': row['id'],
+        'customerName': row['name'],
+        'customerNickname': row['nickname'],
+        'balance': (row['balance'] as num).toDouble(),
+        'unpaidCount': row['unpaid_count'],
+        'unpaidTotal': (row['unpaid_total'] as num?)?.toDouble() ?? 0.0,
+        'creditLimit': row['credit_limit'],
+      });
+    }
+
+    // 2. Debt ceiling warnings (balance >= 80% of credit_limit, credit_limit > 0)
+    final ceilingWarnings = await db.rawQuery('''
+      SELECT id, name, nickname, balance, credit_limit
+      FROM users
+      WHERE role = 'CUSTOMER'
+        AND deleted_at IS NULL
+        AND credit_limit > 0
+        AND balance >= (credit_limit * 0.8)
+      ORDER BY (CAST(balance AS REAL) / credit_limit) DESC
+    ''');
+
+    for (final row in ceilingWarnings) {
+      final balance = (row['balance'] as num).toDouble();
+      final limit = (row['credit_limit'] as num).toDouble();
+      // Skip if already included as UNPAID_INVOICES with balance >= limit
+      notifications.add({
+        'type': 'CEILING_WARNING',
+        'customerId': row['id'],
+        'customerName': row['name'],
+        'customerNickname': row['nickname'],
+        'balance': balance,
+        'creditLimit': limit,
+        'percentage': ((balance / limit) * 100).round(),
+      });
+    }
+
+    return notifications;
+  }
+
+  Future<int> getSmartNotificationsCount() async {
+    final db = await database;
+    // Count customers with real debt (balance > 0) that have unpaid invoices
+    final r = await db.rawQuery('''
+      SELECT COUNT(DISTINCT u.id) as cnt
+      FROM users u
+      JOIN invoices i ON i.user_id = u.id
+        AND i.deleted_at IS NULL
+        AND i.type = 'SALE'
+        AND i.payment_status IN ('UNPAID', 'DEFERRED')
+      WHERE u.role = 'CUSTOMER'
+        AND u.deleted_at IS NULL
+        AND u.balance > 0
+    ''');
+    final unpaidCount = Sqflite.firstIntValue(r) ?? 0;
+
+    final r2 = await db.rawQuery('''
+      SELECT COUNT(*) as cnt FROM users
+      WHERE role = 'CUSTOMER' AND deleted_at IS NULL
+        AND credit_limit > 0 AND balance >= (credit_limit * 0.8)
+    ''');
+    final ceilingCount = Sqflite.firstIntValue(r2) ?? 0;
+
+    return unpaidCount + ceilingCount;
+  }
