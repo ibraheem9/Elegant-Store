@@ -30,7 +30,7 @@ class DatabaseService {
       path = join(dbPath, dbName);
     }
 
-    return await openDatabase(
+    final db = await openDatabase(
       path,
       version: 5,
       onCreate: (db, version) async {
@@ -39,17 +39,6 @@ class DatabaseService {
         await _createIndexes(db);
         // No seed data — fresh installs start with a completely empty database.
         // All data is created by the user or pulled from the server via sync.
-      },
-      onOpen: (db) async {
-        // Enable WAL mode for better concurrent read performance
-        await db.execute('PRAGMA journal_mode = WAL');
-        // Increase cache size to 4MB for faster repeated queries
-        await db.execute('PRAGMA cache_size = -4000');
-        // NOTE: PRAGMA foreign_keys = ON is intentionally NOT set here.
-        // Enabling FK enforcement on an existing DB can cause failures when
-        // synced data arrives out-of-order or when orphaned references exist
-        // from soft-deleted records. Data integrity is maintained at the
-        // application layer instead.
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -83,8 +72,17 @@ class DatabaseService {
         }
       },
     );
+    // Apply performance PRAGMAs AFTER the database is fully open.
+    // sqflite does not allow db.execute() inside onOpen callbacks;
+    // rawQuery is used here because it works outside transaction context.
+    try {
+      await db.rawQuery('PRAGMA journal_mode = WAL');
+      await db.rawQuery('PRAGMA cache_size = -4000');
+    } catch (e) {
+      dev.log('PRAGMA setup skipped: $e', name: 'DatabaseService');
+    }
+    return db;
   }
-
   Future<void> _createTables(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS users (
