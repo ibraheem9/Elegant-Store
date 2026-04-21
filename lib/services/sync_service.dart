@@ -398,75 +398,103 @@ class SyncService extends ChangeNotifier {
   // ─────────────────────────────────────────────────────────────────────────
   // PUSH PAYLOAD PREPARATION
   // ─────────────────────────────────────────────────────────────────────────
-
+  // PUSH PAYLOAD PREPARATION
+  // ─────────────────────────────────────────────────────────────────────────
   /// Collect all unsynced local records and replace integer IDs with UUIDs
   /// so the server can resolve relationships independently.
+  ///
+  /// Optimized: builds a UUID lookup map per referenced table using a single
+  /// IN-query instead of one query per row (eliminates N+1 pattern).
   Future<Map<String, List<Map<String, dynamic>>>> _prepareSyncPayload() async {
     final Map<String, List<Map<String, dynamic>>> payload = {};
+    final db = await _dbService.database;
 
     for (final table in _tableOrder) {
       final unsynced = await _dbService.getUnsynced(table);
-      if (unsynced.isNotEmpty) {
-        payload[table] = await Future.wait(
-          unsynced.map((item) => _replaceIdsWithUuids(table, Map<String, dynamic>.from(item))),
+      if (unsynced.isEmpty) continue;
+
+      // Build UUID lookup maps with a single IN-query per referenced table
+      final Map<String, Map<int, String>> uuidCache = {};
+
+      Future<Map<int, String>> buildCache(String fromTable, List<int> ids) async {
+        if (ids.isEmpty) return {};
+        final placeholders = List.filled(ids.length, '?').join(', ');
+        final rows = await db.rawQuery(
+          'SELECT id, uuid FROM $fromTable WHERE id IN ($placeholders)',
+          ids,
         );
+        return {for (final r in rows) r['id'] as int: r['uuid'] as String};
       }
+
+      // Collect all FK ids for this table in one pass, then build caches
+      switch (table) {
+        case 'invoices':
+          final userIds = unsynced.map((r) => r['user_id'] as int?).whereType<int>().toSet().toList();
+          final pmIds   = unsynced.map((r) => r['payment_method_id'] as int?).whereType<int>().toSet().toList();
+          uuidCache['users']           = await buildCache('users', userIds);
+          uuidCache['payment_methods'] = await buildCache('payment_methods', pmIds);
+          break;
+        case 'transactions':
+          final buyerIds = unsynced.map((r) => r['buyer_id'] as int?).whereType<int>().toSet().toList();
+          final invIds   = unsynced.map((r) => r['invoice_id'] as int?).whereType<int>().toSet().toList();
+          final pmIds    = unsynced.map((r) => r['payment_method_id'] as int?).whereType<int>().toSet().toList();
+          uuidCache['users']           = await buildCache('users', buyerIds);
+          uuidCache['invoices']        = await buildCache('invoices', invIds);
+          uuidCache['payment_methods'] = await buildCache('payment_methods', pmIds);
+          break;
+        case 'purchases':
+          final pmIds = unsynced.map((r) => r['payment_method_id'] as int?).whereType<int>().toSet().toList();
+          uuidCache['payment_methods'] = await buildCache('payment_methods', pmIds);
+          break;
+        case 'users':
+          final parentIds = unsynced.map((r) => r['parent_id'] as int?).whereType<int>().toSet().toList();
+          uuidCache['users'] = await buildCache('users', parentIds);
+          break;
+        case 'edit_history':
+          final editorIds = unsynced.map((r) => r['edited_by_id'] as int?).whereType<int>().toSet().toList();
+          uuidCache['users'] = await buildCache('users', editorIds);
+          break;
+      }
+
+      // Map each row using the pre-built cache (zero DB calls inside the loop)
+      payload[table] = unsynced.map((rawItem) {
+        final item = Map<String, dynamic>.from(rawItem);
+        item.remove('id'); // Never send local auto-increment IDs to server
+        switch (table) {
+          case 'invoices':
+            item['user_uuid']           = uuidCache['users']?[item['user_id'] as int?];
+            item['payment_method_uuid'] = uuidCache['payment_methods']?[item['payment_method_id'] as int?];
+            item.remove('user_id');
+            item.remove('payment_method_id');
+            break;
+          case 'transactions':
+            item['buyer_uuid']          = uuidCache['users']?[item['buyer_id'] as int?];
+            item['invoice_uuid']        = uuidCache['invoices']?[item['invoice_id'] as int?];
+            item['payment_method_uuid'] = uuidCache['payment_methods']?[item['payment_method_id'] as int?];
+            item.remove('buyer_id');
+            item.remove('invoice_id');
+            item.remove('payment_method_id');
+            break;
+          case 'purchases':
+            item['payment_method_uuid'] = uuidCache['payment_methods']?[item['payment_method_id'] as int?];
+            item.remove('payment_method_id');
+            break;
+          case 'users':
+            item['parent_uuid'] = uuidCache['users']?[item['parent_id'] as int?];
+            item.remove('parent_id');
+            item.remove('password'); // Never send plain-text password to server
+            break;
+          case 'edit_history':
+            item['edited_by_uuid'] = uuidCache['users']?[item['edited_by_id'] as int?];
+            item.remove('edited_by_id');
+            break;
+        }
+        return item;
+      }).toList();
     }
     return payload;
   }
 
-  /// Replace integer FK columns with their UUID equivalents for server transport.
-  Future<Map<String, dynamic>> _replaceIdsWithUuids(
-      String table, Map<String, dynamic> item) async {
-    final db = await _dbService.database;
-    item.remove('id'); // Never send local auto-increment IDs to server
-
-    Future<String?> uuidFor(String fromTable, int? id) async {
-      if (id == null) return null;
-      final r = await db.query(fromTable,
-          columns: ['uuid'], where: 'id = ?', whereArgs: [id]);
-      return r.isNotEmpty ? r.first['uuid'] as String? : null;
-    }
-
-    switch (table) {
-      case 'invoices':
-        item['user_uuid']           = await uuidFor('users', item['user_id'] as int?);
-        item['payment_method_uuid'] = await uuidFor('payment_methods', item['payment_method_id'] as int?);
-        item.remove('user_id');
-        item.remove('payment_method_id');
-        break;
-
-      case 'transactions':
-        item['buyer_uuid']          = await uuidFor('users', item['buyer_id'] as int?);
-        item['invoice_uuid']        = await uuidFor('invoices', item['invoice_id'] as int?);
-        item['payment_method_uuid'] = await uuidFor('payment_methods', item['payment_method_id'] as int?);
-        item.remove('buyer_id');
-        item.remove('invoice_id');
-        item.remove('payment_method_id');
-        break;
-
-      case 'purchases':
-        item['payment_method_uuid'] = await uuidFor('payment_methods', item['payment_method_id'] as int?);
-        item.remove('payment_method_id');
-        break;
-
-      case 'users':
-        item['parent_uuid'] = await uuidFor('users', item['parent_id'] as int?);
-        item.remove('parent_id');
-        // Never send the local plain-text password to the server
-        item.remove('password');
-        break;
-
-      case 'edit_history':
-        item['edited_by_uuid'] = await uuidFor('users', item['edited_by_id'] as int?);
-        item.remove('edited_by_id');
-        break;
-    }
-
-    return item;
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
   // PULL: FOREIGN KEY RESOLUTION
   // ─────────────────────────────────────────────────────────────────────────
 

@@ -737,7 +737,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     if (confirmed != true) return;
     final db = context.read<DatabaseService>();
     await db.softDeleteInvoice(inv);
-    await db.recalculateAllBalances();
+    await db.recalculateUserBalance(inv.userId);
     _loadData();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -833,7 +833,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     );
     final db = context.read<DatabaseService>();
     await db.updateInvoiceWithLog(oldInv: inv, newInv: newInv, reason: reason);
-    await db.recalculateAllBalances();
+    await db.recalculateUserBalance(inv.userId);
     _loadData();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

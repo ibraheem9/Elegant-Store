@@ -32,12 +32,21 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: (db, version) async {
         await _createTables(db);
         await _createTriggers(db);
+        await _createIndexes(db);
         // No seed data — fresh installs start with a completely empty database.
         // All data is created by the user or pulled from the server via sync.
+      },
+      onOpen: (db) async {
+        // Enable WAL mode for better concurrent read performance
+        await db.execute('PRAGMA journal_mode = WAL');
+        // Increase cache size to 4MB for faster repeated queries
+        await db.execute('PRAGMA cache_size = -4000');
+        // Ensure foreign keys are enforced
+        await db.execute('PRAGMA foreign_keys = ON');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -62,6 +71,10 @@ class DatabaseService {
         if (oldVersion < 4) {
           // Add yesterday_cash_in_box to daily_statistics if missing
           try { await db.execute('ALTER TABLE daily_statistics ADD COLUMN yesterday_cash_in_box REAL NOT NULL DEFAULT 0'); } catch (_) {}
+        }
+        if (oldVersion < 5) {
+          // Add performance indexes for existing databases
+          await _createIndexes(db);
         }
       },
     );
@@ -252,7 +265,34 @@ class DatabaseService {
 
   // _seedInitialData removed — fresh installs start with an empty database.
 
-  // --- Methods ---
+  /// Creates performance indexes on frequently-queried columns.
+  /// Uses IF NOT EXISTS so it is safe to call on existing databases during upgrade.
+  Future<void> _createIndexes(Database db) async {
+    // Invoices: most queries filter by user_id, created_at, deleted_at, payment_status
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_inv_user_id     ON invoices(user_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_inv_created_at  ON invoices(created_at)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_inv_deleted_at  ON invoices(deleted_at)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_inv_status      ON invoices(payment_status)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_inv_type        ON invoices(type)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_inv_pm_id       ON invoices(payment_method_id)');
+    // Users: filter by role and deleted_at
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_usr_role        ON users(role)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_usr_deleted_at  ON users(deleted_at)');
+    // Transactions: filter by buyer_id, invoice_id, deleted_at
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_txn_buyer_id    ON transactions(buyer_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_txn_invoice_id  ON transactions(invoice_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_txn_deleted_at  ON transactions(deleted_at)');
+    // Purchases: filter by created_at, payment_source, payment_method_id, deleted_at
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_pur_created_at  ON purchases(created_at)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_pur_pm_id       ON purchases(payment_method_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_pur_deleted_at  ON purchases(deleted_at)');
+    // Edit history: filter by target_id + target_type
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_edh_target      ON edit_history(target_id, target_type)');
+    // Daily statistics: filter by statistic_date
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_dstat_date      ON daily_statistics(statistic_date)');
+  }
+
+  // --- Methods ----
 
   Future<User?> authenticate(String username, String password) async {
     final db = await database;
@@ -600,6 +640,36 @@ class DatabaseService {
     return r.map((m) => Invoice.fromMap(m)).toList();
   }
 
+  /// Recalculates the balance for a **single** customer.
+  /// Use this after any operation that affects only one customer (add/edit/delete invoice).
+  /// This is O(1) per customer instead of O(N) for all customers.
+  Future<void> recalculateUserBalance(int userId) async {
+    final db = await database;
+    await db.rawUpdate('''
+      UPDATE users SET balance = (
+        SELECT COALESCE(SUM(
+          CASE
+            WHEN i.type IN ('SALE', 'WITHDRAWAL') THEN (i.amount - i.paid_amount)
+            WHEN i.type = 'DEPOSIT' THEN
+              -(
+                i.amount - COALESCE((
+                  SELECT SUM(t.used_amount)
+                  FROM transactions t
+                  WHERE t.invoice_id = i.id AND t.deleted_at IS NULL
+                ), 0)
+              )
+            ELSE 0
+          END
+        ), 0)
+        FROM invoices i
+        WHERE i.user_id = ? AND i.deleted_at IS NULL
+      )
+      WHERE id = ?
+    ''', [userId, userId]);
+  }
+
+  /// Recalculates balances for ALL customers.
+  /// Only needed after a full sync where multiple customers may be affected.
   Future<void> recalculateAllBalances() async {
     final db = await database;
     await db.transaction((txn) async {
@@ -630,29 +700,24 @@ class DatabaseService {
     });
   }
 
+  /// Returns global stats in a **single SQL query** instead of loading all customers into RAM.
   Future<Map<String, dynamic>> getGlobalStats() async {
     final db = await database;
-    final customersCount = Sqflite.firstIntValue(await db.rawQuery("SELECT COUNT(*) FROM users WHERE role = 'CUSTOMER' AND deleted_at IS NULL")) ?? 0;
-    final customers = await getCustomers();
-    double totalDebts = 0;
-    double totalDeposits = 0;
-    for (var c in customers) {
-      if (c.balance > 0) totalDebts += c.balance;
-      else if (c.balance < 0) totalDeposits += c.balance.abs();
-    }
-    final unpaidNonPermanentCount = Sqflite.firstIntValue(await db.rawQuery('''
-      SELECT COUNT(*) FROM users 
-      WHERE role = 'CUSTOMER' 
-      AND is_permanent_customer = 0 
-      AND balance > 0 
-      AND deleted_at IS NULL
-    ''')) ?? 0;
-
+    final rows = await db.rawQuery('''
+      SELECT
+        COUNT(*) AS total_customers,
+        COALESCE(SUM(CASE WHEN balance > 0 THEN balance ELSE 0 END), 0) AS total_debts,
+        COALESCE(SUM(CASE WHEN balance < 0 THEN ABS(balance) ELSE 0 END), 0) AS total_balances,
+        COUNT(CASE WHEN is_permanent_customer = 0 AND balance > 0 THEN 1 END) AS unpaid_non_permanent_count
+      FROM users
+      WHERE role = 'CUSTOMER' AND deleted_at IS NULL
+    ''');
+    final row = rows.first;
     return {
-      'total_customers': customersCount,
-      'total_debts': totalDebts,
-      'total_balances': totalDeposits,
-      'unpaid_non_permanent_count': unpaidNonPermanentCount,
+      'total_customers':           (row['total_customers'] as int?) ?? 0,
+      'total_debts':               (row['total_debts'] as num?)?.toDouble() ?? 0.0,
+      'total_balances':            (row['total_balances'] as num?)?.toDouble() ?? 0.0,
+      'unpaid_non_permanent_count':(row['unpaid_non_permanent_count'] as int?) ?? 0,
     };
   }
 
@@ -886,69 +951,55 @@ class DatabaseService {
   }
 
   /// [date] defaults to today if null.
+  /// Returns all daily stats in **2 SQL queries** instead of 6 separate ones.
   Future<Map<String, double>> getDetailedTodayStats({DateTime? date}) async {
     final today = DateFormat('yyyy-MM-dd').format(date ?? DateTime.now());
     final db = await database;
 
-    // إجمالي المبيعات على التطبيق = كل الفواتير المدفوعة (PAID) بطريقة دفع بنكي (app)
-    // تشمل فواتير البيع وفواتير تسديد الديون
-    final appSalesQuery = await db.rawQuery(
-      '''SELECT SUM(i.amount) as t FROM invoices i
-         JOIN payment_methods pm ON i.payment_method_id = pm.id
-         WHERE i.created_at LIKE ? AND i.payment_status IN ('PAID','paid')
-         AND pm.type = 'app' AND i.deleted_at IS NULL''',
-      ['$today%'],
-    );
-    final double appSalesTotal = (appSalesQuery.first['t'] as num?)?.toDouble() ?? 0.0;
+    // Single query to get all invoice-based stats for the day
+    final invRows = await db.rawQuery('''
+      SELECT
+        COALESCE(SUM(CASE
+          WHEN i.payment_status IN ('PAID','paid') AND pm.type = 'app'
+          THEN i.amount ELSE 0 END), 0) AS app_sales,
+        COALESCE(SUM(CASE
+          WHEN i.payment_status IN ('UNPAID','pending') AND pm.type = 'app'
+          THEN i.amount ELSE 0 END), 0) AS app_unpaid,
+        COALESCE(SUM(CASE
+          WHEN i.type = 'WITHDRAWAL'
+          THEN i.amount ELSE 0 END), 0) AS cash_withdrawals,
+        COALESCE(SUM(CASE
+          WHEN i.type = 'DEPOSIT' AND pm.type = 'cash'
+          THEN i.amount ELSE 0 END), 0) AS cash_debt_repayment
+      FROM invoices i
+      LEFT JOIN payment_methods pm ON i.payment_method_id = pm.id
+      WHERE i.created_at LIKE ? AND i.deleted_at IS NULL
+    ''', ['$today%']);
 
-    // إجمالي الفواتير غير المدفوعة بطريقة بنكي (UNPAID / دين آجل)
-    final appUnpaidQuery = await db.rawQuery(
-      '''SELECT SUM(i.amount) as t FROM invoices i
-         JOIN payment_methods pm ON i.payment_method_id = pm.id
-         WHERE i.created_at LIKE ? AND i.payment_status IN ('UNPAID','pending')
-         AND pm.type = 'app' AND i.deleted_at IS NULL''',
-      ['$today%'],
-    );
-    final double appUnpaidTotal = (appUnpaidQuery.first['t'] as num?)?.toDouble() ?? 0.0;
+    // Single query to get all purchase-based stats for the day
+    final purRows = await db.rawQuery('''
+      SELECT
+        COALESCE(SUM(CASE WHEN payment_source = 'CASH' THEN amount ELSE 0 END), 0) AS cash_purchases,
+        COALESCE(SUM(CASE WHEN payment_source = 'APP'  THEN amount ELSE 0 END), 0) AS app_purchases
+      FROM purchases
+      WHERE created_at LIKE ? AND deleted_at IS NULL
+    ''', ['$today%']);
 
-    // إجمالي الدين على التطبيق = الفواتير غير المدفوعة بنكي - إجمالي المبيعات على التطبيق
-    // إذا كانت النتيجة سالبة تُعرض صفر (معناه المبيعات المدفوعة تغطي كل الديون)
+    final inv = invRows.first;
+    final pur = purRows.first;
+    final double appSalesTotal  = (inv['app_sales'] as num?)?.toDouble() ?? 0.0;
+    final double appUnpaidTotal = (inv['app_unpaid'] as num?)?.toDouble() ?? 0.0;
     final double appDebt = (appUnpaidTotal - appSalesTotal).clamp(0.0, double.infinity);
 
-    // إجمالي الديون النقدي = إجمالي السحب النقدي
-    final cashWithdrawals = await db.rawQuery(
-      "SELECT SUM(amount) as t FROM invoices WHERE created_at LIKE ? AND type = 'WITHDRAWAL' AND deleted_at IS NULL",
-      ['$today%'],
-    );
-
-    // المشتريات
-    final cashPurchases = await db.rawQuery(
-      "SELECT SUM(amount) as t FROM purchases WHERE created_at LIKE ? AND payment_source = 'CASH'",
-      ['$today%'],
-    );
-    final appPurchases = await db.rawQuery(
-      "SELECT SUM(amount) as t FROM purchases WHERE created_at LIKE ? AND payment_source = 'APP'",
-      ['$today%'],
-    );
-
-    // إجمالي سداد الدين النقدي = فواتير DEPOSIT مدفوعة بوسيلة نقدية (cash)
-    final cashDebtRepayment = await db.rawQuery(
-      '''SELECT SUM(i.amount) as t FROM invoices i
-         JOIN payment_methods pm ON i.payment_method_id = pm.id
-         WHERE i.created_at LIKE ? AND i.type = 'DEPOSIT'
-         AND pm.type = 'cash' AND i.deleted_at IS NULL''',
-      ['$today%'],
-    );
-
     return {
-      'app_sales':            appSalesTotal,
-      'app_debt':             appDebt,
-      'cash_withdrawals':     (cashWithdrawals.first['t'] as num?)?.toDouble() ?? 0.0,
-      'cash_purchases':       (cashPurchases.first['t'] as num?)?.toDouble() ?? 0.0,
-      'app_purchases':        (appPurchases.first['t'] as num?)?.toDouble() ?? 0.0,
-      'cash_debt_repayment':  (cashDebtRepayment.first['t'] as num?)?.toDouble() ?? 0.0,
-      // legacy key
-      'app_debt_repayment':   appSalesTotal,
+      'app_sales':           appSalesTotal,
+      'app_debt':            appDebt,
+      'cash_withdrawals':    (inv['cash_withdrawals'] as num?)?.toDouble() ?? 0.0,
+      'cash_purchases':      (pur['cash_purchases'] as num?)?.toDouble() ?? 0.0,
+      'app_purchases':       (pur['app_purchases'] as num?)?.toDouble() ?? 0.0,
+      'cash_debt_repayment': (inv['cash_debt_repayment'] as num?)?.toDouble() ?? 0.0,
+      // legacy key kept for backward compatibility
+      'app_debt_repayment':  appSalesTotal,
     };
   }
 
