@@ -346,19 +346,13 @@ class _CustomerBalancesScreenState extends State<CustomerBalancesScreen> {
 
   Widget _buildSummaryRow(bool isDark) {
     final totalCustomers = _filtered.length;
-    final debtors = _filtered.where((c) => c.balance > 0).length;
-    final creditors = _filtered.where((c) => c.balance < 0).length;
     final totalDebt = _filtered.fold<double>(0, (sum, c) => sum + (c.balance > 0 ? c.balance : 0));
 
     return Row(
       children: [
         _summaryChip(Icons.people_alt_rounded, '$totalCustomers زبون', Colors.blue, isDark),
         const SizedBox(width: 8),
-        _summaryChip(Icons.trending_up_rounded, '$debtors مدين', Colors.orange, isDark),
-        const SizedBox(width: 8),
-        _summaryChip(Icons.trending_down_rounded, '$creditors دائن', Colors.green, isDark),
-        const SizedBox(width: 8),
-        Flexible(
+        Expanded(
           child: _summaryChip(
             Icons.account_balance_wallet_rounded,
             'إجمالي الديون: ${totalDebt.toStringAsFixed(2)} ₪',
