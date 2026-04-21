@@ -858,24 +858,104 @@ class _SalesScreenState extends State<SalesScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Flexible(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('سجل العمليات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
-                  const SizedBox(height: 2),
-                  Text('عدد الفواتير: $totalCount  •  دفعات السداد: $depositCount',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[500])),
-                ],
-              ),
+              child: Text('سجل العمليات',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : Colors.black)),
             ),
             _buildSortMenu(isDark),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
+        // ── Two stat cards ──────────────────────────────────────────────────
+        Row(
+          children: [
+            Expanded(
+              child: _buildCountCard(
+                label: 'عدد الفواتير',
+                count: totalCount,
+                icon: Icons.receipt_long_rounded,
+                color: Colors.blue,
+                isDark: isDark,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildCountCard(
+                label: 'دفعات السداد',
+                count: depositCount,
+                icon: Icons.payments_rounded,
+                color: Colors.green,
+                isDark: isDark,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
         _buildTableSearchBar(isDark, isMobile),
         const SizedBox(height: 16),
         isMobile ? _buildInvoiceCards(isDark) : _buildTodaySalesTable(isDark),
       ],
+    );
+  }
+
+  Widget _buildCountCard({
+    required String label,
+    required int count,
+    required IconData icon,
+    required Color color,
+    required bool isDark,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.grey[850] : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.25), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  count.toString(),
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? Colors.grey[400] : Colors.grey[600],
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
