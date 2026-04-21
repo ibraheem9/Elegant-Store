@@ -1416,4 +1416,30 @@ class DatabaseService {
 
     return unpaidCount + ceilingCount;
   }
+
+  /// Returns true if the accountant (employee) has any linked invoices or payments
+  Future<bool> accountantHasOperations(int accountantId) async {
+    final db = await database;
+    // Check invoices linked to this accountant via payment method
+    final invoiceResult = await db.rawQuery('''
+      SELECT COUNT(*) as cnt
+      FROM invoices
+      WHERE payment_method_id IN (
+        SELECT id FROM payment_methods WHERE accountant_id = ?
+      )
+      AND deleted_at IS NULL
+    ''', [accountantId]);
+    final invoiceCount = (invoiceResult.first['cnt'] as int?) ?? 0;
+    if (invoiceCount > 0) return true;
+
+    // Check if accountant is directly referenced in any transaction
+    final txResult = await db.rawQuery('''
+      SELECT COUNT(*) as cnt
+      FROM transactions
+      WHERE accountant_id = ?
+      AND deleted_at IS NULL
+    ''', [accountantId]);
+    final txCount = (txResult.first['cnt'] as int?) ?? 0;
+    return txCount > 0;
+  }
 }
