@@ -890,31 +890,23 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                           methodName.toLowerCase() == 'deferred' ||
                           methodName.toLowerCase() == 'debt';
 
-                      if (isPaid) {
-                        // Invoice is PAID
-                        if (inv.methodName != null && !isDeferredMethod) {
-                          // Real payment method (bank app / cash) — show it
-                          return Text('وسيلة الدفع: $methodName',
-                              style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12));
-                        } else {
-                          // Was deferred but auto-paid from credit balance
-                          return const Text('وسيلة الدفع: تم السداد من الرصيد',
-                              style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12));
-                        }
+                      if (isDeferredMethod || inv.methodName == null) {
+                        // Debt / unpaid method — show payment status label
+                        final isDebt = methodName == 'دين' || methodName.toLowerCase() == 'debt';
+                        return Text(
+                          isDebt ? 'حالة الفاتورة: دين' : 'حالة الفاتورة: غير مدفوع',
+                          style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12),
+                        );
                       } else {
-                        // Invoice is UNPAID
-                        if (isDeferredMethod || inv.methodName == null) {
-                          // Show payment status label instead of method name
-                          final statusLabel = (methodName == 'دين' || methodName.toLowerCase() == 'debt')
-                              ? 'حالة الدفع: دين'
-                              : 'حالة الدفع: غير مدفوع';
-                          return Text(statusLabel,
-                              style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12));
-                        } else {
-                          // Real payment method (bank/cash) for unpaid invoice
-                          return Text('وسيلة الدفع: $methodName',
-                              style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12));
-                        }
+                        // Real payment method (bank app / cash) — show method name
+                        return Text(
+                          'وسيلة الدفع: $methodName',
+                          style: TextStyle(
+                            color: isPaid ? Colors.blue : Colors.orange,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        );
                       }
                     }),
                     Text('التاريخ: ${inv.invoiceDate}', style: const TextStyle(color: Colors.grey, fontSize: 11)),
