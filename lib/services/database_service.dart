@@ -517,6 +517,16 @@ class DatabaseService {
           amountFromBalance += deduction;
           totalToPay -= deduction;
         }
+        // When deposit credit is consumed, the deposit invoice already reduced the balance
+        // by its full amount via the insert trigger. We must add back the consumed portion
+        // so the balance correctly reflects the remaining credit.
+        // Example: deposit of 150 → balance = -150. Consuming 100 → balance should be -50.
+        if (amountFromBalance > 0) {
+          await txn.rawUpdate(
+            'UPDATE users SET balance = balance + ?, updated_at = ? WHERE id = ?',
+            [amountFromBalance, now, inv.userId],
+          );
+        }
       }
 
       String finalStatus = inv.paymentStatus;
@@ -595,17 +605,26 @@ class DatabaseService {
     final db = await database;
     await db.transaction((txn) async {
       await txn.rawUpdate("UPDATE users SET balance = 0.0 WHERE role = 'CUSTOMER'");
+      // For DEPOSIT invoices, we subtract only the REMAINING (unconsumed) credit.
+      // The consumed portion is tracked in transactions.used_amount linked by invoice_id.
       await txn.rawUpdate('''
         UPDATE users SET balance = (
           SELECT COALESCE(SUM(
             CASE
-              WHEN type IN ('SALE', 'WITHDRAWAL') THEN (amount - paid_amount)
-              WHEN type = 'DEPOSIT' THEN (-amount)
+              WHEN i.type IN ('SALE', 'WITHDRAWAL') THEN (i.amount - i.paid_amount)
+              WHEN i.type = 'DEPOSIT' THEN
+                -(
+                  i.amount - COALESCE((
+                    SELECT SUM(t.used_amount)
+                    FROM transactions t
+                    WHERE t.invoice_id = i.id AND t.deleted_at IS NULL
+                  ), 0)
+                )
               ELSE 0
             END
           ), 0)
-          FROM invoices
-          WHERE user_id = users.id AND deleted_at IS NULL
+          FROM invoices i
+          WHERE i.user_id = users.id AND i.deleted_at IS NULL
         )
         WHERE role = 'CUSTOMER'
       ''');
