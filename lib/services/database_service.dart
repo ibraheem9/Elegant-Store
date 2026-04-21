@@ -273,28 +273,33 @@ class DatabaseService {
   /// Creates performance indexes on frequently-queried columns.
   /// Uses IF NOT EXISTS so it is safe to call on existing databases during upgrade.
   Future<void> _createIndexes(Database db) async {
-    // Invoices: most queries filter by user_id, created_at, deleted_at, payment_status
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_inv_user_id     ON invoices(user_id)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_inv_created_at  ON invoices(created_at)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_inv_deleted_at  ON invoices(deleted_at)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_inv_status      ON invoices(payment_status)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_inv_type        ON invoices(type)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_inv_pm_id       ON invoices(payment_method_id)');
-    // Users: filter by role and deleted_at
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_usr_role        ON users(role)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_usr_deleted_at  ON users(deleted_at)');
-    // Transactions: filter by buyer_id, invoice_id, deleted_at
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_txn_buyer_id    ON transactions(buyer_id)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_txn_invoice_id  ON transactions(invoice_id)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_txn_deleted_at  ON transactions(deleted_at)');
-    // Purchases: filter by created_at, payment_source, payment_method_id, deleted_at
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_pur_created_at  ON purchases(created_at)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_pur_pm_id       ON purchases(payment_method_id)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_pur_deleted_at  ON purchases(deleted_at)');
-    // Edit history: filter by target_id + target_type
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_edh_target      ON edit_history(target_id, target_type)');
-    // Daily statistics: filter by statistic_date
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_dstat_date      ON daily_statistics(statistic_date)');
+    // Each index is wrapped in try-catch so a missing column on an old DB
+    // schema never blocks the migration or the app startup.
+    final indexes = [
+      'CREATE INDEX IF NOT EXISTS idx_inv_user_id    ON invoices(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_inv_created_at ON invoices(created_at)',
+      'CREATE INDEX IF NOT EXISTS idx_inv_deleted_at ON invoices(deleted_at)',
+      'CREATE INDEX IF NOT EXISTS idx_inv_status     ON invoices(payment_status)',
+      'CREATE INDEX IF NOT EXISTS idx_inv_type       ON invoices(type)',
+      'CREATE INDEX IF NOT EXISTS idx_inv_pm_id      ON invoices(payment_method_id)',
+      'CREATE INDEX IF NOT EXISTS idx_usr_role       ON users(role)',
+      'CREATE INDEX IF NOT EXISTS idx_usr_deleted_at ON users(deleted_at)',
+      'CREATE INDEX IF NOT EXISTS idx_txn_buyer_id   ON transactions(buyer_id)',
+      'CREATE INDEX IF NOT EXISTS idx_txn_invoice_id ON transactions(invoice_id)',
+      'CREATE INDEX IF NOT EXISTS idx_txn_deleted_at ON transactions(deleted_at)',
+      'CREATE INDEX IF NOT EXISTS idx_pur_created_at ON purchases(created_at)',
+      'CREATE INDEX IF NOT EXISTS idx_pur_pm_id      ON purchases(payment_method_id)',
+      'CREATE INDEX IF NOT EXISTS idx_pur_deleted_at ON purchases(deleted_at)',
+      'CREATE INDEX IF NOT EXISTS idx_edh_target     ON edit_history(target_id, target_type)',
+      'CREATE INDEX IF NOT EXISTS idx_dstat_date     ON daily_statistics(statistic_date)',
+    ];
+    for (final sql in indexes) {
+      try {
+        await db.execute(sql);
+      } catch (e) {
+        dev.log('Index creation skipped (column may not exist yet): $e', name: 'DatabaseService');
+      }
+    }
   }
 
   // --- Methods ----

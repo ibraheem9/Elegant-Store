@@ -95,7 +95,10 @@ class _LoginScreenState extends State<LoginScreen> {
           _showError('لا يوجد اتصال بالإنترنت. يرجى الاتصال للدخول لأول مرة');
           return;
         case LoginResult.unknownError:
-          _showError('حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى');
+          final errDetail = authService.lastLoginError;
+          _showError(errDetail != null && errDetail.isNotEmpty
+              ? 'خطأ: $errDetail'
+              : 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى');
           return;
       }
 

@@ -215,11 +215,17 @@ class AuthService extends ChangeNotifier {
         }
       }
       return LoginResult.networkError;
-    } catch (e) {
-      dev.log('Login error (Exception): $e', name: 'AuthService', error: e);
+    } catch (e, stackTrace) {
+      dev.log('Login error (Exception): $e\n$stackTrace', name: 'AuthService', error: e);
+      _lastLoginError = e.toString();
       return LoginResult.unknownError;
     }
   }
+
+  /// Holds the last exception message from a failed login attempt.
+  /// Used to surface detailed error info to the UI for debugging.
+  String? _lastLoginError;
+  String? get lastLoginError => _lastLoginError;
 
   Future<void> logout() async {
     try {
