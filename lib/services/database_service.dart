@@ -1051,6 +1051,131 @@ class DatabaseService {
     );
   }
 
+  /// Soft-delete a purchase (sets deleted_at timestamp)
+  Future<void> softDeletePurchase(int purchaseId) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    await db.update(
+      'purchases',
+      {'deleted_at': now, 'updated_at': now, 'is_synced': 0},
+      where: 'id = ?',
+      whereArgs: [purchaseId],
+    );
+  }
+
+  /// Restore a soft-deleted purchase
+  Future<void> restorePurchase(int purchaseId) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    await db.update(
+      'purchases',
+      {'deleted_at': null, 'updated_at': now, 'is_synced': 0},
+      where: 'id = ?',
+      whereArgs: [purchaseId],
+    );
+  }
+
+  /// Returns all soft-deleted purchases ordered by deletion date desc
+  Future<List<Purchase>> getDeletedPurchases() async {
+    final db = await database;
+    final rows = await db.query(
+      'purchases',
+      where: 'deleted_at IS NOT NULL',
+      orderBy: 'deleted_at DESC',
+    );
+    return rows.map((m) => Purchase.fromMap(m)).toList();
+  }
+
+  /// Edit purchase with full audit log (records who edited, reason, changed fields)
+  Future<void> editPurchaseWithLog({
+    required Purchase oldPurchase,
+    required Purchase newPurchase,
+    required String reason,
+    required String editorName,
+    required int editorId,
+  }) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    await db.transaction((txn) async {
+      await txn.update(
+        'purchases',
+        {
+          ...newPurchase.toMap(),
+          'version': oldPurchase.version + 1,
+          'updated_at': now,
+          'is_synced': 0,
+        },
+        where: 'id = ?',
+        whereArgs: [oldPurchase.id],
+      );
+      // Log amount change
+      if (oldPurchase.amount != newPurchase.amount) {
+        await txn.insert('edit_history', {
+          'uuid': _uuid.v4(),
+          'target_id': oldPurchase.id,
+          'target_type': 'PURCHASE',
+          'field_name': 'amount',
+          'old_value': oldPurchase.amount.toStringAsFixed(2),
+          'new_value': newPurchase.amount.toStringAsFixed(2),
+          'edit_reason': reason,
+          'edited_by_id': editorId,
+          'edited_by_name': editorName,
+          'version': 1,
+          'created_at': now,
+          'updated_at': now,
+          'is_synced': 0,
+        });
+      }
+      // Log merchant name change
+      if (oldPurchase.merchantName != newPurchase.merchantName) {
+        await txn.insert('edit_history', {
+          'uuid': _uuid.v4(),
+          'target_id': oldPurchase.id,
+          'target_type': 'PURCHASE',
+          'field_name': 'merchant_name',
+          'old_value': oldPurchase.merchantName,
+          'new_value': newPurchase.merchantName,
+          'edit_reason': reason,
+          'edited_by_id': editorId,
+          'edited_by_name': editorName,
+          'version': 1,
+          'created_at': now,
+          'updated_at': now,
+          'is_synced': 0,
+        });
+      }
+      // Log notes change
+      if ((oldPurchase.notes ?? '') != (newPurchase.notes ?? '')) {
+        await txn.insert('edit_history', {
+          'uuid': _uuid.v4(),
+          'target_id': oldPurchase.id,
+          'target_type': 'PURCHASE',
+          'field_name': 'notes',
+          'old_value': oldPurchase.notes ?? '',
+          'new_value': newPurchase.notes ?? '',
+          'edit_reason': reason,
+          'edited_by_id': editorId,
+          'edited_by_name': editorName,
+          'version': 1,
+          'created_at': now,
+          'updated_at': now,
+          'is_synced': 0,
+        });
+      }
+    });
+  }
+
+  /// Returns edit history entries for a specific purchase
+  Future<List<Map<String, dynamic>>> getPurchaseEditHistory(int purchaseId) async {
+    final db = await database;
+    return await db.query(
+      'edit_history',
+      where: 'target_id = ? AND target_type = ?',
+      whereArgs: [purchaseId, 'PURCHASE'],
+      orderBy: 'created_at DESC',
+    );
+  }
+
   Future<void> updateInvoice(Invoice inv) async {
     final db = await database;
     final now = DateTime.now().toIso8601String();
