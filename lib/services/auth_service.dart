@@ -153,6 +153,7 @@ class AuthService extends ChangeNotifier {
         final Map<String, dynamic> localUserDataMap = {
           'uuid': userData['uuid'],
           'parent_id': userData['parent_id'],
+          'store_manager_id': userData['store_manager_id'],
           'username': userData['username'],
           'password': password, // Store plain text locally for offline re-auth
           'name': userData['name'],

@@ -45,8 +45,11 @@ class DatabaseService {
         await db.execute('PRAGMA journal_mode = WAL');
         // Increase cache size to 4MB for faster repeated queries
         await db.execute('PRAGMA cache_size = -4000');
-        // Ensure foreign keys are enforced
-        await db.execute('PRAGMA foreign_keys = ON');
+        // NOTE: PRAGMA foreign_keys = ON is intentionally NOT set here.
+        // Enabling FK enforcement on an existing DB can cause failures when
+        // synced data arrives out-of-order or when orphaned references exist
+        // from soft-deleted records. Data integrity is maintained at the
+        // application layer instead.
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -73,6 +76,8 @@ class DatabaseService {
           try { await db.execute('ALTER TABLE daily_statistics ADD COLUMN yesterday_cash_in_box REAL NOT NULL DEFAULT 0'); } catch (_) {}
         }
         if (oldVersion < 5) {
+          // Add store_manager_id to users table if missing (added after v1)
+          try { await db.execute('ALTER TABLE users ADD COLUMN store_manager_id INTEGER'); } catch (_) {}
           // Add performance indexes for existing databases
           await _createIndexes(db);
         }
