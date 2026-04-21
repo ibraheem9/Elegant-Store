@@ -539,19 +539,12 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
               totalCount: invoices.length,
               displayCount: displayCount);
         } else {
-          return Column(
-            children: [
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                padding: EdgeInsets.all(isMobile ? 16 : 32),
-                itemCount: displayed.length,
-                itemBuilder: (context, index) {
-                  return _buildInvoiceCard(displayed[index], isDark, isUnpaidTab, isMobile);
-                },
-              ),
-              if (hasMore)
-                Padding(
+          return ListView.builder(
+            padding: EdgeInsets.all(isMobile ? 16 : 32),
+            itemCount: displayed.length + (hasMore ? 1 : 0),
+            itemBuilder: (context, index) {
+              if (index == displayed.length) {
+                return Padding(
                   padding: const EdgeInsets.only(bottom: 24),
                   child: TextButton.icon(
                     onPressed: () => setState(() {
@@ -564,8 +557,10 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                       style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
                     ),
                   ),
-                ),
-            ],
+                );
+              }
+              return _buildInvoiceCard(displayed[index], isDark, isUnpaidTab, isMobile);
+            },
           );
         }
       }
