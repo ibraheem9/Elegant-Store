@@ -690,6 +690,241 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     );
   }
 
+  // ── Invoice Actions ────────────────────────────────────────────────────────
+
+  Future<void> _deleteInvoice(Invoice inv) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+            SizedBox(width: 10),
+            Text('تأكيد الحذف', style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('هل أنت متأكد من حذف هذه الفاتورة؟'),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.red.withOpacity(0.2)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('المبلغ: ${inv.amount.toStringAsFixed(2)} ₪', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+                  Text('التاريخ: ${inv.invoiceDate}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text('سيتم تصحيح رصيد الزبون تلقائياً.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.delete_rounded, color: Colors.white, size: 18),
+            label: const Text('حذف', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final db = context.read<DatabaseService>();
+    await db.softDeleteInvoice(inv);
+    await db.recalculateAllBalances();
+    _loadData();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم حذف الفاتورة بنجاح'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _editInvoice(Invoice inv) async {
+    final amountController = TextEditingController(text: inv.amount.toStringAsFixed(2));
+    final notesController = TextEditingController(text: inv.notes ?? '');
+    final reasonController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.edit_rounded, color: Colors.blue, size: 24),
+            SizedBox(width: 10),
+            Text('تعديل الفاتورة', style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: amountController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'المبلغ',
+                  prefixText: '₪ ',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: notesController,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  labelText: 'ملاحظات',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: reasonController,
+                decoration: InputDecoration(
+                  labelText: 'سبب التعديل *',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.save_rounded, color: Colors.white, size: 18),
+            label: const Text('حفظ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final newAmount = double.tryParse(amountController.text.trim());
+    if (newAmount == null || newAmount <= 0) return;
+    final reason = reasonController.text.trim().isEmpty ? 'تعديل يدوي' : reasonController.text.trim();
+    final now = DateTime.now().toIso8601String();
+    final newInv = Invoice(
+      id: inv.id,
+      uuid: inv.uuid,
+      storeManagerId: inv.storeManagerId,
+      userId: inv.userId,
+      invoiceDate: inv.invoiceDate,
+      amount: newAmount,
+      paidAmount: inv.paidAmount,
+      paymentMethodId: inv.paymentMethodId,
+      paymentStatus: inv.paymentStatus,
+      type: inv.type,
+      notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
+      version: inv.version,
+      createdAt: inv.createdAt,
+      updatedAt: now,
+      isSynced: 0,
+    );
+    final db = context.read<DatabaseService>();
+    await db.updateInvoiceWithLog(oldInv: inv, newInv: newInv, reason: reason);
+    await db.recalculateAllBalances();
+    _loadData();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم تعديل الفاتورة بنجاح'), backgroundColor: Colors.blue),
+      );
+    }
+  }
+
+  Future<void> _showEditHistory(Invoice inv) async {
+    final db = context.read<DatabaseService>();
+    final history = await db.getEditHistory(inv.id!, 'INVOICE');
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.history_rounded, color: Colors.purple, size: 24),
+            SizedBox(width: 10),
+            Text('سجل التعديلات', style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: SizedBox(
+          width: 360,
+          child: history.isEmpty
+              ? const Text('لا توجد تعديلات مسجلة.')
+              : ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: history.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (_, i) {
+                    final h = history[i];
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.edit_note_rounded, size: 16, color: Colors.blue),
+                              const SizedBox(width: 6),
+                              Text('الحقل: ${h['field_name']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Flexible(child: Text('من: ${h['old_value']}', style: const TextStyle(color: Colors.red, fontSize: 12))),
+                              const SizedBox(width: 8),
+                              const Icon(Icons.arrow_forward_rounded, size: 14, color: Colors.grey),
+                              const SizedBox(width: 8),
+                              Flexible(child: Text('إلى: ${h['new_value']}', style: const TextStyle(color: Colors.green, fontSize: 12))),
+                            ],
+                          ),
+                          if (h['edit_reason'] != null && h['edit_reason'].toString().isNotEmpty)
+                            Text('السبب: ${h['edit_reason']}', style: const TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic)),
+                          Text(h['created_at']?.toString().substring(0, 16) ?? '', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إغلاق')),
+        ],
+      ),
+    );
+  }
+
+  bool _wasEdited(Invoice inv) {
+    if (inv.createdAt.isEmpty || inv.updatedAt.isEmpty) return false;
+    // Compare only up to seconds (ignore milliseconds drift)
+    final created = inv.createdAt.substring(0, 19);
+    final updated = inv.updatedAt.substring(0, 19);
+    return created != updated;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -827,40 +1062,78 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         bool isDeposit = inv.type == 'DEPOSIT';
         
         if (isDeposit) {
+          final edited = _wasEdited(inv);
           return Container(
             margin: const EdgeInsets.only(bottom: 16),
-            padding: EdgeInsets.all(isMobile ? 16 : 20),
             decoration: BoxDecoration(
               color: Colors.green[600]!.withOpacity(0.1),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: Colors.green[600]!.withOpacity(0.3), width: 2),
             ),
-            child: Row(
+            child: Column(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: Colors.green[600], borderRadius: BorderRadius.circular(12)),
-                  child: const Icon(Icons.payments_rounded, color: Colors.white, size: 20),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                Padding(
+                  padding: EdgeInsets.all(isMobile ? 16 : 20),
+                  child: Row(
                     children: [
-                      Text('دفعة سداد ديون', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.green[800])),
-                      if (inv.methodName != null) 
-                        Text('عبر: ${inv.methodName}', style: TextStyle(color: Colors.green[700], fontWeight: FontWeight.bold, fontSize: 12)),
-                      Text('التاريخ: ${inv.invoiceDate}', style: TextStyle(color: Colors.green[800]!.withOpacity(0.7), fontSize: 11)),
-                      if (inv.notes != null) Text(inv.notes!, style: TextStyle(fontSize: 12, color: Colors.green[900])),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(color: Colors.green[600], borderRadius: BorderRadius.circular(12)),
+                        child: const Icon(Icons.payments_rounded, color: Colors.white, size: 20),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('دفعة سداد ديون', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.green[800])),
+                            if (inv.methodName != null)
+                              Text('عبر: ${inv.methodName}', style: TextStyle(color: Colors.green[700], fontWeight: FontWeight.bold, fontSize: 12)),
+                            Text('التاريخ: ${inv.invoiceDate}', style: TextStyle(color: Colors.green[800]!.withOpacity(0.7), fontSize: 11)),
+                            if (inv.notes != null) Text(inv.notes!, style: TextStyle(fontSize: 12, color: Colors.green[900])),
+                          ],
+                        ),
+                      ),
+                      Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(fontWeight: FontWeight.w900, fontSize: isMobile ? 18 : 24, color: Colors.green[800])),
                     ],
                   ),
                 ),
-                Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(fontWeight: FontWeight.w900, fontSize: isMobile ? 18 : 24, color: Colors.green[800])),
+                // Action buttons row
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (edited)
+                        TextButton.icon(
+                          onPressed: () => _showEditHistory(inv),
+                          icon: const Icon(Icons.history_rounded, size: 16, color: Colors.purple),
+                          label: const Text('سجل التعديل', style: TextStyle(fontSize: 12, color: Colors.purple)),
+                          style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                        ),
+                      if (edited) const SizedBox(width: 4),
+                      TextButton.icon(
+                        onPressed: () => _editInvoice(inv),
+                        icon: const Icon(Icons.edit_rounded, size: 16, color: Colors.blue),
+                        label: const Text('تعديل', style: TextStyle(fontSize: 12, color: Colors.blue)),
+                        style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                      ),
+                      const SizedBox(width: 4),
+                      TextButton.icon(
+                        onPressed: () => _deleteInvoice(inv),
+                        icon: const Icon(Icons.delete_rounded, size: 16, color: Colors.red),
+                        label: const Text('حذف', style: TextStyle(fontSize: 12, color: Colors.red)),
+                        style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           );
         }
 
+        final saleEdited = _wasEdited(inv);
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
@@ -882,35 +1155,57 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                   children: [
                     Builder(builder: (context) {
                       final methodName = inv.methodName ?? '';
-                      // Deferred/debt method names — these are NOT real payment methods
                       final isDeferredMethod = methodName == 'غير مدفوع' ||
                           methodName == 'دين' ||
                           methodName == 'آجل' ||
                           methodName.toLowerCase() == 'unpaid' ||
                           methodName.toLowerCase() == 'deferred' ||
                           methodName.toLowerCase() == 'debt';
-
                       if (isDeferredMethod || inv.methodName == null) {
-                        // Debt / unpaid method — show payment status label
                         final isDebt = methodName == 'دين' || methodName.toLowerCase() == 'debt';
                         return Text(
                           isDebt ? 'حالة الفاتورة: دين' : 'حالة الفاتورة: غير مدفوع',
                           style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12),
                         );
                       } else {
-                        // Real payment method (bank app / cash) — show method name
                         return Text(
                           'وسيلة الدفع: $methodName',
-                          style: TextStyle(
-                            color: isPaid ? Colors.blue : Colors.orange,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
+                          style: TextStyle(color: isPaid ? Colors.blue : Colors.orange, fontWeight: FontWeight.bold, fontSize: 12),
                         );
                       }
                     }),
                     Text('التاريخ: ${inv.invoiceDate}', style: const TextStyle(color: Colors.grey, fontSize: 11)),
                     if (inv.notes != null) Text('ملاحظات: ${inv.notes}', style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic)),
+                  ],
+                ),
+              ),
+              // Action buttons
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (saleEdited)
+                      TextButton.icon(
+                        onPressed: () => _showEditHistory(inv),
+                        icon: const Icon(Icons.history_rounded, size: 16, color: Colors.purple),
+                        label: const Text('سجل التعديل', style: TextStyle(fontSize: 12, color: Colors.purple)),
+                        style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                      ),
+                    if (saleEdited) const SizedBox(width: 4),
+                    TextButton.icon(
+                      onPressed: () => _editInvoice(inv),
+                      icon: const Icon(Icons.edit_rounded, size: 16, color: Colors.blue),
+                      label: const Text('تعديل', style: TextStyle(fontSize: 12, color: Colors.blue)),
+                      style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                    ),
+                    const SizedBox(width: 4),
+                    TextButton.icon(
+                      onPressed: () => _deleteInvoice(inv),
+                      icon: const Icon(Icons.delete_rounded, size: 16, color: Colors.red),
+                      label: const Text('حذف', style: TextStyle(fontSize: 12, color: Colors.red)),
+                      style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                    ),
                   ],
                 ),
               ),
