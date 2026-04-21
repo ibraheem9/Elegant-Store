@@ -585,16 +585,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     final cardBg = isDark ? const Color(0xFF0F172A) : Colors.white;
     final border = isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0);
 
-    final fields = [
-      Expanded(flex: 2, child: _buildInput('اسم المورد', _merchantController, Icons.business, isDark)),
-      const SizedBox(width: 10, height: 10),
-      Expanded(flex: 1, child: _buildInput('المبلغ', _amountController, Icons.payments, isDark, isNumeric: true)),
-      const SizedBox(width: 10, height: 10),
-      Expanded(flex: 1, child: _buildDatePicker(isDark)),
-      const SizedBox(width: 10, height: 10),
-      Expanded(flex: 2, child: _buildMethodDropdown(isDark)),
-    ];
-
     return Container(
       padding: EdgeInsets.all(isMobile ? 14 : 20),
       decoration: BoxDecoration(
@@ -611,15 +601,28 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                   fontWeight: FontWeight.bold,
                   color: isDark ? Colors.white : Colors.black)),
           const SizedBox(height: 12),
-          if (isMobile)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: fields
-                  .map((f) => f is SizedBox ? SizedBox(height: f.height ?? 0) : f)
-                  .toList(),
-            )
+          if (isMobile) ...([
+            _buildInput('اسم المورد', _merchantController, Icons.business, isDark),
+            const SizedBox(height: 10),
+            _buildInput('المبلغ', _amountController, Icons.payments, isDark, isNumeric: true),
+            const SizedBox(height: 10),
+            _buildDatePicker(isDark),
+            const SizedBox(height: 10),
+            _buildMethodDropdown(isDark),
+          ])
           else
-            Row(crossAxisAlignment: CrossAxisAlignment.start, children: fields),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 2, child: _buildInput('اسم المورد', _merchantController, Icons.business, isDark)),
+                const SizedBox(width: 10),
+                Expanded(flex: 1, child: _buildInput('المبلغ', _amountController, Icons.payments, isDark, isNumeric: true)),
+                const SizedBox(width: 10),
+                Expanded(flex: 1, child: _buildDatePicker(isDark)),
+                const SizedBox(width: 10),
+                Expanded(flex: 2, child: _buildMethodDropdown(isDark)),
+              ],
+            ),
           const SizedBox(height: 10),
           _buildInput('ملاحظات (اختياري)', _notesController, Icons.note_outlined, isDark),
           const SizedBox(height: 14),
