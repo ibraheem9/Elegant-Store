@@ -383,7 +383,13 @@ class _CustomerBalancesScreenState extends State<CustomerBalancesScreen> {
         children: [
           Icon(icon, size: 14, color: color),
           const SizedBox(width: 5),
-          Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.bold)),
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.bold),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
     );
