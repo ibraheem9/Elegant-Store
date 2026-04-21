@@ -649,15 +649,19 @@ class _SalesScreenState extends State<SalesScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('شاشة البيع', style: TextStyle(fontSize: isMobile ? 24 : 32, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A))),
-        ]),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('شاشة البيع', style: TextStyle(fontSize: isMobile ? 24 : 32, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A)), overflow: TextOverflow.ellipsis),
+          ]),
+        ),
+        const SizedBox(width: 8),
         Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             ElevatedButton.icon(
               onPressed: () => _selectFilterDateRange(context),
               icon: const Icon(Icons.date_range, size: 18),
-              label: Text(DateFormat('MM/dd').format(_startDate) + ' - ' + DateFormat('MM/dd').format(_endDate)),
+              label: Text(DateFormat('MM/dd').format(_startDate) + ' - ' + DateFormat('MM/dd').format(_endDate), overflow: TextOverflow.ellipsis),
               style: ElevatedButton.styleFrom(
                 backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
                 foregroundColor: isDark ? Colors.white : Colors.black87,
@@ -786,43 +790,53 @@ class _SalesScreenState extends State<SalesScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('رصيد الزبون الحالي', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-              Text(
-                currentBalance > 0
-                    ? '+${currentBalance.toStringAsFixed(2)} ₪  (دين عليه)'
-                    : currentBalance < 0
-                        ? '-${currentBalance.abs().toStringAsFixed(2)} ₪  (رصيد له)'
-                        : '0.00 ₪',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
-                  color: currentBalance > 0 ? Colors.red : Colors.green,
-                ),
-              ),
-            ],
-          ),
-          if (enteredAmount > 0) ...[
-            const Icon(Icons.arrow_forward_ios, size: 12, color: Colors.grey),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('بعد الفاتورة', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                Text('رصيد الزبون الحالي', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
                 Text(
-                  projectedBalance > 0
-                      ? '+${projectedBalance.toStringAsFixed(2)} ₪  (دين عليه)'
-                      : projectedBalance < 0
-                          ? '-${projectedBalance.abs().toStringAsFixed(2)} ₪  (رصيد له)'
+                  currentBalance > 0
+                      ? '+${currentBalance.toStringAsFixed(2)} ₪ (دين عليه)'
+                      : currentBalance < 0
+                          ? '-${currentBalance.abs().toStringAsFixed(2)} ₪ (رصيد له)'
                           : '0.00 ₪',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: isDebt ? Colors.red : Colors.green,
+                    fontSize: 14,
+                    color: currentBalance > 0 ? Colors.red : Colors.green,
                   ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
+            ),
+          ),
+          if (enteredAmount > 0) ...[
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: Icon(Icons.arrow_forward_ios, size: 12, color: Colors.grey),
+            ),
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('بعد الفاتورة', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                  Text(
+                    projectedBalance > 0
+                        ? '+${projectedBalance.toStringAsFixed(2)} ₪ (دين عليه)'
+                        : projectedBalance < 0
+                            ? '-${projectedBalance.abs().toStringAsFixed(2)} ₪ (رصيد له)'
+                            : '0.00 ₪',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: isDebt ? Colors.red : Colors.green,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                  ),
+                ],
+              ),
             ),
           ],
         ],
@@ -1018,7 +1032,7 @@ class _SalesScreenState extends State<SalesScreen> {
                       if (isWithdrawal) Row(children: [
                         Icon(Icons.account_balance_wallet, size: 11, color: Colors.orange[700]),
                         const SizedBox(width: 3),
-                        Text('سحب كاش من الصندوق', style: TextStyle(color: Colors.orange[700], fontSize: 10, fontWeight: FontWeight.bold)),
+                        Flexible(child: Text('سحب كاش من الصندوق', style: TextStyle(color: Colors.orange[700], fontSize: 10, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
                       ]),
                     ],
                   ),

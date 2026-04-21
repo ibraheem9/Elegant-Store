@@ -321,7 +321,7 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
                                     children: [
                                       const Icon(Icons.person_rounded, size: 16, color: Colors.purple),
                                       const SizedBox(width: 8),
-                                      Text(name, style: TextStyle(fontSize: 13, color: isDark ? Colors.white70 : Colors.black87)),
+                                      Flexible(child: Text(name, style: TextStyle(fontSize: 13, color: isDark ? Colors.white70 : Colors.black87), overflow: TextOverflow.ellipsis)),
                                     ],
                                   ),
                                 ),
@@ -566,9 +566,11 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
       children: [
         Icon(Icons.check_circle_outline_rounded, size: 18, color: color),
         const SizedBox(width: 8),
-        Text(
-          message,
-          style: TextStyle(fontSize: 13, color: isDark ? Colors.white60 : Colors.black54),
+        Flexible(
+          child: Text(
+            message,
+            style: TextStyle(fontSize: 13, color: isDark ? Colors.white60 : Colors.black54),
+          ),
         ),
       ],
     );

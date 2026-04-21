@@ -275,11 +275,14 @@ class _LoginScreenState extends State<LoginScreen> {
                                     color: Color(0xFF1E3A8A)),
                               ),
                               const SizedBox(width: 10),
-                              Text(
-                                _syncStatusMessage!,
-                                style: const TextStyle(
-                                    fontSize: 13,
-                                    color: Color(0xFF475569)),
+                              Flexible(
+                                child: Text(
+                                  _syncStatusMessage!,
+                                  style: const TextStyle(
+                                      fontSize: 13,
+                                      color: Color(0xFF475569)),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                             ],
                           ),

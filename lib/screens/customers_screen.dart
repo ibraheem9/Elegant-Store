@@ -875,10 +875,10 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                 contentPadding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 20, vertical: 10),
                 title: Row(
                   children: [
-                    Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: isDark ? Colors.white : Colors.black)),
+                    Flexible(child: Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: isDark ? Colors.white : Colors.black), overflow: TextOverflow.ellipsis)),
                     if (isPartial) ...[
-                      const SizedBox(width: 12),
-                      Text('(المدفوع: ${inv.paidAmount} ₪)', style: const TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 8),
+                      Flexible(child: Text('(المدفوع: ${inv.paidAmount} ₪)', style: const TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
                     ]
                   ],
                 ),

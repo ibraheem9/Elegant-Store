@@ -746,7 +746,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
             children: [
               Row(
                 children: [
-                  Text(inv.customerName ?? 'زبون عابر', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Flexible(
+                    child: Text(inv.customerName ?? 'زبون عابر', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                  ),
                   const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -760,7 +762,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                 children: [
                   Icon(Icons.access_time, size: 14, color: Colors.grey[400]),
                   const SizedBox(width: 4),
-                  Text('${inv.invoiceDate}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                  Flexible(child: Text('${inv.invoiceDate}', style: const TextStyle(color: Colors.grey, fontSize: 13), overflow: TextOverflow.ellipsis)),
                 ],
               ),
               if (inv.notes != null && inv.notes!.isNotEmpty) ...[
@@ -838,10 +840,10 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
               decoration: BoxDecoration(color: typeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
               child: Text(typeLabel, style: TextStyle(color: typeColor, fontSize: 10, fontWeight: FontWeight.bold)),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 8),
             Icon(Icons.access_time, size: 12, color: Colors.grey[400]),
             const SizedBox(width: 4),
-            Text('${inv.invoiceDate}', style: const TextStyle(color: Colors.grey, fontSize: 11)),
+            Flexible(child: Text('${inv.invoiceDate}', style: const TextStyle(color: Colors.grey, fontSize: 11), overflow: TextOverflow.ellipsis)),
           ],
         ),
         if (inv.notes != null && inv.notes!.isNotEmpty) ...[

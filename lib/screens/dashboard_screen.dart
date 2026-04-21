@@ -502,14 +502,18 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'لوحة التحكم', 
-                    style: TextStyle(
-                      fontSize: isMobile ? 24 : 32, 
-                      fontWeight: FontWeight.w900, 
-                      color: isDark ? const Color(0xFFDCEFFF) : const Color(0xFF0F172A)
-                    )
+                  Expanded(
+                    child: Text(
+                      'لوحة التحكم', 
+                      style: TextStyle(
+                        fontSize: isMobile ? 24 : 32, 
+                        fontWeight: FontWeight.w900, 
+                        color: isDark ? const Color(0xFFDCEFFF) : const Color(0xFF0F172A)
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
+                  const SizedBox(width: 8),
                   _buildSyncButton(isDark, syncService.isSyncing),
                 ],
               ),
@@ -624,7 +628,7 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // ── More Details button ──────────────────────────────────
+              // ── More Details button ────────────────────────────────────────────────
               TextButton.icon(
                 onPressed: _openSyncDetails,
                 icon: const Icon(Icons.bar_chart_rounded, size: 16),
@@ -637,13 +641,17 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
                 ),
               ),
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    'حالة المزامنة',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                      color: isDark ? Colors.blue[300] : Colors.blue[800],
+                  Flexible(
+                    child: Text(
+                      'حالة المزامنة',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: isDark ? Colors.blue[300] : Colors.blue[800],
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   const SizedBox(width: 8),

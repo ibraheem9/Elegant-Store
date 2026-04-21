@@ -257,8 +257,13 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text('إدارة المشتريات', 
-          style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A))),
+        Expanded(
+          child: Text('إدارة المشتريات', 
+            style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A)),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: 16),
         _buildFilterBar(isDark, size),
       ],
     );
@@ -626,8 +631,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                         children: [
                           Icon(Icons.access_time, size: 12, color: isDark ? Colors.white30 : Colors.grey),
                           const SizedBox(width: 4),
-                          Text(DateFormat('MM/dd HH:mm').format(DateTime.parse(p.createdAt)),
-                            style: TextStyle(fontSize: 12, color: isDark ? Colors.white30 : Colors.grey)),
+                          Flexible(child: Text(DateFormat('MM/dd HH:mm').format(DateTime.parse(p.createdAt)),
+                            style: TextStyle(fontSize: 12, color: isDark ? Colors.white30 : Colors.grey), overflow: TextOverflow.ellipsis)),
                         ],
                       ),
                       // Always show notes below on a new line
