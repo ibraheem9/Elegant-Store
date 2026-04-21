@@ -340,8 +340,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         const SizedBox(height: 4),
                         Text(
                           isExceeded
-                              ? 'تجاوز سقف الدين! الرصيد ${balance.toStringAsFixed(2)} ₪ من أصل ${limit.toStringAsFixed(2)} ₪'
-                              : 'اقترب من سقف الدين. الرصيد ${balance.toStringAsFixed(2)} ₪ من أصل ${limit.toStringAsFixed(2)} ₪',
+                              ? '${nickname != null && nickname.isNotEmpty ? nickname : name} تجاوز الحد الأقصى من الدين باستخدام ${balance.toStringAsFixed(0)} من أصل ${limit.toStringAsFixed(0)} ₪'
+                              : '${nickname != null && nickname.isNotEmpty ? nickname : name} أوشك على بلوغ الحد الأقصى من الدين باستخدام ${balance.toStringAsFixed(0)} من أصل ${limit.toStringAsFixed(0)} ₪',
                           style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 6),

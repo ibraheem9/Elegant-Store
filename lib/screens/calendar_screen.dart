@@ -46,7 +46,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       }
       
       String mName = (inv.methodName ?? '').toLowerCase();
-      if (mName.contains('كاش') || mName.contains('نقدي') || mName.contains('cash')) {
+      if (mName.contains('نقدي') || mName.contains('نقدي') || mName.contains('cash')) {
         stats[dateKey]!['cash'] = (stats[dateKey]!['cash'] ?? 0.0) + inv.amount;
       } else if (mName.contains('تطبيق') || mName.contains('بنكي') || mName.contains('app')) {
         stats[dateKey]!['app'] = (stats[dateKey]!['app'] ?? 0.0) + inv.amount;

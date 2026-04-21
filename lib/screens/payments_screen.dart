@@ -773,7 +773,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: typeColor)),
-              if (!isUnpaidTab) Text(inv.methodName ?? 'كاش', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 14)),
+              if (!isUnpaidTab) Text(inv.methodName ?? 'نقدي', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 14)),
             ],
           ),
         ),
@@ -847,7 +847,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         ],
         if (!isUnpaidTab) ...[
            const SizedBox(height: 8),
-           Text(inv.methodName ?? 'كاش', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 12)),
+           Text(inv.methodName ?? 'نقدي', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 12)),
         ],
         if (isUnpaidTab) ...[
           const SizedBox(height: 16),

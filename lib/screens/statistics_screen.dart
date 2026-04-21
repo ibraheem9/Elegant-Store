@@ -20,12 +20,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   final _todayCashController = TextEditingController();
 
   // ── Auto-calculated ────────────────────────────────────────────────────────
-  double _appSales        = 0.0;
-  double _appDebt         = 0.0;
-  double _cashWithdrawals = 0.0;
-  double _cashPurchases   = 0.0;
-  double _appPurchases    = 0.0;
-  double _yesterdayCash   = 0.0;
+  double _appSales            = 0.0;
+  double _appDebt             = 0.0;
+  double _cashWithdrawals     = 0.0;
+  double _cashPurchases       = 0.0;
+  double _appPurchases        = 0.0;
+  double _yesterdayCash       = 0.0;
+  double _cashDebtRepayment   = 0.0; // إجمالي سداد الدين النقدي
 
   bool _isLoading = false;
   DailyStatistics? _savedStats;
@@ -57,12 +58,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final monthly       = await db.getMonthlySales(_selectedDate.year, _selectedDate.month);
 
     setState(() {
-      _appSales        = detailedStats['app_sales']        ?? 0.0;
-      _appDebt         = detailedStats['app_debt']         ?? 0.0;
-      _cashWithdrawals = detailedStats['cash_withdrawals'] ?? 0.0;
-      _cashPurchases   = detailedStats['cash_purchases']   ?? 0.0;
-      _appPurchases    = detailedStats['app_purchases']    ?? 0.0;
-      _yesterdayCash   = yesterdayCash;
+      _appSales            = detailedStats['app_sales']          ?? 0.0;
+      _appDebt             = detailedStats['app_debt']           ?? 0.0;
+      _cashWithdrawals     = detailedStats['cash_withdrawals']   ?? 0.0;
+      _cashPurchases       = detailedStats['cash_purchases']     ?? 0.0;
+      _appPurchases        = detailedStats['app_purchases']      ?? 0.0;
+      _cashDebtRepayment   = detailedStats['cash_debt_repayment'] ?? 0.0;
+      _yesterdayCash       = yesterdayCash;
       _monthlyData     = monthly;
 
       if (savedStats != null) {
@@ -89,21 +91,21 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
   // ── Derived values ─────────────────────────────────────────────────────────
 
-  /// إجمالي البيع كاش = صندوق اليوم - صندوق الأمس
-  /// إذا لم يُدخل صندوق اليوم بعد → صفر
+  /// إجمالي الصندوق اليوم مُدخل؟
   bool get _cashEntered => _todayCashController.text.trim().isNotEmpty;
 
+  /// إجمالي البيع النقدي = صندوق اليوم + إجمالي الدين النقدي + إجمالي المشتريات نقدي
+  ///                      - صندوق الأمس - إجمالي سداد الدين النقدي
   double get _cashSales {
     if (!_cashEntered) return 0.0;
     final today = double.tryParse(_todayCashController.text) ?? 0.0;
-    return today - _yesterdayCash;
+    return today + _cashWithdrawals + _cashPurchases - _yesterdayCash - _cashDebtRepayment;
   }
 
-  /// إجمالي المشتريات = كاش + تطبيق
+  /// إجمالي المشتريات = نقدي + تطبيق
   double get _totalPurchases => _cashPurchases + _appPurchases;
 
-  /// إجمالي البيع الكلي = مبيعات تطبيق + بيع كاش
-  /// إذا لم يُدخل صندوق اليوم → يُعرض صفر للكاش وفقط مبيعات التطبيق
+  /// إجمالي البيع الكلي = مبيعات تطبيق + بيع نقدي
   double get _totalSales => _appSales + _cashSales;
 
   // ── Save ───────────────────────────────────────────────────────────────────
@@ -121,7 +123,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       statisticDate:           DateFormat('yyyy-MM-dd').format(_selectedDate),
       yesterdayCashInBox:      _yesterdayCash,
       todayCashInBox:          double.tryParse(_todayCashController.text) ?? 0.0,
-      totalCashDebtRepayment:  0.0, // سداد ديون كاش ملغي
+      totalCashDebtRepayment:  0.0, // سداد ديون نقدي ملغي
       totalAppDebtRepayment:   _appDebt,
       totalCashPurchases:      _cashPurchases + _cashWithdrawals,
       totalAppPurchases:       _appPurchases,
@@ -285,7 +287,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         const SizedBox(height: 16),
         // صندوق اليوم — يدوي
         _buildManualInput(
-          'إجمالي الصندوق اليوم (الفصلي)',
+          'إجمالي الصندوق اليوم',
           _todayCashController,
           Icons.account_balance_wallet_rounded,
           Colors.green,
@@ -311,11 +313,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           mainAxisSpacing: 16,
           childAspectRatio: isSmall ? 2.8 : 3.8,
           children: [
-            _buildAutoDisplay('إجمالي المبيعات على التطبيق',   _appSales,        Icons.phonelink_ring_rounded,        Colors.blue,    isDark),
-            _buildAutoDisplay('إجمالي الدين على التطبيق',      _appDebt,         Icons.account_balance_rounded,       Colors.purple,  isDark),
-            _buildAutoDisplay('إجمالي الديون الكاش (سحب)',     _cashWithdrawals, Icons.money_off_rounded,             Colors.red,     isDark),
-            _buildAutoDisplay('إجمالي المشتريات تطبيق',        _appPurchases,    Icons.mobile_friendly_rounded,       Colors.indigo,  isDark),
-            _buildAutoDisplay('إجمالي المشتريات كاش',          _cashPurchases,   Icons.shopping_bag_rounded,          Colors.orange,  isDark),
+            _buildAutoDisplay('إجمالي المبيعات على التطبيق',     _appSales,           Icons.phonelink_ring_rounded,  Colors.blue,    isDark),
+            _buildAutoDisplay('إجمالي الدين على التطبيق',        _appDebt,            Icons.account_balance_rounded, Colors.purple,  isDark),
+            _buildAutoDisplay('إجمالي الدين النقدي (سحب)',       _cashWithdrawals,    Icons.money_off_rounded,       Colors.red,     isDark),
+            _buildAutoDisplay('إجمالي سداد الدين النقدي',        _cashDebtRepayment,  Icons.payments_rounded,        Colors.teal,    isDark),
+            _buildAutoDisplay('إجمالي المشتريات تطبيق',          _appPurchases,       Icons.mobile_friendly_rounded, Colors.indigo,  isDark),
+            _buildAutoDisplay('إجمالي المشتريات نقدي',           _cashPurchases,      Icons.shopping_bag_rounded,    Colors.orange,  isDark),
           ],
         ),
       ],
@@ -337,12 +340,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           mainAxisSpacing: 16,
           childAspectRatio: isSmall ? 2.2 : 2.8,
           children: [
-            _buildDerivedCard('إجمالي البيع كاش',    _cashSales,      Colors.green,  isDark,
-                subtitle: 'صندوق اليوم - صندوق الأمس'),
-            _buildDerivedCard('إجمالي المشتريات',    _totalPurchases, Colors.orange, isDark,
-                subtitle: 'كاش + تطبيق'),
-            _buildDerivedCard('إجمالي البيع الكلي',  _totalSales,     Colors.blue,   isDark,
-                subtitle: 'تطبيق + كاش'),
+            _buildDerivedCard('إجمالي البيع النقدي',  _cashSales,      Colors.green,  isDark,
+                subtitle: 'اليوم + دين نقدي + مشتريات - أمس - سداد الدين'),
+            _buildDerivedCard('إجمالي المشتريات',     _totalPurchases, Colors.orange, isDark,
+                subtitle: 'نقدي + تطبيق'),
+            _buildDerivedCard('إجمالي البيع الكلي',   _totalSales,     Colors.blue,   isDark,
+                subtitle: 'تطبيق + نقدي'),
           ],
         ),
       ],
@@ -448,7 +451,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           childAspectRatio: 3,
           children: [
             _buildResultCard('إجمالي البيع الكلي',    totalSalesStored,     Colors.blue,   isDark),
-            _buildResultCard('إجمالي البيع كاش',      cashSalesStored,      Colors.green,  isDark),
+            _buildResultCard('إجمالي البيع نقدي',      cashSalesStored,      Colors.green,  isDark),
             _buildResultCard('إجمالي المبيعات تطبيق', s.totalSalesCredit,   Colors.purple, isDark),
             _buildResultCard('إجمالي المشتريات',      totalPurchasesStored, Colors.orange, isDark),
           ],

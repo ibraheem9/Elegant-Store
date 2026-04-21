@@ -20,7 +20,7 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
   bool _isLoading = true;
 
   final List<Map<String, String>> _types = [
-    {'value': 'cash', 'label': 'كاش (نقدي)'},
+    {'value': 'cash', 'label': 'نقدي (نقدي)'},
     {'value': 'app', 'label': 'تطبيق إلكتروني'},
     {'value': 'deferred', 'label': 'أجل (دين)'},
     {'value': 'credit_balance', 'label': 'رصيد المحفظة'},
@@ -448,7 +448,7 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                         style: TextStyle(
                             color: isDark ? Colors.white : Colors.black),
                         decoration: _inputDecoration(
-                            'مثلاً: كاش، بنك فلسطين، حمودة...', isDark),
+                            'مثلاً: نقدي، بنك فلسطين، حمودة...', isDark),
                         validator: (v) =>
                             v == null || v.isEmpty ? 'يرجى إدخال الاسم' : null,
                       ),

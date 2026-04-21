@@ -33,6 +33,23 @@ class _AccountantsScreenState extends State<AccountantsScreen> {
   }
 
   Future<void> _deleteAccountant(User accountant) async {
+    final db = context.read<DatabaseService>();
+    // Check if accountant has linked invoices/operations
+    final hasOps = await db.accountantHasOperations(accountant.id!);
+    if (!mounted) return;
+
+    if (hasOps) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('لا يمكن الحذف', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          content: Text('الموظف "${accountant.name}" مرتبط بعمليات في النظام. لا يمكن حذفه للحفاظ على سجلات العمليات.'),
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً'))],
+        ),
+      );
+      return;
+    }
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -46,7 +63,6 @@ class _AccountantsScreenState extends State<AccountantsScreen> {
     );
 
     if (confirm == true) {
-      final db = context.read<DatabaseService>();
       await db.softDeleteUser(accountant.id!);
       _loadAccountants();
     }

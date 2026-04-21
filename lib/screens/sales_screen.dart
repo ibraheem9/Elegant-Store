@@ -416,15 +416,38 @@ class _SalesScreenState extends State<SalesScreen> {
     final creditAmountController = TextEditingController(text: _amountController.text);
     final creditNotesController = TextEditingController(text: _notesController.text);
 
+    DateTime depositDate = DateTime.now();
+    final depositDateController = TextEditingController(text: DateFormat('yyyy-MM-dd').format(depositDate));
+
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('إيداع رصيد'),
+          title: const Text('دفعة (سداد)'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: creditAmountController, decoration: const InputDecoration(labelText: 'المبلغ المودع'), keyboardType: TextInputType.number),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<PaymentMethod>(value: localMethod, items: creditMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name))).toList(), onChanged: (v) => setDialogState(() => localMethod = v), decoration: const InputDecoration(labelText: 'طريقة الإيداع')),
+            TextField(controller: creditAmountController, decoration: const InputDecoration(labelText: 'المبلغ'), keyboardType: TextInputType.number),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<PaymentMethod>(value: localMethod, items: creditMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name))).toList(), onChanged: (v) => setDialogState(() => localMethod = v), decoration: const InputDecoration(labelText: 'طريقة الدفع')),
+            const SizedBox(height: 12),
+            TextField(
+              controller: depositDateController,
+              readOnly: true,
+              decoration: const InputDecoration(labelText: 'تاريخ الدفعة', prefixIcon: Icon(Icons.calendar_today, size: 18)),
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: depositDate,
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime(2101),
+                );
+                if (picked != null) {
+                  setDialogState(() {
+                    depositDate = picked;
+                    depositDateController.text = DateFormat('yyyy-MM-dd').format(picked);
+                  });
+                }
+              },
+            ),
           ]),
           actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')), ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('تأكيد'))],
         ),
@@ -433,7 +456,7 @@ class _SalesScreenState extends State<SalesScreen> {
     if (result == true && localMethod != null) {
       final amount = double.tryParse(creditAmountController.text) ?? 0;
       setState(() => _isLoading = true);
-      try { await db.addCredit(userId: _selectedCustomer!.id!, amount: amount, notes: creditNotesController.text, paymentMethodId: localMethod!.id!); _clearFields(); await _loadData(); _showSnackBar('تم الإيداع بنجاح', Colors.green); } catch (e) { _showSnackBar('خطأ: $e', Colors.red); } finally { setState(() => _isLoading = false); }
+      try { await db.addCredit(userId: _selectedCustomer!.id!, amount: amount, notes: creditNotesController.text, paymentMethodId: localMethod!.id!, date: depositDate); _clearFields(); await _loadData(); _showSnackBar('تم تسجيل الدفعة بنجاح', Colors.green); } catch (e) { _showSnackBar('خطأ: $e', Colors.red); } finally { setState(() => _isLoading = false); }
     }
   }
 
@@ -632,86 +655,12 @@ class _SalesScreenState extends State<SalesScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildHeader(isMobile, isDark),
-                const SizedBox(height: 32),
-                _buildStatsRow(isMobile, isDark),
-                const SizedBox(height: 32),
                 _buildInvoiceForm(isMobile, isDark),
-                const SizedBox(height: 48),
+                const SizedBox(height: 32),
                 _buildInvoiceSection(isMobile, isDark),
               ],
             ),
           ),
-    );
-  }
-
-  Widget _buildHeader(bool isMobile, bool isDark) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('شاشة البيع', style: TextStyle(fontSize: isMobile ? 24 : 32, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A)), overflow: TextOverflow.ellipsis),
-          ]),
-        ),
-        const SizedBox(width: 8),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ElevatedButton.icon(
-              onPressed: () => _selectFilterDateRange(context),
-              icon: const Icon(Icons.date_range, size: 18),
-              label: Text(DateFormat('MM/dd').format(_startDate) + ' - ' + DateFormat('MM/dd').format(_endDate), overflow: TextOverflow.ellipsis),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-                foregroundColor: isDark ? Colors.white : Colors.black87,
-                elevation: 0,
-                side: BorderSide(color: isDark ? Colors.white10 : Colors.black12)
-              ),
-            ),
-            const SizedBox(width: 8),
-            IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatsRow(bool isMobile, bool isDark) {
-    if (isMobile) {
-      return Column(children: [
-        _buildStatCard('إجمالي مبيعات الفترة', '${_todayStats['total_sales'].toStringAsFixed(2)} ₪', Icons.trending_up, Colors.blue, isDark),
-        const SizedBox(height: 16),
-        _buildStatCard('إجمالي الزبائن', '${_allCustomers.length}', Icons.people, Colors.green, isDark),
-      ]);
-    }
-    return Row(children: [
-      Expanded(child: _buildStatCard('إجمالي مبيعات الفترة', '${_todayStats['total_sales'].toStringAsFixed(2)} ₪', Icons.trending_up, Colors.blue, isDark)),
-      const SizedBox(width: 20),
-      Expanded(child: _buildStatCard('إجمالي الزبائن', '${_allCustomers.length}', Icons.people, Colors.green, isDark)),
-    ]);
-  }
-
-  Widget _buildStatCard(String title, String value, IconData icon, Color color, bool isDark, {bool tappable = false}) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF0F172A) : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: tappable ? color.withOpacity(0.4) : (isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
-          width: tappable ? 1.5 : 1,
-        ),
-      ),
-      child: Row(children: [
-        Icon(icon, color: color, size: 28),
-        const SizedBox(width: 16),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title, style: TextStyle(color: isDark ? Colors.white60 : Colors.grey, fontSize: 13)),
-          Text(value, style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 22, fontWeight: FontWeight.w900)),
-        ])),
-        if (tappable) Icon(Icons.arrow_forward_ios, size: 14, color: color.withOpacity(0.6)),
-      ]),
     );
   }
 
@@ -892,21 +841,33 @@ class _SalesScreenState extends State<SalesScreen> {
       SizedBox(width: double.infinity, height: 56, child: ElevatedButton(onPressed: _isLoading ? null : _createInvoice, style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0B74FF), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))), child: Text(_isLoading ? 'جاري الحفظ...' : 'حفظ الفاتورة', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)))),
       const SizedBox(height: 12),
       Row(children: [
-        Expanded(child: SizedBox(height: 56, child: ElevatedButton(onPressed: _isLoading ? null : _handleCashWithdrawal, style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))), child: const Text('سحب (دين)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))))),
+        Expanded(child: SizedBox(height: 56, child: ElevatedButton(onPressed: _isLoading ? null : _handleCashWithdrawal, style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))), child: const Text('دين نقدي', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))))),
         const SizedBox(width: 12),
-        Expanded(child: SizedBox(height: 56, child: ElevatedButton(onPressed: _isLoading ? null : _handleAddCredit, style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))), child: const Text('إيداع رصيد', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))))),
+        Expanded(child: SizedBox(height: 56, child: ElevatedButton(onPressed: _isLoading ? null : _handleAddCredit, style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))), child: const Text('دفعة (سداد)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))))),
       ]),
     ]);
   }
 
   Widget _buildInvoiceSection(bool isMobile, bool isDark) {
+    final totalCount = _filteredInvoices.length;
+    final depositCount = _filteredInvoices.where((i) => i.type == 'DEPOSIT').length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('سجل العمليات', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('سجل العمليات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+                  const SizedBox(height: 2),
+                  Text('عدد الفواتير: $totalCount  •  دفعات السداد: $depositCount',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+                ],
+              ),
+            ),
             _buildSortMenu(isDark),
           ],
         ),
@@ -1032,7 +993,7 @@ class _SalesScreenState extends State<SalesScreen> {
                       if (isWithdrawal) Row(children: [
                         Icon(Icons.account_balance_wallet, size: 11, color: Colors.orange[700]),
                         const SizedBox(width: 3),
-                        Flexible(child: Text('سحب كاش من الصندوق', style: TextStyle(color: Colors.orange[700], fontSize: 10, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                        Flexible(child: Text('سحب نقدي من الصندوق', style: TextStyle(color: Colors.orange[700], fontSize: 10, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
                       ]),
                     ],
                   ),
@@ -1109,7 +1070,7 @@ class _SalesScreenState extends State<SalesScreen> {
                     children: [
                       Text(inv.customerName ?? 'عابر', style: TextStyle(color: rowNameColor, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
                       if (isDeposit) Text('فاتورة تسديد ديون', style: TextStyle(color: Colors.green[700], fontSize: 9, fontWeight: FontWeight.bold)),
-                      if (isWithdrawal) Text('سحب كاش من الصندوق', style: TextStyle(color: Colors.orange[700], fontSize: 9, fontWeight: FontWeight.bold)),
+                      if (isWithdrawal) Text('سحب نقدي من الصندوق', style: TextStyle(color: Colors.orange[700], fontSize: 9, fontWeight: FontWeight.bold)),
                     ],
                   ),
                 )

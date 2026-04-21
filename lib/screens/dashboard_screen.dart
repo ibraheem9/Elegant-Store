@@ -367,24 +367,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 onPressed: () => _scaffoldKey.currentState?.openDrawer(),
               ),
             const SizedBox(width: 8),
-            if (isMobile)
-              Image.asset(
-                'assets/logo.png',
-                height: 45,
-                errorBuilder: (context, error, stackTrace) => Text(
-                  _getScreenTitle(_selectedIndex),
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: isDark ? const Color(0xFFDCEFFF) : const Color(0xFF0F172A))
+            Expanded(
+              child: Text(
+                _getScreenTitle(_selectedIndex),
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: isMobile ? 17 : 20,
+                  color: isDark ? const Color(0xFFDCEFFF) : const Color(0xFF0F172A),
                 ),
-              )
-            else
-              Image.asset(
-                'assets/logo.png',
-                height: 42,
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) =>
-                    Image.asset('assets/icon.png', height: 36, fit: BoxFit.contain),
+                overflow: TextOverflow.ellipsis,
               ),
-            const Spacer(),
+            ),
             _buildNotificationIcon(isDark),
           ],
         ),
@@ -535,20 +528,8 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Expanded(
-                    child: Text(
-                      'لوحة التحكم', 
-                      style: TextStyle(
-                        fontSize: isMobile ? 24 : 32, 
-                        fontWeight: FontWeight.w900, 
-                        color: isDark ? const Color(0xFFDCEFFF) : const Color(0xFF0F172A)
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
                   _buildSyncButton(isDark, syncService.isSyncing),
                 ],
               ),
@@ -575,9 +556,25 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
                       _buildStatCard('إجمالي الديون القائمة', '${stats['total_debts'].toStringAsFixed(2)} ₪', Icons.money_off_rounded, const Color(0xFFEF4444), isDark),
                       _buildStatCard('إجمالي الأرصدة المودعة', '${stats['total_balances'].toStringAsFixed(2)} ₪', Icons.account_balance_rounded, const Color(0xFF10B981), isDark),
                       _buildStatCard('عدد الزبائن الكلي', '${stats['total_customers']}', Icons.group_rounded, const Color(0xFF3B82F6), isDark),
-                      _buildStatCard('تنبيهات غير مسددة', '${stats['unpaid_non_permanent_count'] ?? 0}', Icons.warning_amber_rounded, Colors.orange, isDark, onTap: () {
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsScreen()));
-                      }),
+                      FutureBuilder<int>(
+                        future: db.getSmartNotificationsCount(),
+                        builder: (ctx, snap) {
+                          final cnt = snap.data ?? 0;
+                          return _buildStatCard('تنبيهات غير مسددة', '$cnt', Icons.warning_amber_rounded, Colors.orange, isDark, onTap: () {
+                            Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsScreen()));
+                          });
+                        },
+                      ),
+                      FutureBuilder<Map<String, dynamic>>(
+                        future: db.getSalesStats(
+                          start: DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day),
+                          end: DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day, 23, 59, 59),
+                        ),
+                        builder: (ctx, snap) {
+                          final total = (snap.data?['total_sales'] ?? 0.0) as double;
+                          return _buildStatCard('إجمالي مبيعات اليوم', '${total.toStringAsFixed(2)} ₪', Icons.trending_up_rounded, const Color(0xFF8B5CF6), isDark);
+                        },
+                      ),
                     ],
                   );
                 },

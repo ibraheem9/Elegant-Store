@@ -20,7 +20,7 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
   List<PaymentMethod> _methods = [];
 
   final List<Map<String, String>> _types = [
-    {'value': 'cash', 'label': 'كاش (نقدي)'},
+    {'value': 'cash', 'label': 'نقدي (نقدي)'},
     {'value': 'app', 'label': 'تطبيق إلكتروني'},
   ];
 
@@ -233,7 +233,7 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              method.type == 'cash' ? 'كاش (نقدي)' : 'تطبيق إلكتروني',
+              method.type == 'cash' ? 'نقدي (نقدي)' : 'تطبيق إلكتروني',
               style: TextStyle(
                   fontSize: 13, color: color, fontWeight: FontWeight.w600),
             ),
@@ -321,7 +321,7 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
                             color: isDark ? Colors.white : Colors.black),
                         decoration: InputDecoration(
                           labelText:
-                              'اسم الوسيلة (مثلاً: كاش، تطبيق إبراهيم، ...)',
+                              'اسم الوسيلة (مثلاً: نقدي، تطبيق إبراهيم، ...)',
                           labelStyle: TextStyle(
                               color: isDark
                                   ? Colors.white70

@@ -689,11 +689,12 @@ class DatabaseService {
     return count > 0;
   }
 
-  Future<void> addCredit({required int userId, required double amount, String? notes, required int paymentMethodId}) async {
+  Future<void> addCredit({required int userId, required double amount, String? notes, required int paymentMethodId, DateTime? date}) async {
     final db = await database;
     await db.transaction((txn) async {
-      final now = DateTime.now().toIso8601String();
-      final dateStr = DateFormat('dd-MM-yyyy EEEE', 'ar').format(DateTime.now());
+      final effectiveDate = date ?? DateTime.now();
+      final now = effectiveDate.toIso8601String();
+      final dateStr = DateFormat('dd-MM-yyyy EEEE', 'ar').format(effectiveDate);
       final invId = await txn.insert('invoices', {
         'uuid': _uuid.v4(),
         'user_id': userId,
@@ -914,7 +915,7 @@ class DatabaseService {
     // إذا كانت النتيجة سالبة تُعرض صفر (معناه المبيعات المدفوعة تغطي كل الديون)
     final double appDebt = (appUnpaidTotal - appSalesTotal).clamp(0.0, double.infinity);
 
-    // إجمالي الديون الكاش = إجمالي السحب الكاش
+    // إجمالي الديون النقدي = إجمالي السحب النقدي
     final cashWithdrawals = await db.rawQuery(
       "SELECT SUM(amount) as t FROM invoices WHERE created_at LIKE ? AND type = 'WITHDRAWAL' AND deleted_at IS NULL",
       ['$today%'],
@@ -930,14 +931,24 @@ class DatabaseService {
       ['$today%'],
     );
 
+    // إجمالي سداد الدين النقدي = فواتير DEPOSIT مدفوعة بوسيلة نقدية (cash)
+    final cashDebtRepayment = await db.rawQuery(
+      '''SELECT SUM(i.amount) as t FROM invoices i
+         JOIN payment_methods pm ON i.payment_method_id = pm.id
+         WHERE i.created_at LIKE ? AND i.type = 'DEPOSIT'
+         AND pm.type = 'cash' AND i.deleted_at IS NULL''',
+      ['$today%'],
+    );
+
     return {
-      'app_sales':        appSalesTotal,
-      'app_debt':         appDebt,
-      'cash_withdrawals': (cashWithdrawals.first['t'] as num?)?.toDouble() ?? 0.0,
-      'cash_purchases':   (cashPurchases.first['t'] as num?)?.toDouble() ?? 0.0,
-      'app_purchases':    (appPurchases.first['t'] as num?)?.toDouble() ?? 0.0,
+      'app_sales':            appSalesTotal,
+      'app_debt':             appDebt,
+      'cash_withdrawals':     (cashWithdrawals.first['t'] as num?)?.toDouble() ?? 0.0,
+      'cash_purchases':       (cashPurchases.first['t'] as num?)?.toDouble() ?? 0.0,
+      'app_purchases':        (appPurchases.first['t'] as num?)?.toDouble() ?? 0.0,
+      'cash_debt_repayment':  (cashDebtRepayment.first['t'] as num?)?.toDouble() ?? 0.0,
       // legacy key
-      'app_debt_repayment': appSalesTotal,
+      'app_debt_repayment':   appSalesTotal,
     };
   }
 

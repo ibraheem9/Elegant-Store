@@ -200,19 +200,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
             tooltip: 'رجوع',
             onPressed: () => Navigator.of(context).pop(),
           ),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('إدارة الزبائن', style: TextStyle(fontSize: isSmall ? 24 : 32, fontWeight: FontWeight.w900, color: isDark ? Colors.white : const Color(0xFF0F172A))),
-              const SizedBox(height: 4),
-              Text('تتبع الديون، الملاحظات، وأسماء التحويلات', 
-                style: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF64748B), fontSize: isSmall ? 12 : 15),
-                maxLines: 1, overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
+        const Spacer(),
         _buildViewToggle(isDark),
       ],
     );
