@@ -1315,7 +1315,6 @@ class DatabaseService {
       return await txn.insert(table, sanitizedData);
     }
   }
-}
 
   // Smart Notifications
   Future<List<Map<String, dynamic>>> getSmartNotifications() async {
@@ -1406,3 +1405,4 @@ class DatabaseService {
 
     return unpaidCount + ceilingCount;
   }
+}
