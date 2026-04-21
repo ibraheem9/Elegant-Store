@@ -41,6 +41,7 @@ class _SalesScreenState extends State<SalesScreen> {
   DateTime _startDate = DateTime.now();
   DateTime _endDate = DateTime.now();
   DateTime _selectedInvoiceDate = DateTime.now();
+  String _invoiceDateFilter = 'day'; // 'day', 'week', 'month', 'custom'
   
   int? _sortColumnIndex = 1; // Default to Date
   bool _isAscending = false; // Newest first
@@ -624,6 +625,47 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
+  void _applyDateFilter(String mode) {
+    final now = DateTime.now();
+    setState(() {
+      _invoiceDateFilter = mode;
+      switch (mode) {
+        case 'day':
+          _startDate = now;
+          _endDate = now;
+          break;
+        case 'week':
+          final weekStart = now.subtract(Duration(days: now.weekday - 1));
+          _startDate = weekStart;
+          _endDate = now;
+          break;
+        case 'month':
+          _startDate = DateTime(now.year, now.month, 1);
+          _endDate = now;
+          break;
+        // 'custom' is handled by _selectFilterDateRange
+      }
+    });
+    _loadData();
+  }
+
+  String _buildDateFilterLabel() {
+    final fmt = DateFormat('dd/MM/yyyy');
+    switch (_invoiceDateFilter) {
+      case 'day':
+        return fmt.format(_startDate);
+      case 'week':
+        return '${fmt.format(_startDate)} - ${fmt.format(_endDate)}';
+      case 'month':
+        return DateFormat('MMMM yyyy', 'ar').format(_startDate);
+      case 'custom':
+        if (_startDate == _endDate) return fmt.format(_startDate);
+        return '${fmt.format(_startDate)} - ${fmt.format(_endDate)}';
+      default:
+        return fmt.format(_startDate);
+    }
+  }
+
   Future<void> _selectFilterDateRange(BuildContext context) async {
     final DateTimeRange? picked = await showDateRangePicker(
       context: context,
@@ -633,6 +675,7 @@ class _SalesScreenState extends State<SalesScreen> {
     );
     if (picked != null) {
       setState(() {
+        _invoiceDateFilter = 'custom';
         _startDate = picked.start;
         _endDate = picked.end;
       });
@@ -850,51 +893,180 @@ class _SalesScreenState extends State<SalesScreen> {
 
   Widget _buildInvoiceSection(bool isMobile, bool isDark) {
     final totalCount = _filteredInvoices.length;
-    final depositCount = _filteredInvoices.where((i) => i.type == 'DEPOSIT').length;
+    final cardBg = isDark ? Colors.grey[850]! : Colors.white;
+    final labelColor = isDark ? Colors.grey[400]! : Colors.grey[600]!;
+    final textColor = isDark ? Colors.white : Colors.black;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // ── Header row: title + sort ────────────────────────────────────────
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Flexible(
-              child: Text('سجل العمليات',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : Colors.black)),
+              child: Text(
+                'سجل العمليات',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                ),
+              ),
             ),
             _buildSortMenu(isDark),
           ],
         ),
-        const SizedBox(height: 12),
-        // ── Two stat cards ──────────────────────────────────────────────────
-        Row(
-          children: [
-            Expanded(
-              child: _buildCountCard(
-                label: 'عدد الفواتير',
-                count: totalCount,
-                icon: Icons.receipt_long_rounded,
-                color: Colors.blue,
-                isDark: isDark,
+        const SizedBox(height: 10),
+
+        // ── Date filter tabs ────────────────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.grey[800] : const Color(0xFFEEF2F7),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            children: [
+              _buildFilterTab('day', 'يوم', isDark),
+              _buildFilterTab('week', 'أسبوع', isDark),
+              _buildFilterTab('month', 'شهر', isDark),
+              _buildCustomDateTab(isDark),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        // ── Selected date label ─────────────────────────────────────────────
+        Text(
+          _buildDateFilterLabel(),
+          style: TextStyle(fontSize: 12, color: labelColor),
+        ),
+        const SizedBox(height: 10),
+
+        // ── Single invoice count card ───────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.blue.withOpacity(0.25), width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildCountCard(
-                label: 'دفعات السداد',
-                count: depositCount,
-                icon: Icons.payments_rounded,
-                color: Colors.green,
-                isDark: isDark,
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.receipt_long_rounded, color: Colors.blue, size: 16),
               ),
-            ),
-          ],
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    totalCount.toString(),
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue,
+                    ),
+                  ),
+                  Text(
+                    'عدد الفواتير',
+                    style: TextStyle(fontSize: 11, color: labelColor),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 12),
+
+        // ── Search bar ──────────────────────────────────────────────────────
         _buildTableSearchBar(isDark, isMobile),
         const SizedBox(height: 16),
+
+        // ── Invoice list ────────────────────────────────────────────────────
         isMobile ? _buildInvoiceCards(isDark) : _buildTodaySalesTable(isDark),
       ],
+    );
+  }
+
+  Widget _buildFilterTab(String mode, String label, bool isDark) {
+    final isSelected = _invoiceDateFilter == mode;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => _applyDateFilter(mode),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? (isDark ? Colors.blueGrey[700] : Colors.white)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: isSelected
+                ? [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 4, offset: const Offset(0, 1))]
+                : [],
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              color: isSelected
+                  ? (isDark ? Colors.white : Colors.blue[700])
+                  : (isDark ? Colors.grey[400] : Colors.grey[600]),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCustomDateTab(bool isDark) {
+    final isSelected = _invoiceDateFilter == 'custom';
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => _selectFilterDateRange(context),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? (isDark ? Colors.blueGrey[700] : Colors.white)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: isSelected
+                ? [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 4, offset: const Offset(0, 1))]
+                : [],
+          ),
+          child: Text(
+            'تاريخ محدد',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              color: isSelected
+                  ? (isDark ? Colors.white : Colors.blue[700])
+                  : (isDark ? Colors.grey[400] : Colors.grey[600]),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
