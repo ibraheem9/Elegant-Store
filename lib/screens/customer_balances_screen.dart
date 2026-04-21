@@ -1,4 +1,3 @@
-import 'dart:ui' show TextDirection;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -188,17 +187,13 @@ class _CustomerBalancesScreenState extends State<CustomerBalancesScreen> {
               height: 42,
               child: TextField(
                 controller: _searchController,
-                textDirection: TextDirection.rtl,
                 decoration: InputDecoration(
                   hintText: 'بحث باسم الزبون...',
-                  hintTextDirection: TextDirection.rtl,
                   prefixIcon: const Icon(Icons.search_rounded, size: 20),
                   suffixIcon: _searchQuery.isNotEmpty
                       ? IconButton(
                           icon: const Icon(Icons.clear_rounded, size: 18),
-                          onPressed: () {
-                            _searchController.clear();
-                          },
+                          onPressed: () => _searchController.clear(),
                         )
                       : null,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
