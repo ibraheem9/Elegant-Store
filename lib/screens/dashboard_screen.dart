@@ -40,12 +40,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 4: return const CustomersScreen();
       case 5: return const AccountantsScreen();
       case 6: return const PaymentsScreen();
-      case 7: return const CalendarScreen();
-      case 8: return const PaymentMethodsScreen();
-      case 9: return const PurchasesMethodsScreen();
-      case 10: return const RecycleBinScreen();
-      case 11: return const SettingsScreen();
-      case 12: return const CustomerBalancesScreen();
+      case 7: return const CustomerBalancesScreen();
+      case 8: return const CalendarScreen();
+      case 9: return const PaymentMethodsScreen();
+      case 10: return const PurchasesMethodsScreen();
+      case 11: return const RecycleBinScreen();
+      case 12: return const SettingsScreen();
       default: return const DashboardHomeScreen();
     }
   }
@@ -59,12 +59,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 4: return 'إدارة الزبائن';
       case 5: return 'إدارة الموظفين';
       case 6: return 'مراجعة المدفوعات';
-      case 7: return 'التقويم المالي';
-      case 8: return 'طرق دفع المبيعات';
-      case 9: return 'طرق دفع المشتريات';
-      case 10: return 'سلة المحذوفات';
-      case 11: return 'الإعدادات والسمة';
-      case 12: return 'أرصدة الزبائن';
+      case 7: return 'أرصدة الزبائن';
+      case 8: return 'التقويم المالي';
+      case 9: return 'طرق دفع المبيعات';
+      case 10: return 'طرق دفع المشتريات';
+      case 11: return 'سلة المحذوفات';
+      case 12: return 'الإعدادات والسمة';
       default: return 'Elegant Store';
     }
   }
@@ -129,13 +129,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 if (auth.isManager())
                   _buildSidebarItem(5, 'إدارة الموظفين', Icons.badge_rounded),
                 _buildSidebarItem(6, 'مراجعة المدفوعات', Icons.payments_rounded),
-                _buildSidebarItem(7, 'التقويم المالي', Icons.calendar_month_rounded),
+                _buildSidebarItem(7, 'أرصدة الزبائن', Icons.account_balance_wallet_rounded),
+                _buildSidebarItem(8, 'التقويم المالي', Icons.calendar_month_rounded),
                 const Divider(color: Colors.white10, indent: 20, endIndent: 20),
-                _buildSidebarItem(8, 'طرق دفع المبيعات', Icons.payment_rounded),
-                _buildSidebarItem(9, 'طرق دفع المشتريات', Icons.account_balance_rounded),
-                _buildSidebarItem(10, 'سلة المحذوفات', Icons.delete_sweep_rounded),
-                _buildSidebarItem(11, 'الإعدادات والسمة', Icons.settings_rounded),
-                _buildSidebarItem(12, 'أرصدة الزبائن', Icons.account_balance_wallet_rounded),
+                _buildSidebarItem(9, 'طرق دفع المبيعات', Icons.payment_rounded),
+                _buildSidebarItem(10, 'طرق دفع المشتريات', Icons.account_balance_rounded),
+                _buildSidebarItem(11, 'سلة المحذوفات', Icons.delete_sweep_rounded),
+                _buildSidebarItem(12, 'الإعدادات والسمة', Icons.settings_rounded),
               ],
             ),
           ),
@@ -169,16 +169,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 if (auth.isManager())
                    _buildSidebarItem(5, 'إدارة الموظفين', Icons.badge_rounded),
                 _buildSidebarItem(6, 'مراجعة المدفوعات', Icons.payments_rounded),
-                _buildSidebarItem(7, 'التقويم المالي', Icons.calendar_month_rounded),
+                _buildSidebarItem(7, 'أرصدة الزبائن', Icons.account_balance_wallet_rounded),
+                _buildSidebarItem(8, 'التقويم المالي', Icons.calendar_month_rounded),
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 10, horizontal: 10),
                   child: Divider(color: Colors.white10),
                 ),
-                _buildSidebarItem(8, 'طرق دفع المبيعات', Icons.payment_rounded),
-                _buildSidebarItem(9, 'طرق دفع المشتريات', Icons.account_balance_rounded),
-                _buildSidebarItem(10, 'سلة المحذوفات', Icons.delete_sweep_rounded),
-                _buildSidebarItem(11, 'الإعدادات والسمة', Icons.settings_rounded),
-                _buildSidebarItem(12, 'أرصدة الزبائن', Icons.account_balance_wallet_rounded),
+                _buildSidebarItem(9, 'طرق دفع المبيعات', Icons.payment_rounded),
+                _buildSidebarItem(10, 'طرق دفع المشتريات', Icons.account_balance_rounded),
+                _buildSidebarItem(11, 'سلة المحذوفات', Icons.delete_sweep_rounded),
+                _buildSidebarItem(12, 'الإعدادات والسمة', Icons.settings_rounded),
               ],
             ),
           ),
