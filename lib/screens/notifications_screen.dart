@@ -92,7 +92,7 @@ class NotificationsScreen extends StatelessWidget {
     }
     
     final allInvoices = await db.getInvoices();
-    final unpaidInvoices = allInvoices.where((inv) => inv.paymentStatus == 'UNPAID' || inv.paymentStatus == 'PARTIAL').toList();
+    final unpaidInvoices = allInvoices.where((inv) => inv.paymentStatus == 'UNPAID').toList();
 
     return {
       'debtCustomers': debtAlerts,

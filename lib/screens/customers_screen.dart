@@ -824,7 +824,6 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
           itemBuilder: (context, index) {
         final inv = displayed[index];
         bool isPaid = inv.paymentStatus == 'PAID' || inv.paymentStatus == 'paid';
-        bool isPartial = inv.paymentStatus == 'PARTIAL';
         bool isDeposit = inv.type == 'DEPOSIT';
         
         if (isDeposit) {
@@ -876,10 +875,6 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                 title: Row(
                   children: [
                     Flexible(child: Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: isDark ? Colors.white : Colors.black), overflow: TextOverflow.ellipsis)),
-                    if (isPartial) ...[
-                      const SizedBox(width: 8),
-                      Flexible(child: Text('(المدفوع: ${inv.paidAmount} ₪)', style: const TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
-                    ]
                   ],
                 ),
                 subtitle: Column(
@@ -907,7 +902,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                               style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12));
                         }
                       } else {
-                        // Invoice is UNPAID / PARTIAL
+                        // Invoice is UNPAID
                         if (isDeferredMethod || inv.methodName == null) {
                           // Show payment status label instead of method name
                           final statusLabel = (methodName == 'دين' || methodName.toLowerCase() == 'debt')
@@ -916,7 +911,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                           return Text(statusLabel,
                               style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12));
                         } else {
-                          // Real payment method shown for partial payments
+                          // Real payment method (bank/cash) for unpaid invoice
                           return Text('وسيلة الدفع: $methodName',
                               style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12));
                         }

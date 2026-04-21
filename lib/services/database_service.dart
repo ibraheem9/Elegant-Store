@@ -375,7 +375,7 @@ class DatabaseService {
 
   // ── Paginated paid invoices (payments review screen) ─────────────────────
 
-  /// Returns [pageSize] paid/partial invoices starting at [offset].
+  /// Returns [pageSize] paid invoices starting at [offset].
   /// Optionally filters by [methodId] and date range.
   Future<List<Invoice>> getPaidInvoicesPaged({
     int offset = 0,
@@ -386,7 +386,7 @@ class DatabaseService {
   }) async {
     final db = await database;
     String where =
-        "i.deleted_at IS NULL AND (i.payment_status = 'PAID' OR i.payment_status = 'paid' OR i.payment_status = 'PARTIAL') AND i.type != 'WITHDRAWAL'";
+        "i.deleted_at IS NULL AND (i.payment_status = 'PAID' OR i.payment_status = 'paid') AND i.type != 'WITHDRAWAL'";
     final List<dynamic> args = [];
     if (methodId != null) {
       where += ' AND i.payment_method_id = ?';
@@ -426,7 +426,7 @@ class DatabaseService {
   }) async {
     final db = await database;
     String where =
-        "deleted_at IS NULL AND (payment_status = 'PAID' OR payment_status = 'paid' OR payment_status = 'PARTIAL') AND type != 'WITHDRAWAL'";
+        "deleted_at IS NULL AND (payment_status = 'PAID' OR payment_status = 'paid') AND type != 'WITHDRAWAL'";
     final List<dynamic> args = [];
     if (methodId != null) {
       where += ' AND payment_method_id = ?';
@@ -538,9 +538,8 @@ class DatabaseService {
         if (totalToPay <= 0) {
           finalStatus = 'PAID';
           finalPaidAmount = inv.amount;
-        } else if (amountFromBalance > 0) {
-          finalStatus = 'PARTIAL';
         }
+        // No partial payment support — invoice remains UNPAID if not fully covered by credit
       }
 
       var map = inv.toMap();
@@ -596,7 +595,7 @@ class DatabaseService {
   Future<List<Invoice>> getCustomerInvoices(int id, {bool unpaidOnly = false}) async {
     final db = await database;
     String where = 'i.user_id = ? AND i.deleted_at IS NULL';
-    if (unpaidOnly) where += " AND i.payment_status IN ('UNPAID', 'PARTIAL', 'DEFERRED')";
+    if (unpaidOnly) where += " AND i.payment_status IN ('UNPAID', 'DEFERRED')";
     final r = await db.rawQuery('SELECT i.*, u.name as customer_name, pm.name as method_name FROM invoices i JOIN users u ON i.user_id = u.id LEFT JOIN payment_methods pm ON i.payment_method_id = pm.id WHERE $where ORDER BY i.created_at ASC', [id]);
     return r.map((m) => Invoice.fromMap(m)).toList();
   }
@@ -905,7 +904,7 @@ class DatabaseService {
     final appUnpaidQuery = await db.rawQuery(
       '''SELECT SUM(i.amount) as t FROM invoices i
          JOIN payment_methods pm ON i.payment_method_id = pm.id
-         WHERE i.created_at LIKE ? AND i.payment_status IN ('UNPAID','pending','PARTIAL')
+         WHERE i.created_at LIKE ? AND i.payment_status IN ('UNPAID','pending')
          AND pm.type = 'app' AND i.deleted_at IS NULL''',
       ['$today%'],
     );
