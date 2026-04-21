@@ -1321,7 +1321,7 @@ class DatabaseService {
     final db = await database;
     final List<Map<String, dynamic>> notifications = [];
 
-    // 1. Unpaid invoices for customers with real positive balance (actual debt)
+    // 1. Unpaid invoices (UNPAID only) for customers with real positive balance (actual debt)
     final debtCustomers = await db.rawQuery('''
       SELECT u.id, u.name, u.nickname, u.balance, u.credit_limit,
              COUNT(i.id) as unpaid_count,
@@ -1330,7 +1330,7 @@ class DatabaseService {
       JOIN invoices i ON i.user_id = u.id
         AND i.deleted_at IS NULL
         AND i.type = 'SALE'
-        AND i.payment_status IN ('UNPAID', 'DEFERRED')
+        AND i.payment_status = 'UNPAID'
       WHERE u.role = 'CUSTOMER'
         AND u.deleted_at IS NULL
         AND u.balance > 0
@@ -1382,14 +1382,14 @@ class DatabaseService {
 
   Future<int> getSmartNotificationsCount() async {
     final db = await database;
-    // Count customers with real debt (balance > 0) that have unpaid invoices
+    // Count customers with real debt (balance > 0) that have UNPAID invoices only
     final r = await db.rawQuery('''
       SELECT COUNT(DISTINCT u.id) as cnt
       FROM users u
       JOIN invoices i ON i.user_id = u.id
         AND i.deleted_at IS NULL
         AND i.type = 'SALE'
-        AND i.payment_status IN ('UNPAID', 'DEFERRED')
+        AND i.payment_status = 'UNPAID'
       WHERE u.role = 'CUSTOMER'
         AND u.deleted_at IS NULL
         AND u.balance > 0
