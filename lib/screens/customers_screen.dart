@@ -885,26 +885,43 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (isPaid && inv.methodName != null) ...[
-                      // Show 'paid via credit' label when method is deferred/unpaid type
-                      // but invoice ended up PAID (auto-paid from customer credit)
-                      Builder(builder: (context) {
-                        final methodName = inv.methodName!;
-                        final isAutoPaidFromCredit = methodName == 'غير مدفوع' ||
-                            methodName == 'دين' ||
-                            methodName == 'آجل' ||
-                            methodName.toLowerCase() == 'unpaid' ||
-                            methodName.toLowerCase() == 'deferred';
-                        return Text(
-                          isAutoPaidFromCredit
-                              ? 'وسيلة الدفع: تم السداد من الرصيد'
-                              : 'وسيلة الدفع: $methodName',
-                          style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12),
-                        );
-                      }),
-                    ],
-                    if (!isPaid && inv.methodName != null)
-                      Text('وسيلة الدفع: ${inv.methodName}', style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12)),
+                    Builder(builder: (context) {
+                      final methodName = inv.methodName ?? '';
+                      // Deferred/debt method names — these are NOT real payment methods
+                      final isDeferredMethod = methodName == 'غير مدفوع' ||
+                          methodName == 'دين' ||
+                          methodName == 'آجل' ||
+                          methodName.toLowerCase() == 'unpaid' ||
+                          methodName.toLowerCase() == 'deferred' ||
+                          methodName.toLowerCase() == 'debt';
+
+                      if (isPaid) {
+                        // Invoice is PAID
+                        if (inv.methodName != null && !isDeferredMethod) {
+                          // Real payment method (bank app / cash) — show it
+                          return Text('وسيلة الدفع: $methodName',
+                              style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12));
+                        } else {
+                          // Was deferred but auto-paid from credit balance
+                          return const Text('وسيلة الدفع: تم السداد من الرصيد',
+                              style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12));
+                        }
+                      } else {
+                        // Invoice is UNPAID / PARTIAL
+                        if (isDeferredMethod || inv.methodName == null) {
+                          // Show payment status label instead of method name
+                          final statusLabel = (methodName == 'دين' || methodName.toLowerCase() == 'debt')
+                              ? 'حالة الدفع: دين'
+                              : 'حالة الدفع: غير مدفوع';
+                          return Text(statusLabel,
+                              style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12));
+                        } else {
+                          // Real payment method shown for partial payments
+                          return Text('وسيلة الدفع: $methodName',
+                              style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12));
+                        }
+                      }
+                    }),
                     Text('التاريخ: ${inv.invoiceDate}', style: const TextStyle(color: Colors.grey, fontSize: 11)),
                     if (inv.notes != null) Text('ملاحظات: ${inv.notes}', style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic)),
                   ],
