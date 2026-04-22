@@ -10,7 +10,7 @@ import '../widgets/shimmer_loading.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared helper: always display amounts with exactly 2 decimal places.
 // ─────────────────────────────────────────────────────────────────────────────
-String _fmt(double value) => value.toStringAsFixed(2);
+String _fmt(double? value) => (value ?? 0.0).toStringAsFixed(2);
 
 Color _balanceColor(double balance) {
   if (balance > 0) return Colors.redAccent;
