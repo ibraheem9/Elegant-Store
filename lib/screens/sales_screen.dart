@@ -925,50 +925,31 @@ class _SalesScreenState extends State<SalesScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Row 1: Title + Date-filter tabs + Sort button ────────────────────────────────
+        // ── Single header row: title + date label | count card | date dropdown | sort ──
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
+            // Title
             Text(
               'سجل العمليات',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor),
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: textColor),
             ),
-            const SizedBox(width: 10),
-            // Date filter tabs — flex fills remaining space
+            const SizedBox(width: 6),
+            // Date label beside title
             Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.grey[800] : const Color(0xFFEEF2F7),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  children: [
-                    _buildFilterTab('day', 'يوم', isDark),
-                    _buildFilterTab('week', 'أسبوع', isDark),
-                    _buildFilterTab('month', 'شهر', isDark),
-                    _buildCustomDateTab(isDark),
-                  ],
-                ),
+              child: Text(
+                _buildDateFilterLabel(),
+                style: TextStyle(fontSize: 11, color: labelColor),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             const SizedBox(width: 8),
-            // Sort button — larger touch target
-            _buildSortButton(isDark),
-          ],
-        ),
-        const SizedBox(height: 6),
-
-        // ── Row 2: Date label + invoice count card + search bar ──────────────────────────
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            // Invoice count card
+            // Invoice count badge
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: cardBg,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.blue.withOpacity(0.25), width: 1),
                 boxShadow: [
                   BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 4, offset: const Offset(0, 1)),
@@ -977,26 +958,23 @@ class _SalesScreenState extends State<SalesScreen> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.receipt_long_rounded, color: Colors.blue, size: 16),
-                  const SizedBox(width: 6),
+                  Icon(Icons.receipt_long_rounded, color: Colors.blue, size: 14),
+                  const SizedBox(width: 5),
                   Text(
                     totalCount.toString(),
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue),
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue),
                   ),
-                  const SizedBox(width: 4),
-                  Text('فاتورة', style: TextStyle(fontSize: 11, color: labelColor)),
+                  const SizedBox(width: 3),
+                  Text('فاتورة', style: TextStyle(fontSize: 10, color: labelColor)),
                 ],
               ),
             ),
-            const SizedBox(width: 10),
-            // Date label
-            Flexible(
-              child: Text(
-                _buildDateFilterLabel(),
-                style: TextStyle(fontSize: 11, color: labelColor),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
+            const SizedBox(width: 6),
+            // Date filter dropdown
+            _buildDateDropdown(isDark),
+            const SizedBox(width: 6),
+            // Sort button
+            _buildSortButton(isDark),
           ],
         ),
         const SizedBox(height: 10),
@@ -1011,68 +989,74 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  Widget _buildFilterTab(String mode, String label, bool isDark) {
-    final isSelected = _invoiceDateFilter == mode;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => _applyDateFilter(mode),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 7),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? (isDark ? Colors.blueGrey[700] : Colors.white)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: isSelected
-                ? [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 4, offset: const Offset(0, 1))]
-                : [],
-          ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              color: isSelected
-                  ? (isDark ? Colors.white : Colors.blue[700])
-                  : (isDark ? Colors.grey[400] : Colors.grey[600]),
+  /// Compact dropdown button that replaces the 4-tab date filter bar.
+  Widget _buildDateDropdown(bool isDark) {
+    // Label shown on the button itself
+    final Map<String, String> modeLabels = {
+      'day': 'يوم',
+      'week': 'أسبوع',
+      'month': 'شهر',
+      'custom': 'تاريخ',
+    };
+    final currentLabel = modeLabels[_invoiceDateFilter] ?? 'يوم';
+
+    return PopupMenuButton<String>(
+      tooltip: 'فلتر التاريخ',
+      onSelected: (value) {
+        if (value == 'custom') {
+          _selectFilterDateRange(context);
+        } else {
+          _applyDateFilter(value);
+        }
+      },
+      itemBuilder: (context) => [
+        _buildDateMenuItem('day', 'اليوم', Icons.today_rounded),
+        _buildDateMenuItem('week', 'هذا الأسبوع', Icons.date_range_rounded),
+        _buildDateMenuItem('month', 'هذا الشهر', Icons.calendar_month_rounded),
+        _buildDateMenuItem('custom', 'تاريخ محدد', Icons.edit_calendar_rounded),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.calendar_today_rounded, color: Colors.blue, size: 15),
+            const SizedBox(width: 5),
+            Text(
+              currentLabel,
+              style: const TextStyle(fontSize: 13, color: Colors.blue, fontWeight: FontWeight.w600),
             ),
-          ),
+            const SizedBox(width: 3),
+            Icon(Icons.arrow_drop_down_rounded, color: Colors.blue, size: 18),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildCustomDateTab(bool isDark) {
-    final isSelected = _invoiceDateFilter == 'custom';
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => _selectFilterDateRange(context),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 7),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? (isDark ? Colors.blueGrey[700] : Colors.white)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: isSelected
-                ? [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 4, offset: const Offset(0, 1))]
-                : [],
-          ),
-          child: Text(
-            'تاريخ محدد',
-            textAlign: TextAlign.center,
+  PopupMenuItem<String> _buildDateMenuItem(String value, String label, IconData icon) {
+    final isSelected = _invoiceDateFilter == value;
+    return PopupMenuItem<String>(
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon, size: 17, color: isSelected ? Colors.blue : Colors.grey[600]),
+          const SizedBox(width: 10),
+          Text(
+            label,
             style: TextStyle(
-              fontSize: 13,
               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              color: isSelected
-                  ? (isDark ? Colors.white : Colors.blue[700])
-                  : (isDark ? Colors.grey[400] : Colors.grey[600]),
+              color: isSelected ? Colors.blue : null,
             ),
           ),
-        ),
+          const Spacer(),
+          if (isSelected) const Icon(Icons.check_rounded, size: 16, color: Colors.blue),
+        ],
       ),
     );
   }
