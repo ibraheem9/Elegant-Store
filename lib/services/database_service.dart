@@ -756,10 +756,25 @@ class DatabaseService {
     return normalized.toLowerCase().trim();
   }
 
-  Future<bool> hasInvoices(int customerId) async {
+   Future<bool> hasInvoices(int customerId) async {
     final db = await database;
     final count = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM invoices WHERE user_id = ? AND deleted_at IS NULL', [customerId])) ?? 0;
     return count > 0;
+  }
+
+  /// Returns total count of non-deleted invoices + transactions linked to this customer.
+  /// Used to guard against deleting customers who have any financial records.
+  Future<int> countCustomerLinkedRecords(int customerId) async {
+    final db = await database;
+    final invoiceCount = Sqflite.firstIntValue(await db.rawQuery(
+      'SELECT COUNT(*) FROM invoices WHERE user_id = ? AND deleted_at IS NULL',
+      [customerId],
+    )) ?? 0;
+    final txnCount = Sqflite.firstIntValue(await db.rawQuery(
+      'SELECT COUNT(*) FROM transactions WHERE buyer_id = ? AND deleted_at IS NULL',
+      [customerId],
+    )) ?? 0;
+    return invoiceCount + txnCount;
   }
 
   Future<void> addCredit({required int userId, required double amount, String? notes, required int paymentMethodId, DateTime? date}) async {
