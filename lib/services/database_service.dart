@@ -864,6 +864,23 @@ class DatabaseService {
     }, where: 'id = ?', whereArgs: [id]);
   }
 
+  /// Returns the total number of non-deleted records (invoices + purchases)
+  /// that reference the given payment method. Used to guard against deletion.
+  Future<int> countLinkedRecords(int paymentMethodId) async {
+    final db = await database;
+    final invResult = await db.rawQuery(
+      'SELECT COUNT(*) as cnt FROM invoices WHERE payment_method_id = ? AND deleted_at IS NULL',
+      [paymentMethodId],
+    );
+    final purResult = await db.rawQuery(
+      'SELECT COUNT(*) as cnt FROM purchases WHERE payment_method_id = ? AND deleted_at IS NULL',
+      [paymentMethodId],
+    );
+    final invCount = (invResult.first['cnt'] as int?) ?? 0;
+    final purCount = (purResult.first['cnt'] as int?) ?? 0;
+    return invCount + purCount;
+  }
+
   Future<void> updatePaymentMethodsOrder(List<PaymentMethod> methods) async {
     final db = await database;
     final now = DateTime.now().toIso8601String();

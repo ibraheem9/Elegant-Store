@@ -308,7 +308,7 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 380,
-        mainAxisExtent: isMobile ? 160 : 170,
+        mainAxisExtent: isMobile ? 180 : 185,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
       ),
@@ -520,15 +520,19 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
 
   Widget _actionBtn(
       IconData icon, Color color, VoidCallback onTap, bool isDark) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E293B) : Colors.grey[50],
-            borderRadius: BorderRadius.circular(8)),
-        child: Icon(icon, size: 16, color: color),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+              color: color.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(10)),
+          child: Icon(icon, size: 20, color: color),
+        ),
       ),
     );
   }
@@ -709,13 +713,68 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
             const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       );
 
-  void _confirmDelete(PaymentMethod method) {
+  Future<void> _confirmDelete(PaymentMethod method) async {
+    final db = context.read<DatabaseService>();
+
+    // Guard: check if this method is linked to any active invoices or purchases
+    final linkedCount = await db.countLinkedRecords(method.id!);
+    if (!mounted) return;
+
+    if (linkedCount > 0) {
+      showDialog(
+        context: context,
+        builder: (context) {
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          return AlertDialog(
+            backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                const Icon(Icons.link_rounded, color: Colors.orange, size: 22),
+                const SizedBox(width: 8),
+                const Text('لا يمكن الحذف',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: Text(
+              'طريقة الدفع "${method.name}" مرتبطة بـ $linkedCount سجل.\n\n'
+              'لا يمكن حذف طريقة دفع مرتبطة بفواتير أو مشتريات موجودة.\n'
+              'يمكنك تعطيلها بدلاً من حذفها حتى لا تظهر في القوائم الجديدة.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('حسناً'),
+              ),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _toggleActive(method);
+                },
+                icon: const Icon(Icons.toggle_off_rounded, size: 18),
+                label: const Text('تعطيل بدلاً من الحذف'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1E3A5F),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  elevation: 0,
+                ),
+              ),
+            ],
+          );
+        },
+      );
+      return;
+    }
+
+    // Safe to delete — show confirmation
     showDialog(
       context: context,
       builder: (context) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
         return AlertDialog(
           backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Text('تأكيد الحذف',
               style: TextStyle(fontWeight: FontWeight.bold)),
           content: Text(
@@ -730,9 +789,7 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
             TextButton(
               onPressed: () async {
                 try {
-                  await context
-                      .read<DatabaseService>()
-                      .deletePaymentMethod(method.id!);
+                  await db.deletePaymentMethod(method.id!);
                   if (mounted) {
                     Navigator.pop(context);
                     _refreshMethods();
