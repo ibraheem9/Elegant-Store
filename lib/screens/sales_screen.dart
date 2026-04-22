@@ -925,17 +925,15 @@ class _SalesScreenState extends State<SalesScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Single header row: title + date label | count card | date dropdown | sort ──
+        // ── Row 1: title + date label ──────────────────────────────────────────────────
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Title
             Text(
               'سجل العمليات',
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: textColor),
             ),
-            const SizedBox(width: 6),
-            // Date label beside title
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 _buildDateFilterLabel(),
@@ -943,7 +941,19 @@ class _SalesScreenState extends State<SalesScreen> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        // ── Row 2: date dropdown | sort button | invoice count ─────────────────────────
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Date filter dropdown
+            _buildDateDropdown(isDark),
             const SizedBox(width: 8),
+            // Sort button
+            _buildSortButton(isDark),
+            const Spacer(),
             // Invoice count badge
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -969,12 +979,6 @@ class _SalesScreenState extends State<SalesScreen> {
                 ],
               ),
             ),
-            const SizedBox(width: 6),
-            // Date filter dropdown
-            _buildDateDropdown(isDark),
-            const SizedBox(width: 6),
-            // Sort button
-            _buildSortButton(isDark),
           ],
         ),
         const SizedBox(height: 10),
