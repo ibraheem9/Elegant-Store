@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/auth_service.dart';
+import '../widgets/shimmer_loading.dart';
 
 class PurchasesScreen extends StatefulWidget {
   const PurchasesScreen({Key? key}) : super(key: key);
@@ -422,7 +423,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     return Scaffold(
       backgroundColor: isDark ? Colors.transparent : const Color(0xFFF1F5F9),
       body: _isInitialLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? ShimmerLoading(isDark: isDark, itemCount: 5)
           : Column(
               children: [
                 Expanded(

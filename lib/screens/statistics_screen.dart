@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
+import '../widgets/shimmer_loading.dart';
 
 class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({Key? key}) : super(key: key);
@@ -175,7 +176,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? ShimmerLoading(isDark: isDark, itemCount: 5)
           : SingleChildScrollView(
               padding: EdgeInsets.all(isSmall ? 16 : 32),
               child: Column(

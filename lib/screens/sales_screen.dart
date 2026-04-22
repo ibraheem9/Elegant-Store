@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/models.dart';
+import '../widgets/shimmer_loading.dart';
 import '../services/database_service.dart';
 import '../services/auth_service.dart';
 import 'customers_screen.dart';
@@ -77,6 +78,28 @@ class _SalesScreenState extends State<SalesScreen> {
     _dateController.dispose();
     _tableFilterController.dispose();
     super.dispose();
+  }
+
+  /// Lightweight reload: only refreshes invoices + stats, no full-page spinner.
+  /// Used when the user changes date filter tabs — avoids rebuilding the form.
+  Future<void> _loadInvoicesOnly() async {
+    if (!mounted) return;
+    try {
+      final db = context.read<DatabaseService>();
+      DateTime rangeStart = DateTime(_startDate.year, _startDate.month, _startDate.day);
+      DateTime rangeEnd = DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59);
+      final stats = await db.getSalesStats(start: rangeStart, end: rangeEnd);
+      final invoices = await db.getInvoices(start: rangeStart, end: rangeEnd);
+      if (mounted) {
+        setState(() {
+          _invoices = invoices;
+          _todayStats = stats;
+          _applyTableFilter();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading invoices: $e');
+    }
   }
 
   Future<void> _loadData() async {
@@ -237,7 +260,7 @@ class _SalesScreenState extends State<SalesScreen> {
                             ],
                           ),
                           subtitle: Text(c.phone ?? 'بدون هاتف', style: TextStyle(color: isDark ? Colors.white60 : Colors.black54)),
-                          trailing: Text('${c.balance} ₪', style: TextStyle(color: c.balance > 0 ? Colors.red : Colors.green, fontWeight: FontWeight.bold)),
+                          trailing: Text('${c.balance.toStringAsFixed(2)} ₪', style: TextStyle(color: c.balance > 0 ? Colors.red : Colors.green, fontWeight: FontWeight.bold)),
                           onTap: () {
                             _selectCustomer(c);
                             _hideOverlay();
@@ -606,7 +629,7 @@ class _SalesScreenState extends State<SalesScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('تأكيد الحذف'),
-        content: Text('هل أنت متأكد من نقل الفاتورة (مبلغ: ${inv.amount} ₪) إلى سلة المحذوفات؟'),
+        content: Text('هل أنت متأكد من نقل الفاتورة (مبلغ: ${inv.amount.toStringAsFixed(2)} ₪) إلى سلة المحذوفات؟'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
           TextButton(
@@ -646,7 +669,8 @@ class _SalesScreenState extends State<SalesScreen> {
         // 'custom' is handled by _selectFilterDateRange
       }
     });
-    _loadData();
+    // Only reload invoices/stats — no full-page spinner
+    _loadInvoicesOnly();
   }
 
   String _buildDateFilterLabel() {
@@ -679,7 +703,8 @@ class _SalesScreenState extends State<SalesScreen> {
         _startDate = picked.start;
         _endDate = picked.end;
       });
-      _loadData();
+      // Only reload invoices/stats — no full-page spinner
+      _loadInvoicesOnly();
     }
   }
 
@@ -692,7 +717,7 @@ class _SalesScreenState extends State<SalesScreen> {
     return Scaffold(
       backgroundColor: isDark ? Colors.transparent : const Color(0xFFF1F5F9),
       body: _isDataLoading
-        ? const Center(child: CircularProgressIndicator())
+        ? ShimmerLoading(isDark: isDark, itemCount: 6)
         : SingleChildScrollView(
             padding: EdgeInsets.all(isMobile ? 16 : 32),
             child: Column(
@@ -900,105 +925,87 @@ class _SalesScreenState extends State<SalesScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Header row: title + sort ────────────────────────────────────────
+        // ── Row 1: Title + Date-filter tabs + Sort button ────────────────────────────────
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Flexible(
-              child: Text(
-                'سجل العمليات',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: textColor,
+            Text(
+              'سجل العمليات',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor),
+            ),
+            const SizedBox(width: 10),
+            // Date filter tabs — flex fills remaining space
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.grey[800] : const Color(0xFFEEF2F7),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    _buildFilterTab('day', 'يوم', isDark),
+                    _buildFilterTab('week', 'أسبوع', isDark),
+                    _buildFilterTab('month', 'شهر', isDark),
+                    _buildCustomDateTab(isDark),
+                  ],
                 ),
               ),
             ),
-            _buildSortMenu(isDark),
+            const SizedBox(width: 8),
+            // Sort button — larger touch target
+            _buildSortButton(isDark),
+          ],
+        ),
+        const SizedBox(height: 6),
+
+        // ── Row 2: Date label + invoice count card + search bar ──────────────────────────
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Invoice count card
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.blue.withOpacity(0.25), width: 1),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 4, offset: const Offset(0, 1)),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.receipt_long_rounded, color: Colors.blue, size: 16),
+                  const SizedBox(width: 6),
+                  Text(
+                    totalCount.toString(),
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue),
+                  ),
+                  const SizedBox(width: 4),
+                  Text('فاتورة', style: TextStyle(fontSize: 11, color: labelColor)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            // Date label
+            Flexible(
+              child: Text(
+                _buildDateFilterLabel(),
+                style: TextStyle(fontSize: 11, color: labelColor),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 10),
 
-        // ── Date filter tabs ────────────────────────────────────────────────
-        Container(
-          padding: const EdgeInsets.all(3),
-          decoration: BoxDecoration(
-            color: isDark ? Colors.grey[800] : const Color(0xFFEEF2F7),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Row(
-            children: [
-              _buildFilterTab('day', 'يوم', isDark),
-              _buildFilterTab('week', 'أسبوع', isDark),
-              _buildFilterTab('month', 'شهر', isDark),
-              _buildCustomDateTab(isDark),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-
-        // ── Selected date label ─────────────────────────────────────────────
-        Text(
-          _buildDateFilterLabel(),
-          style: TextStyle(fontSize: 12, color: labelColor),
-        ),
-        const SizedBox(height: 10),
-
-        // ── Single invoice count card ───────────────────────────────────────
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: cardBg,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.blue.withOpacity(0.25), width: 1),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.receipt_long_rounded, color: Colors.blue, size: 16),
-              ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    totalCount.toString(),
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue,
-                    ),
-                  ),
-                  Text(
-                    'عدد الفواتير',
-                    style: TextStyle(fontSize: 11, color: labelColor),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-
-        // ── Search bar ──────────────────────────────────────────────────────
+        // ── Search bar (full width) ─────────────────────────────────────────────────────────────────
         _buildTableSearchBar(isDark, isMobile),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
 
-        // ── Invoice list ────────────────────────────────────────────────────
+        // ── Invoice list ────────────────────────────────────────────────────────────────────
         isMobile ? _buildInvoiceCards(isDark) : _buildTodaySalesTable(isDark),
       ],
     );
@@ -1132,8 +1139,11 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Widget _buildSortMenu(bool isDark) {
+    return _buildSortButton(isDark);
+  }
+
+  Widget _buildSortButton(bool isDark) {
     return PopupMenuButton<int>(
-      icon: const Icon(Icons.sort_rounded, color: Colors.blue),
       tooltip: 'ترتيب حسب',
       onSelected: _onSort,
       itemBuilder: (context) => [
@@ -1142,6 +1152,22 @@ class _SalesScreenState extends State<SalesScreen> {
         _buildSortItem(3, 'طريقة الدفع'),
         _buildSortItem(2, 'المبلغ'),
       ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.sort_rounded, color: Colors.blue, size: 18),
+            const SizedBox(width: 5),
+            Text('ترتيب', style: TextStyle(fontSize: 13, color: Colors.blue, fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1251,7 +1277,7 @@ class _SalesScreenState extends State<SalesScreen> {
                   ),
                 ),
               ),
-              Text('${inv.amount} ₪', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: nameColor)),
+              Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: nameColor)),
             ],
           ),
           const SizedBox(height: 8),
@@ -1328,7 +1354,7 @@ class _SalesScreenState extends State<SalesScreen> {
                 )
               ),
               DataCell(Text(inv.invoiceDate, style: TextStyle(color: isDeposit ? Colors.green[800] : isWithdrawal ? Colors.orange[800] : null))),
-              DataCell(Text('${inv.amount} ₪', style: TextStyle(color: rowNameColor, fontWeight: (isDeposit || isWithdrawal) ? FontWeight.bold : null))),
+              DataCell(Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(color: rowNameColor, fontWeight: (isDeposit || isWithdrawal) ? FontWeight.bold : null))),
               DataCell(Text(isWithdrawal ? 'سحب نقدي' : (inv.methodName ?? '-'), style: TextStyle(color: isDeposit ? Colors.green[800] : isWithdrawal ? Colors.orange[800] : null))),
               DataCell(Row(
                 mainAxisSize: MainAxisSize.min,

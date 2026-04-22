@@ -6,6 +6,7 @@ import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/auth_service.dart';
 import 'customers_screen.dart';
+import '../widgets/shimmer_loading.dart';
 
 class PaymentsScreen extends StatefulWidget {
   const PaymentsScreen({Key? key}) : super(key: key);
@@ -206,7 +207,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
           _buildTopBar(isDark, isMobile),
           Expanded(
             child: _isLoading
-               ? const Center(child: CircularProgressIndicator())
+               ? ShimmerLoading(isDark: isDark, itemCount: 5)
                : _buildPaidTab(isDark, isMobile),
           ),
         ],

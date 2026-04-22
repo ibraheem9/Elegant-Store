@@ -5,6 +5,7 @@ import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/auth_service.dart';
 import 'add_edit_customer_form.dart';
+import '../widgets/shimmer_loading.dart';
 
 class CustomersScreen extends StatefulWidget {
   final bool showBackButton;
@@ -166,7 +167,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
           ),
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? ShimmerLoading(isDark: isDark, itemCount: 6)
                 : _filteredCustomers.isEmpty
                   ? _buildEmptyState(isDark)
                   : _isTableView 
@@ -958,7 +959,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         elevation: 0,
         iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black),
       ),
-      body: _isLoading ? const Center(child: CircularProgressIndicator()) : SingleChildScrollView(
+      body: _isLoading ? ShimmerLoading(isDark: isDark, itemCount: 5) : SingleChildScrollView(
         padding: EdgeInsets.all(isMobile ? 16 : 32),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -988,7 +989,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         _buildDetailCard(
           isDebt ? 'إجمالي الدين الكلي' : 'إجمالي الرصيد الدائن', 
           '${_calculatedBalance.toStringAsFixed(2)} ₪',
-          isDebt ? Colors.red : (isCredit ? Colors.green : Colors.grey), 
+          isDebt ? Colors.red : (isCredit ? Colors.green : const Color(0xFFD4A574)), 
           isDark, 
           width: cardWidth,
           subtitle: isDebt ? 'مستحق الدفع' : (isCredit ? 'رصيد لك لدينا' : 'الحساب متعادل')

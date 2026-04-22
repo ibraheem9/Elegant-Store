@@ -1,11 +1,27 @@
 import 'package:intl/intl.dart';
 
-// Helper to handle Laravel's decimal-as-string and normal numbers
+// Helper to handle Laravel's decimal-as-string and normal numbers.
+// Rounds to 2 decimal places to prevent floating-point artifacts (e.g. 3.6e-16 instead of 0.00).
 double _toDouble(dynamic value) {
   if (value == null) return 0.0;
-  if (value is num) return value.toDouble();
-  if (value is String) return double.tryParse(value) ?? 0.0;
-  return 0.0;
+  double raw;
+  if (value is num) {
+    raw = value.toDouble();
+  } else if (value is String) {
+    raw = double.tryParse(value) ?? 0.0;
+  } else {
+    return 0.0;
+  }
+  // Clamp near-zero floating-point noise to exactly 0
+  if (raw.abs() < 1e-9) return 0.0;
+  // Round to 2 decimal places
+  return double.parse(raw.toStringAsFixed(2));
+}
+
+/// Round a monetary amount to 2 decimal places before persisting to DB.
+double _roundMoney(double v) {
+  if (v.abs() < 1e-9) return 0.0;
+  return double.parse(v.toStringAsFixed(2));
 }
 
 // User Model
@@ -259,8 +275,8 @@ class Invoice {
       'store_manager_id': storeManagerId,
       'user_id': userId,
       'invoice_date': invoiceDate,
-      'amount': amount,
-      'paid_amount': paidAmount,
+      'amount': _roundMoney(amount),
+      'paid_amount': _roundMoney(paidAmount),
       'payment_method_id': paymentMethodId,
       'payment_status': paymentStatus,
       'type': type,
@@ -347,8 +363,8 @@ class FinancialTransaction {
       'buyer_id': buyerId,
       'invoice_id': invoiceId,
       'type': type,
-      'amount': amount,
-      'used_amount': usedAmount,
+      'amount': _roundMoney(amount),
+      'used_amount': _roundMoney(usedAmount),
       'payment_method_id': paymentMethodId,
       'notes': notes,
       'version': version,
@@ -420,7 +436,7 @@ class Purchase {
       'uuid': uuid,
       'store_manager_id': storeManagerId,
       'merchant_name': merchantName,
-      'amount': amount,
+      'amount': _roundMoney(amount),
       'payment_source': paymentSource,
       'payment_method_id': paymentMethodId,
       'notes': notes,

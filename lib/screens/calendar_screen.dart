@@ -232,7 +232,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     child: ListTile(
                       title: Text(inv.customerName ?? 'عابر', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : Colors.black)),
                       subtitle: Text(inv.methodName ?? '-', style: const TextStyle(fontSize: 11)),
-                      trailing: Text('${inv.amount} ₪', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: typeColor)),
+                      trailing: Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: typeColor)),
                     ),
                   );
                 },
