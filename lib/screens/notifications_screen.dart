@@ -56,7 +56,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('التنبيهات', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text('التنبيهات', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
             if (_notifications.isNotEmpty) ...[
               const SizedBox(width: 8),
               Container(
@@ -75,6 +75,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         ),
         centerTitle: true,
         backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+        foregroundColor: isDark ? Colors.white : Colors.black87,
+        iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black87),
         elevation: 0,
         actions: [
           IconButton(
