@@ -340,7 +340,7 @@ class _PurchasesRecycleBinScreenState
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        p.paymentMethodName ?? '—',
+                        p.paymentSource,
                         style: TextStyle(
                           fontSize: 12,
                           color: isDark
