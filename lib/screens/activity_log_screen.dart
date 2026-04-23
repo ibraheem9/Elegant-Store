@@ -201,11 +201,11 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                 style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : Colors.black87)),
+                    color: isDark ? Colors.white : Colors.black.withOpacity(0.87))),
             Text('جميع العمليات المسجلة في النظام',
                 style: TextStyle(
                     fontSize: 12,
-                    color: isDark ? Colors.white38 : Colors.black38)),
+                    color: isDark ? Colors.white38 : Colors.black.withOpacity(0.38))),
           ]),
           const Spacer(),
           IconButton(
@@ -232,14 +232,14 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
           color: selected ? selBg : chipBg,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: selected ? selBg : (isDark ? Colors.white12 : Colors.black12),
+            color: selected ? selBg : (isDark ? Colors.white12 : Colors.black.withOpacity(0.12)),
           ),
         ),
         child: Text(label,
             style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: selected ? Colors.white : (isDark ? Colors.white70 : Colors.black54))),
+                color: selected ? Colors.white : (isDark ? Colors.white70 : Colors.black.withOpacity(0.54)))),
       ),
     );
 
@@ -257,7 +257,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
         chip('حذف',     _filterAction == 'DELETE',  () { setState(() => _filterAction = 'DELETE'); _loadLogs(reset: true); }),
         const SizedBox(width: 12),
         // Divider
-        Container(width: 1, height: 24, color: isDark ? Colors.white12 : Colors.black12),
+        Container(width: 1, height: 24, color: isDark ? Colors.white12 : Colors.black.withOpacity(0.12)),
         const SizedBox(width: 12),
         // Type filter
         chip('كل الأنواع',   _filterTargetType == null,         () { setState(() => _filterTargetType = null);         _loadLogs(reset: true); }),
@@ -273,7 +273,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
         chip('محاسبون',      _filterTargetType == 'ACCOUNTANT', () { setState(() => _filterTargetType = 'ACCOUNTANT'); _loadLogs(reset: true); }),
         const SizedBox(width: 12),
         // Divider
-        Container(width: 1, height: 24, color: isDark ? Colors.white12 : Colors.black12),
+        Container(width: 1, height: 24, color: isDark ? Colors.white12 : Colors.black.withOpacity(0.12)),
         const SizedBox(width: 12),
         // Date range
         _buildDateChip(isDark, 'من', _fromDate, () async {
@@ -302,7 +302,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
         // User filter (manager only)
         if (isManager && _users.isNotEmpty) ...[
           const SizedBox(width: 12),
-          Container(width: 1, height: 24, color: isDark ? Colors.white12 : Colors.black12),
+          Container(width: 1, height: 24, color: isDark ? Colors.white12 : Colors.black.withOpacity(0.12)),
           const SizedBox(width: 12),
           _buildUserDropdown(isDark),
         ],
@@ -322,20 +322,20 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
               : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: hasDate ? const Color(0xFF0B74FF) : (isDark ? Colors.white12 : Colors.black12),
+            color: hasDate ? const Color(0xFF0B74FF) : (isDark ? Colors.white12 : Colors.black.withOpacity(0.12)),
           ),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           Icon(Icons.calendar_today_rounded,
               size: 13,
-              color: hasDate ? const Color(0xFF0B74FF) : (isDark ? Colors.white54 : Colors.black45)),
+              color: hasDate ? const Color(0xFF0B74FF) : (isDark ? Colors.white54 : Colors.black.withOpacity(0.45))),
           const SizedBox(width: 5),
           Text(
             hasDate ? '$label: ${DateFormat('MM/dd').format(date!)}' : label,
             style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: hasDate ? const Color(0xFF0B74FF) : (isDark ? Colors.white54 : Colors.black45)),
+                color: hasDate ? const Color(0xFF0B74FF) : (isDark ? Colors.white54 : Colors.black.withOpacity(0.45))),
           ),
         ]),
       ),
@@ -351,7 +351,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
             : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: _filterUserId != null ? const Color(0xFF0B74FF) : (isDark ? Colors.white12 : Colors.black12),
+          color: _filterUserId != null ? const Color(0xFF0B74FF) : (isDark ? Colors.white12 : Colors.black.withOpacity(0.12)),
         ),
       ),
       child: DropdownButton<int?>(
@@ -359,7 +359,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
         underline: const SizedBox(),
         isDense: true,
         hint: Text('كل المستخدمين',
-            style: TextStyle(fontSize: 12, color: isDark ? Colors.white54 : Colors.black45)),
+            style: TextStyle(fontSize: 12, color: isDark ? Colors.white54 : Colors.black.withOpacity(0.45))),
         items: [
           const DropdownMenuItem<int?>(value: null, child: Text('كل المستخدمين', style: TextStyle(fontSize: 12))),
           ..._users.map((u) => DropdownMenuItem<int?>(
@@ -384,9 +384,9 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
       return Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Icon(Icons.history_toggle_off_rounded, size: 64,
-              color: isDark ? Colors.white12 : Colors.black12),
+              color: isDark ? Colors.white12 : Colors.black.withOpacity(0.12)),
           const SizedBox(height: 12),
-          Text('لا توجد سجلات', style: TextStyle(color: isDark ? Colors.white38 : Colors.black38)),
+          Text('لا توجد سجلات', style: TextStyle(color: isDark ? Colors.white38 : Colors.black.withOpacity(0.38))),
         ]),
       );
     }
@@ -466,13 +466,13 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                       style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: actionColor)),
                 ),
                 const SizedBox(width: 8),
-                Icon(_typeIcon(targetType), size: 13, color: isDark ? Colors.white38 : Colors.black38),
+                Icon(_typeIcon(targetType), size: 13, color: isDark ? Colors.white38 : Colors.black.withOpacity(0.38)),
                 const SizedBox(width: 4),
                 Text(_typeLabel(targetType),
-                    style: TextStyle(fontSize: 12, color: isDark ? Colors.white54 : Colors.black54)),
+                    style: TextStyle(fontSize: 12, color: isDark ? Colors.white54 : Colors.black.withOpacity(0.54))),
                 const Spacer(),
                 Text(_relativeTime(createdAt),
-                    style: TextStyle(fontSize: 11, color: isDark ? Colors.white30 : Colors.black38)),
+                    style: TextStyle(fontSize: 11, color: isDark ? Colors.white30 : Colors.black.withOpacity(0.38))),
               ]),
               const SizedBox(height: 8),
               // Summary
@@ -481,7 +481,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                     style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white87 : Colors.black87)),
+                        color: isDark ? Colors.white.withOpacity(0.87) : Colors.black.withOpacity(0.87))),
               // Field change detail
               if (fieldName != null && (oldValue != null || newValue != null)) ...[
                 const SizedBox(height: 6),
@@ -493,7 +493,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                   ),
                   child: Row(children: [
                     Text('$fieldName: ',
-                        style: TextStyle(fontSize: 11, color: isDark ? Colors.white38 : Colors.black38)),
+                        style: TextStyle(fontSize: 11, color: isDark ? Colors.white38 : Colors.black.withOpacity(0.38))),
                     if (oldValue != null) ...[
                       Text(oldValue,
                           style: const TextStyle(fontSize: 11, color: Colors.red,
@@ -515,12 +515,12 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                 const SizedBox(height: 6),
                 Row(children: [
                   Icon(Icons.info_outline_rounded, size: 12,
-                      color: isDark ? Colors.white30 : Colors.black38),
+                      color: isDark ? Colors.white30 : Colors.black.withOpacity(0.38)),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text('السبب: $reason',
                         style: TextStyle(fontSize: 11,
-                            color: isDark ? Colors.white38 : Colors.black45,
+                            color: isDark ? Colors.white38 : Colors.black.withOpacity(0.45),
                             fontStyle: FontStyle.italic)),
                   ),
                 ]),
@@ -529,15 +529,15 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
               const SizedBox(height: 6),
               Row(children: [
                 Icon(Icons.person_outline_rounded, size: 12,
-                    color: isDark ? Colors.white30 : Colors.black38),
+                    color: isDark ? Colors.white30 : Colors.black.withOpacity(0.38)),
                 const SizedBox(width: 4),
                 Text(byName != null && byName.isNotEmpty ? byName : 'النظام',
                     style: TextStyle(fontSize: 11,
-                        color: isDark ? Colors.white38 : Colors.black45)),
+                        color: isDark ? Colors.white38 : Colors.black.withOpacity(0.45))),
                 const SizedBox(width: 8),
                 if (createdAt != null) ...[
                   Icon(Icons.access_time_rounded, size: 12,
-                      color: isDark ? Colors.white30 : Colors.black38),
+                      color: isDark ? Colors.white30 : Colors.black.withOpacity(0.38)),
                   const SizedBox(width: 4),
                   Text(
                     () {
@@ -546,7 +546,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                       } catch (_) { return createdAt; }
                     }(),
                     style: TextStyle(fontSize: 11,
-                        color: isDark ? Colors.white38 : Colors.black45),
+                        color: isDark ? Colors.white38 : Colors.black.withOpacity(0.45)),
                   ),
                 ],
               ]),
