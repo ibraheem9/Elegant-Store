@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
+import '../services/sync_service.dart';
 import '../services/theme_service.dart';
 
 class RecycleBinScreen extends StatefulWidget {
@@ -319,11 +320,24 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
 
     if (confirm == true) {
       final db = context.read<DatabaseService>();
+      // SAFE-HOUSE: Mark as unsynced so the next push sends the deleted_at
+      // tombstone to the server (server will soft-delete, never hard-delete).
+      await db.markInvoiceUnsyncedBeforePermanentDelete(inv.id!);
+      // Push the tombstone immediately if online.
+      try {
+        final sync = context.read<SyncService>();
+        await sync.performFullSync();
+      } catch (_) {
+        // Non-fatal: tombstone will be pushed on next successful sync.
+      }
+      // Hard-delete locally only after the server has the soft-delete record.
       await db.permanentDeleteInvoice(inv.id!);
       _loadDeletedInvoices();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم حذف الفاتورة نهائياً'), backgroundColor: Colors.red),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم حذف الفاتورة نهائياً'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 }

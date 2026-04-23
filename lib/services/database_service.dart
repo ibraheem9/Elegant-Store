@@ -664,6 +664,17 @@ class DatabaseService {
     }, where: 'id = ?', whereArgs: [inv.id]);
   }
 
+  /// SAFE-HOUSE: Marks the invoice as unsynced (is_synced = 0) so the next
+  /// push will send its deleted_at tombstone to the server before we erase
+  /// the record locally. The server will soft-delete it, preserving all data.
+  Future<void> markInvoiceUnsyncedBeforePermanentDelete(int id) async {
+    final db = await database;
+    await db.rawUpdate(
+      'UPDATE invoices SET is_synced = 0 WHERE id = ?',
+      [id],
+    );
+  }
+
   Future<void> permanentDeleteInvoice(int id) async {
     final db = await database;
     await db.delete('invoices', where: 'id = ?', whereArgs: [id]);

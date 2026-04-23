@@ -16,6 +16,7 @@ class SyncDetailsScreen extends StatefulWidget {
 class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
   bool _isResetting = false;
   bool _isSyncing = false;
+  bool _isRestoring = false;
 
   Map<String, int> _unsyncedCounts = {};
   Map<String, int> _totalCounts = {};
@@ -76,6 +77,86 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
       }
     } finally {
       if (mounted) setState(() => _isSyncing = false);
+    }
+  }
+
+  Future<void> _handleRestore() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.teal.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.cloud_download_rounded, color: Colors.teal, size: 24),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text('استعادة كاملة من السيرفر',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              ),
+            ],
+          ),
+          content: const Text(
+            'سيتم تحميل جميع البيانات من السيرفر (بما فيها المحذوفة) وكتابتها محلياً.
+
+هذا لا يحذف أي شيء من السيرفر.
+
+هل تريد المتابعة؟',
+            style: TextStyle(height: 1.6),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('إلغاء'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('استعادة', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) return;
+    setState(() => _isRestoring = true);
+    try {
+      final syncService = context.read<SyncService>();
+      await syncService.performFullRestore();
+      await _loadStats();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تمت الاستعادة الكاملة من السيرفر بنجاح ✓'),
+            backgroundColor: Colors.teal,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('فشلت الاستعادة: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isRestoring = false);
     }
   }
 
@@ -582,7 +663,7 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
       children: [
         // ── Sync Now ──────────────────────────────────────────────────────
         ElevatedButton.icon(
-          onPressed: (_isSyncing || _isResetting) ? null : _handleSync,
+          onPressed: (_isSyncing || _isResetting || _isRestoring) ? null : _handleSync,
           icon: _isSyncing
               ? const SizedBox(
                   width: 18,
@@ -600,11 +681,32 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
         ),
+        // ── Full Restore from Server (Safe-House) ──────────────────────────────
+        const SizedBox(height: 12),
+        ElevatedButton.icon(
+          onPressed: (_isSyncing || _isResetting || _isRestoring) ? null : _handleRestore,
+          icon: _isRestoring
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+              : const Icon(Icons.cloud_download_rounded, color: Colors.white),
+          label: Text(
+            _isRestoring ? 'جاري الاستعادة...' : 'استعادة كاملة من السيرفر',
+            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.teal,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          ),
+        ),
         // ── Reset Local Data (DEVELOPER only) ─────────────────────────────────────
         if (context.read<AuthService>().isDeveloper()) ...[  
           const SizedBox(height: 12),
           OutlinedButton.icon(
-            onPressed: (_isSyncing || _isResetting) ? null : _confirmAndReset,
+            onPressed: (_isSyncing || _isResetting || _isRestoring) ? null : _confirmAndReset,
             icon: _isResetting
                 ? const SizedBox(
                     width: 18,

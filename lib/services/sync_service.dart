@@ -544,4 +544,86 @@ class SyncService extends ChangeNotifier {
 
     return map;
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // SAFE-HOUSE FULL RESTORE
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Calls POST /sync/restore to download ALL store data from the server,
+  /// including soft-deleted records.
+  ///
+  /// Use this when:
+  ///   • The app is freshly installed / database was lost.
+  ///   • The user wants to recover data after a crash.
+  ///   • A new device needs to be seeded with the full history.
+  ///
+  /// Soft-deleted records are written to the local DB with their deleted_at
+  /// value intact, so they appear in the Recycle Bin but not in normal views.
+  Future<void> performFullRestore() async {
+    if (_isSyncing) return;
+    _isSyncing = true;
+    notifyListeners();
+
+    try {
+      dev.log('Starting full restore from server…', name: 'SyncService');
+
+      final response = await _dio.post('/sync/restore');
+      final responseData = response.data is String
+          ? jsonDecode(response.data)
+          : response.data as Map<String, dynamic>;
+
+      if (responseData['success'] == true) {
+        final pullData = _safeMap(responseData['pull_data']) ?? {};
+        final serverTimestamp =
+            _safeString(responseData['timestamp']) ??
+            DateTime.now().toIso8601String();
+
+        final db = await _dbService.database;
+        await db.transaction((txn) async {
+          for (final table in _tableOrder) {
+            final items = pullData[table];
+            if (items == null || items is! List) continue;
+
+            for (final rawItem in items) {
+              if (rawItem is! Map) continue;
+              final item = Map<String, dynamic>.from(rawItem as Map);
+              try {
+                final resolved = await _resolveRelationsInTxn(table, item, txn);
+                await _dbService.upsertFromSyncInTxn(table, resolved, txn);
+              } catch (e) {
+                dev.log(
+                  'Restore: error on $table item: $e',
+                  name: 'SyncService',
+                  error: e,
+                );
+              }
+            }
+          }
+        });
+
+        await _dbService.recalculateAllBalances();
+        // Reset last_sync_time so the next regular sync fetches everything fresh.
+        await _prefs.setString('last_sync_time', serverTimestamp);
+
+        dev.log('Full restore completed at $serverTimestamp.', name: 'SyncService');
+      } else {
+        final errorMsg =
+            responseData['message'] as String? ?? 'Restore failed on server';
+        throw Exception(errorMsg);
+      }
+    } on DioException catch (e) {
+      String message = 'فشل استعادة البيانات بسبب مشكلة في الشبكة';
+      if (e.response?.statusCode == 401) {
+        message = 'انتهت صلاحية الجلسة، يرجى إعادة تسجيل الدخول';
+      }
+      dev.log('Restore failed (Network): ${e.message}', name: 'SyncService');
+      throw Exception(message);
+    } catch (e) {
+      dev.log('Restore failed (General): $e', name: 'SyncService', error: e);
+      rethrow;
+    } finally {
+      _isSyncing = false;
+      notifyListeners();
+    }
+  }
 }
