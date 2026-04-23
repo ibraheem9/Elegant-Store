@@ -8,15 +8,23 @@ class PaymentMethodsScreen extends StatefulWidget {
   const PaymentMethodsScreen({Key? key}) : super(key: key);
 
   @override
-  State<PaymentMethodsScreen> createState() => _PaymentMethodsScreenState();
+  State<PaymentMethodsScreen> createState() => PaymentMethodsScreenState();
 }
 
-class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
+class PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _descController = TextEditingController();
   String _selectedType = 'cash';
   bool _isReordering = false;
+
+  /// Called by DashboardScreen back button to exit reorder mode
+  bool get isReordering => _isReordering;
+
+  void exitReorderMode() {
+    if (_isReordering) setState(() => _isReordering = false);
+  }
+
   List<PaymentMethod> _methods = [];
   bool _isLoading = true;
 

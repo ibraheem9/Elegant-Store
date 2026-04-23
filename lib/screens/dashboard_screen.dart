@@ -31,6 +31,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
   int _previousIndex = 0;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final GlobalKey<PaymentMethodsScreenState> _paymentMethodsKey = GlobalKey<PaymentMethodsScreenState>();
+  final GlobalKey<PurchasesMethodsScreenState> _purchasesMethodsKey = GlobalKey<PurchasesMethodsScreenState>();
 
   Widget _getScreen(int index) {
     switch (index) {
@@ -43,8 +45,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 6: return const PaymentsScreen();
       case 7: return const CustomerBalancesScreen();
       case 8: return const CalendarScreen();
-      case 9: return const PaymentMethodsScreen();
-      case 10: return const PurchasesMethodsScreen();
+      case 9: return PaymentMethodsScreen(key: _paymentMethodsKey);
+      case 10: return PurchasesMethodsScreen(key: _purchasesMethodsKey);
       case 11: return const RecycleBinScreen();
       case 12: return const SettingsScreen();
       default: return const DashboardHomeScreen();
@@ -371,7 +373,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 icon: Icon(Icons.arrow_back_ios_new_rounded,
                     color: isDark ? Colors.white : Colors.black87),
                 tooltip: 'رجوع',
-                onPressed: () => setState(() => _selectedIndex = _previousIndex),
+                onPressed: () {
+                  // If currently in reorder mode, exit it instead of navigating away
+                  if (_selectedIndex == 9) {
+                    final s = _paymentMethodsKey.currentState;
+                    if (s != null && s.isReordering) { s.exitReorderMode(); return; }
+                  } else if (_selectedIndex == 10) {
+                    final s = _purchasesMethodsKey.currentState;
+                    if (s != null && s.isReordering) { s.exitReorderMode(); return; }
+                  }
+                  setState(() => _selectedIndex = _previousIndex);
+                },
               )
             else if (isMobile)
               IconButton(

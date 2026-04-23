@@ -9,15 +9,22 @@ class PurchasesMethodsScreen extends StatefulWidget {
 
   @override
   State<PurchasesMethodsScreen> createState() =>
-      _PurchasesMethodsScreenState();
+      PurchasesMethodsScreenState();
 }
 
-class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
+class PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _descController = TextEditingController();
   String _selectedType = 'cash';
   bool _isReordering = false;
+
+  bool get isReordering => _isReordering;
+
+  void exitReorderMode() {
+    if (_isReordering) setState(() => _isReordering = false);
+  }
+
   List<PaymentMethod> _methods = [];
   bool _isLoading = true;
 
