@@ -1513,7 +1513,9 @@ class DatabaseService {
     });
     // Reclaim disk space outside of transaction
     await db.rawQuery('VACUUM');
-    dev.log('Full database reset completed.', name: 'DatabaseService');
+    // Re-seed the developer account so the developer can log in immediately
+    await _seedDeveloperAccount(db);
+    dev.log('Full database reset completed. Developer account re-seeded.', name: 'DatabaseService');
   }
 
   /// Returns the count of unsynced records per table for the sync details screen.

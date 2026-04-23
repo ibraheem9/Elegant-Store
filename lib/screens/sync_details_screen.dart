@@ -791,6 +791,27 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.withOpacity(0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.developer_mode_rounded, size: 16, color: Colors.blue),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'حساب المطور (ibraheem / 123) سيُعاد زرعه تلقائياً بعد المسح.',
+                      style: TextStyle(fontSize: 11, color: Colors.blue),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
         actions: [
