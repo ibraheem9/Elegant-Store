@@ -29,6 +29,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
+  int _previousIndex = 0;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   Widget _getScreen(int index) {
@@ -303,7 +304,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       padding: const EdgeInsets.only(bottom: 4),
       child: ListTile(
         onTap: () {
-          setState(() => _selectedIndex = index);
+          setState(() {
+            _previousIndex = _selectedIndex;
+            _selectedIndex = index;
+          });
           if (MediaQuery.of(context).size.width < 650) Navigator.pop(context);
         },
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -361,7 +365,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         child: Row(
           children: [
-            if (isMobile) 
+            // Back button for sub-screens (payment methods 9 & 10)
+            if (_selectedIndex == 9 || _selectedIndex == 10)
+              IconButton(
+                icon: Icon(Icons.arrow_back_ios_new_rounded,
+                    color: isDark ? Colors.white : Colors.black87),
+                tooltip: 'رجوع',
+                onPressed: () => setState(() => _selectedIndex = _previousIndex),
+              )
+            else if (isMobile)
               IconButton(
                 icon: Icon(Icons.menu_rounded, color: isDark ? Colors.white : Colors.black87),
                 onPressed: () => _scaffoldKey.currentState?.openDrawer(),
