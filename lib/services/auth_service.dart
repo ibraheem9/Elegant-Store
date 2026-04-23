@@ -86,6 +86,8 @@ class AuthService extends ChangeNotifier {
         _currentUser = User.fromMap(r.first);
         _isLoggedIn = true;
         notifyListeners();
+        // Start background auto-sync every 10 minutes (session resume)
+        _syncService.startAutoSync();
         // Fire-and-forget sync — never block startup
         Future.microtask(() async {
           try {
@@ -183,6 +185,8 @@ class AuthService extends ChangeNotifier {
         }
 
         notifyListeners();
+        // Start background auto-sync every 10 minutes
+        _syncService.startAutoSync();
         // Initial sync is triggered by LoginScreen on first login so the UI
         // can display a loading message. Subsequent logins use session init sync.
         return LoginResult.success;
@@ -228,12 +232,17 @@ class AuthService extends ChangeNotifier {
   String? get lastLoginError => _lastLoginError;
 
   Future<void> logout() async {
+    // 1. Sync any unsynced data before signing out (non-blocking if offline)
+    await _syncService.syncBeforeLogout();
+
+    // 2. Invalidate server token
     try {
       if (_token != null) {
         await _dio.post('logout', options: Options(headers: {'Authorization': 'Bearer $_token'}));
       }
     } catch (_) {}
 
+    // 3. Clear local session state
     _currentUser = null;
     _isLoggedIn = false;
     _token = null;

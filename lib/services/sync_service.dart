@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -57,6 +58,10 @@ class SyncService extends ChangeNotifier {
   SyncDetails? _lastSyncDetails;
   SyncDetails? get lastSyncDetails => _lastSyncDetails;
 
+  // ── Auto-sync timer ──────────────────────────────────────────────────────
+  Timer? _autoSyncTimer;
+  static const Duration _autoSyncInterval = Duration(minutes: 10);
+
   /// Tables must be processed in dependency order (parents before children).
   static const List<String> _tableOrder = [
     'payment_methods',
@@ -92,6 +97,62 @@ class SyncService extends ChangeNotifier {
 
     _loadLastSyncDetails();
     checkConnectivity();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // AUTO-SYNC TIMER
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Starts the background auto-sync timer.
+  /// Should be called after a successful login.
+  void startAutoSync() {
+    _autoSyncTimer?.cancel();
+    _autoSyncTimer = Timer.periodic(_autoSyncInterval, (_) async {
+      final hasInternet = await checkConnectivity();
+      if (!hasInternet) {
+        dev.log('Auto-sync skipped: no internet.', name: 'SyncService');
+        return;
+      }
+      if (_isSyncing) {
+        dev.log('Auto-sync skipped: sync already in progress.', name: 'SyncService');
+        return;
+      }
+      dev.log('Auto-sync triggered (every 10 min).', name: 'SyncService');
+      try {
+        await performFullSync();
+        dev.log('Auto-sync completed successfully.', name: 'SyncService');
+      } catch (e) {
+        dev.log('Auto-sync failed silently: $e', name: 'SyncService');
+        // Silent failure — do not interrupt the user.
+      }
+    });
+    dev.log('Auto-sync timer started (interval: 10 min).', name: 'SyncService');
+  }
+
+  /// Stops the background auto-sync timer.
+  /// Should be called before logout.
+  void stopAutoSync() {
+    _autoSyncTimer?.cancel();
+    _autoSyncTimer = null;
+    dev.log('Auto-sync timer stopped.', name: 'SyncService');
+  }
+
+  /// Performs a sync and then stops the timer.
+  /// Used by the logout flow to ensure data is pushed before signing out.
+  Future<void> syncBeforeLogout() async {
+    stopAutoSync();
+    final hasInternet = await checkConnectivity();
+    if (!hasInternet) {
+      dev.log('Logout sync skipped: no internet.', name: 'SyncService');
+      return; // Proceed with logout even if offline
+    }
+    try {
+      await performFullSync();
+      dev.log('Pre-logout sync completed.', name: 'SyncService');
+    } catch (e) {
+      dev.log('Pre-logout sync failed (non-blocking): $e', name: 'SyncService');
+      // Non-blocking — logout proceeds regardless
+    }
   }
 
   void _loadLastSyncDetails() {

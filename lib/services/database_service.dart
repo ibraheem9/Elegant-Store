@@ -37,8 +37,8 @@ class DatabaseService {
         await _createTables(db);
         await _createTriggers(db);
         await _createIndexes(db);
-        // No seed data — fresh installs start with a completely empty database.
-        // All data is created by the user or pulled from the server via sync.
+        // Seed the developer account so the developer can always log in locally.
+        await _seedDeveloperAccount(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -309,8 +309,29 @@ class DatabaseService {
     }
   }
 
-  // --- Methods ----
+  // ─────────────────────────────────────────────────────────────────────────
+  // SEED
+  // ─────────────────────────────────────────────────────────────────────────
 
+  /// Seeds the developer account into the local DB on a fresh install.
+  /// Uses INSERT OR IGNORE so it never overwrites an existing record.
+  /// Password is stored as plain text (same as the offline-login mechanism).
+  Future<void> _seedDeveloperAccount(Database db) async {
+    const String devUuid = 'dev-ibraheem-abd-elhadi-00000000-0001';
+    const String now = '2026-01-01T00:00:00.000';
+    await db.execute('''
+      INSERT OR IGNORE INTO users (
+        uuid, username, password, name, email,
+        role, version, created_at, updated_at, is_synced
+      ) VALUES (
+        ?, 'ibraheem', '123', 'Ibraheem Abd Elhadi', 'i7r10k8@gmail.com',
+        'DEVELOPER', 1, ?, ?, 1
+      )
+    ''', [devUuid, now, now]);
+    dev.log('Developer account seeded (or already exists).', name: 'DatabaseService');
+  }
+
+  // --- Methods ----
   Future<User?> authenticate(String username, String password) async {
     final db = await database;
     final r = await db.query('users', where: 'username = ? AND password = ?', whereArgs: [username, password]);
