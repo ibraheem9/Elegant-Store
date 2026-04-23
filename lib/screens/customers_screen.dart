@@ -980,6 +980,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                     final summary = h['summary'] as String?;
                     final oldVal = h['old_value'] as String?;
                     final newVal = h['new_value'] as String?;
+                    final creatorName = h['edited_by_name'] as String?;
                     final hasFieldChange = fieldLabel != null && oldVal != null && newVal != null;
                     // Badge color by action type
                     final badgeColor = action == 'CREATE'
@@ -1020,6 +1021,30 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                                 Text(fieldLabel!, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                               ],
                             ]),
+                            // Creator name for CREATE/DELETE actions
+                            if (creatorName != null && creatorName.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Row(children: [
+                                Icon(
+                                  action == 'CREATE' ? Icons.person_add_rounded : Icons.person_rounded,
+                                  size: 13,
+                                  color: badgeColor,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  action == 'CREATE'
+                                      ? 'أُنشئت بواسطة: $creatorName'
+                                      : action == 'DELETE'
+                                          ? 'حُذفت بواسطة: $creatorName'
+                                          : 'عُدّلت بواسطة: $creatorName',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: badgeColor,
+                                  ),
+                                ),
+                              ]),
+                            ],
                             // Summary line (if available)
                             if (summary != null && summary.isNotEmpty) ...[
                               const SizedBox(height: 4),

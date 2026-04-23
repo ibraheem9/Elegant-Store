@@ -681,13 +681,25 @@ class _SalesScreenState extends State<SalesScreen> {
                               Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.person_outline, size: 12),
+                                  Icon(
+                                    action == 'CREATE' ? Icons.person_add_rounded : Icons.person_rounded,
+                                    size: 12,
+                                    color: badgeColor,
+                                  ),
                                   const SizedBox(width: 3),
                                   ConstrainedBox(
-                                    constraints: const BoxConstraints(maxWidth: 120),
+                                    constraints: const BoxConstraints(maxWidth: 160),
                                     child: Text(
-                                      editorName,
-                                      style: const TextStyle(fontSize: 11),
+                                      action == 'CREATE'
+                                          ? 'أُنشئت بواسطة: $editorName'
+                                          : action == 'DELETE'
+                                              ? 'حُذفت بواسطة: $editorName'
+                                              : 'عُدّلت بواسطة: $editorName',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: badgeColor,
+                                      ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
