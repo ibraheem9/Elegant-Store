@@ -38,7 +38,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator())
         : SingleChildScrollView(
-            padding: EdgeInsets.all(isMobile ? 16 : 32),
+            padding: EdgeInsets.fromLTRB(isMobile ? 16 : 32, isMobile ? 16 : 32, isMobile ? 16 : 32, 40),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

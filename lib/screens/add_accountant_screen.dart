@@ -83,7 +83,7 @@ class _AddAccountantScreenState extends State<AddAccountantScreen> {
         foregroundColor: isDark ? Colors.white : Colors.black,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.fromLTRB(32, 32, 32, 56),
         child: Center(
           child: Container(
             constraints: const BoxConstraints(maxWidth: 600),

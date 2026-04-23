@@ -263,7 +263,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Container(
-        padding: const EdgeInsets.all(4),
+        padding: const EdgeInsets.fromLTRB(4, 4, 4, 40),
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF1E293B) : Colors.white,
           borderRadius: BorderRadius.circular(12),
@@ -552,7 +552,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
               displayCount: displayCount);
         } else {
           return ListView.builder(
-            padding: EdgeInsets.all(isMobile ? 16 : 32),
+            padding: EdgeInsets.fromLTRB(isMobile ? 16 : 32, isMobile ? 16 : 32, isMobile ? 16 : 32, 40),
             itemCount: displayed.length + (hasMore ? 1 : 0),
             itemBuilder: (context, index) {
               if (index == displayed.length) {
@@ -582,7 +582,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   Widget _buildInvoicesTable(List<Invoice> invoices, bool isDark, bool isUnpaidTab,
       {bool hasMore = false, int totalCount = 0, int displayCount = 0}) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(32),
+      padding: const EdgeInsets.fromLTRB(32, 32, 32, 56),
       child: Column(
         children: [
           Container(

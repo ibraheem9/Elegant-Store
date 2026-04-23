@@ -178,7 +178,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       body: _isLoading
           ? ShimmerLoading(isDark: isDark, itemCount: 5)
           : SingleChildScrollView(
-              padding: EdgeInsets.all(isSmall ? 16 : 32),
+              padding: EdgeInsets.fromLTRB(isSmall ? 16 : 32, isSmall ? 16 : 32, isSmall ? 16 : 32, 40),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

@@ -805,7 +805,7 @@ class _SalesScreenState extends State<SalesScreen> {
       body: _isDataLoading
         ? ShimmerLoading(isDark: isDark, itemCount: 6)
         : SingleChildScrollView(
-            padding: EdgeInsets.all(isMobile ? 16 : 32),
+            padding: EdgeInsets.fromLTRB(isMobile ? 16 : 32, isMobile ? 16 : 32, isMobile ? 16 : 32, 40),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

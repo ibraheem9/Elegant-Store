@@ -191,7 +191,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return RefreshIndicator(
       onRefresh: _loadNotifications,
       child: ListView.builder(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
         itemCount: items.length,
         itemBuilder: (context, index) {
           final n = items[index];

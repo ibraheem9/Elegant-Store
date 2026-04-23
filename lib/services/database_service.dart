@@ -1238,6 +1238,31 @@ class DatabaseService {
     return rows.map((m) => Purchase.fromMap(m)).toList();
   }
 
+  /// Returns paginated soft-deleted purchases (10 per page)
+  Future<List<Purchase>> getDeletedPurchasesPaged({
+    int limit = 10,
+    int offset = 0,
+  }) async {
+    final db = await database;
+    final rows = await db.query(
+      'purchases',
+      where: 'deleted_at IS NOT NULL',
+      orderBy: 'deleted_at DESC',
+      limit: limit,
+      offset: offset,
+    );
+    return rows.map((m) => Purchase.fromMap(m)).toList();
+  }
+
+  /// Returns total count of soft-deleted purchases
+  Future<int> getDeletedPurchasesCount() async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as cnt FROM purchases WHERE deleted_at IS NOT NULL',
+    );
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
   /// Edit purchase with full audit log (records who edited, reason, changed fields)
   Future<void> editPurchaseWithLog({
     required Purchase oldPurchase,

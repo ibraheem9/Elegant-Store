@@ -196,7 +196,7 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
 
   Widget _buildInvoicesList(bool isDark, Color cardColor) {
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
       itemCount: _filteredInvoices.length,
       itemBuilder: (context, index) {
         final inv = _filteredInvoices[index];

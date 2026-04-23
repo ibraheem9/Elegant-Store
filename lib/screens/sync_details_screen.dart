@@ -238,7 +238,7 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
                 onRefresh: _loadStats,
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 44),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

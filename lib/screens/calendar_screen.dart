@@ -82,6 +82,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
               children: [
                 _buildCalendarCard(isDark, true),
                 _buildInvoicesCard(isDark, true),
+                const SizedBox(height: 40),
               ],
             ),
           )
@@ -216,6 +217,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           else
             Expanded(
               child: ListView.builder(
+                padding: const EdgeInsets.only(bottom: 16),
                 itemCount: _selectedDayInvoices.length,
                 itemBuilder: (context, index) {
                   final inv = _selectedDayInvoices[index];

@@ -115,7 +115,7 @@ class _AccountantsScreenState extends State<AccountantsScreen> {
                 : _accountants.isEmpty
                     ? Center(child: Text('لا يوجد موظفون حالياً', style: TextStyle(color: isDark ? Colors.white30 : Colors.grey)))
                     : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        padding: const EdgeInsets.fromLTRB(32, 0, 32, 80),
                         itemCount: _accountants.length,
                         itemBuilder: (context, index) {
                           final acc = _accountants[index];

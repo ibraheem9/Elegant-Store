@@ -1086,7 +1086,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       body: _isLoading
           ? ShimmerLoading(isDark: isDark, itemCount: 5)
           : SingleChildScrollView(
-              padding: EdgeInsets.all(isMobile ? 16 : 32),
+              padding: EdgeInsets.fromLTRB(isMobile ? 16 : 32, isMobile ? 16 : 32, isMobile ? 16 : 32, 40),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 _buildInfoGrid(isDark, size),
                 const SizedBox(height: 32),

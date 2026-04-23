@@ -6,6 +6,7 @@ import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/shimmer_loading.dart';
+import 'purchases_recycle_bin_screen.dart';
 
 class PurchasesScreen extends StatefulWidget {
   const PurchasesScreen({Key? key}) : super(key: key);
@@ -459,7 +460,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
               children: [
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: EdgeInsets.all(isMobile ? 12 : 24),
+                    padding: EdgeInsets.fromLTRB(isMobile ? 12 : 24, isMobile ? 12 : 24, isMobile ? 12 : 24, 40),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -556,7 +557,12 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     return Tooltip(
       message: 'سلة المحذوفات',
       child: InkWell(
-        onTap: _showRecycleBin,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const PurchasesRecycleBinScreen(),
+          ),
+        ).then((_) => _loadData()),
         borderRadius: BorderRadius.circular(10),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),

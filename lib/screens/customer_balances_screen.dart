@@ -284,7 +284,7 @@ class _CustomerBalancesScreenState extends State<CustomerBalancesScreen> {
     }
 
     return ListView(
-      padding: EdgeInsets.all(isMobile ? 12 : 20),
+      padding: EdgeInsets.fromLTRB(isMobile ? 12 : 20, isMobile ? 12 : 20, isMobile ? 12 : 20, 40),
       children: [
         // Summary row
         _buildSummaryRow(isDark),
