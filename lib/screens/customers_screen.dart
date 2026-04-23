@@ -965,45 +965,82 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (_, i) {
                     final h = history[i];
+                    // Resolve field label from raw DB key
+                    final rawField = h['field_name'] as String?;
+                    final fieldLabel = rawField == 'amount'
+                        ? 'المبلغ'
+                        : rawField == 'payment_status'
+                            ? 'حالة الدفع'
+                            : rawField == 'notes'
+                                ? 'الملاحظات'
+                                : rawField == 'payment_method_id'
+                                    ? 'طريقة الدفع'
+                                    : rawField;
+                    final action = h['action'] as String? ?? 'UPDATE';
+                    final summary = h['summary'] as String?;
+                    final oldVal = h['old_value'] as String?;
+                    final newVal = h['new_value'] as String?;
+                    final hasFieldChange = fieldLabel != null && oldVal != null && newVal != null;
+                    // Badge color by action type
+                    final badgeColor = action == 'CREATE'
+                        ? Colors.green
+                        : action == 'DELETE'
+                            ? Colors.red
+                            : Colors.orange;
+                    // Format date
+                    String dateStr = h['created_at']?.toString() ?? '';
+                    try {
+                      final dt = DateTime.parse(dateStr).toLocal();
+                      dateStr = '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}  ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+                    } catch (_) {
+                      if (dateStr.length > 16) dateStr = dateStr.substring(0, 16);
+                    }
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // Action badge + field label
                             Row(children: [
-                              const Icon(Icons.edit_note_rounded,
-                                  size: 16, color: Colors.blue),
-                              const SizedBox(width: 6),
-                              Text('الحقل: ${h['field_name']}',
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold, fontSize: 13)),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: badgeColor.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  action == 'CREATE' ? 'إضافة' : action == 'DELETE' ? 'حذف' : 'تعديل',
+                                  style: TextStyle(fontSize: 11, color: badgeColor, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              if (hasFieldChange) ...[
+                                const SizedBox(width: 8),
+                                const Icon(Icons.edit_note_rounded, size: 16, color: Colors.blue),
+                                const SizedBox(width: 4),
+                                Text(fieldLabel!, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              ],
                             ]),
-                            const SizedBox(height: 4),
-                            Row(children: [
-                              Flexible(
-                                  child: Text('من: ${h['old_value']}',
-                                      style: const TextStyle(
-                                          color: Colors.red, fontSize: 12))),
-                              const SizedBox(width: 8),
-                              const Icon(Icons.arrow_forward_rounded,
-                                  size: 14, color: Colors.grey),
-                              const SizedBox(width: 8),
-                              Flexible(
-                                  child: Text('إلى: ${h['new_value']}',
-                                      style: const TextStyle(
-                                          color: Colors.green, fontSize: 12))),
-                            ]),
-                            if (h['edit_reason'] != null &&
-                                h['edit_reason'].toString().isNotEmpty)
+                            // Summary line (if available)
+                            if (summary != null && summary.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(summary, style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                            ],
+                            // Old → New values (only when a specific field changed)
+                            if (hasFieldChange) ...[
+                              const SizedBox(height: 4),
+                              Row(children: [
+                                Flexible(child: Text('من: $oldVal', style: const TextStyle(color: Colors.red, fontSize: 12))),
+                                const SizedBox(width: 8),
+                                const Icon(Icons.arrow_forward_rounded, size: 14, color: Colors.grey),
+                                const SizedBox(width: 8),
+                                Flexible(child: Text('إلى: $newVal', style: const TextStyle(color: Colors.green, fontSize: 12))),
+                              ]),
+                            ],
+                            if (h['edit_reason'] != null && h['edit_reason'].toString().isNotEmpty)
                               Text('السبب: ${h['edit_reason']}',
-                                  style: const TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey,
-                                      fontStyle: FontStyle.italic)),
-                            Text(
-                                h['created_at']?.toString().substring(0, 16) ?? '',
-                                style: const TextStyle(
-                                    fontSize: 10, color: Colors.grey)),
+                                  style: const TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic)),
+                            const SizedBox(height: 2),
+                            Text(dateStr, style: const TextStyle(fontSize: 10, color: Colors.grey)),
                           ]),
                     );
                   },
