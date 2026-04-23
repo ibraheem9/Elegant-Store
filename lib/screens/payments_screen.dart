@@ -185,7 +185,18 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
       updatedAt: DateTime.now().toIso8601String(),
     );
     await db.updateInvoice(updatedInvoice);
-    await db.logEdit(inv.id!, 'INVOICE', 'طريقة الدفع', inv.methodName ?? 'غير محدد', selectedMethod.name);
+    db.logActivity(
+      targetId: inv.id!,
+      targetType: 'INVOICE',
+      action: 'UPDATE',
+      fieldName: 'تسوية دفع',
+      oldValue: inv.methodName ?? 'غير محدد',
+      newValue: selectedMethod.name,
+      summary: 'تسوية فاتورة بمبلغ ${inv.amount.toStringAsFixed(2)} ₪ عبر ${selectedMethod.name}',
+      performedById: currentUser?.id,
+      performedByName: currentUser?.name,
+      storeManagerId: currentUser?.parentId ?? currentUser?.id,
+    ).catchError((e) => debugPrint('logActivity failed: $e'));
 
     _loadData();
     if (mounted) {

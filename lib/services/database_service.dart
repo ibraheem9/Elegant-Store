@@ -32,7 +32,7 @@ class DatabaseService {
 
     final db = await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: (db, version) async {
         await _createTables(db);
         await _createTriggers(db);
@@ -69,6 +69,13 @@ class DatabaseService {
           try { await db.execute('ALTER TABLE users ADD COLUMN store_manager_id INTEGER'); } catch (_) {}
           // Add performance indexes for existing databases
           await _createIndexes(db);
+        }
+        if (oldVersion < 6) {
+          // Add action (CREATE/UPDATE/DELETE) and summary columns to edit_history
+          try { await db.execute('ALTER TABLE edit_history ADD COLUMN action TEXT'); } catch (_) {}
+          try { await db.execute('ALTER TABLE edit_history ADD COLUMN summary TEXT'); } catch (_) {}
+          // Backfill existing rows as UPDATE actions
+          try { await db.execute("UPDATE edit_history SET action = 'UPDATE' WHERE action IS NULL"); } catch (_) {}
         }
       },
     );
@@ -220,10 +227,12 @@ class DatabaseService {
         edited_by_name TEXT,
         target_id INTEGER,
         target_type TEXT,
+        action TEXT,
         field_name TEXT,
         old_value TEXT,
         new_value TEXT,
         edit_reason TEXT,
+        summary TEXT,
         version INTEGER DEFAULT 1,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
@@ -1278,21 +1287,106 @@ class DatabaseService {
     }, where: 'id = ?', whereArgs: [inv.id]);
   }
 
-  Future<void> logEdit(int targetId, String type, String field, String oldVal, String newVal) async {
+  /// Legacy wrapper kept for backward compatibility.
+  Future<void> logEdit(int targetId, String type, String field, String oldVal, String newVal, {int? byId, String? byName}) async {
+    await logActivity(
+      targetId: targetId,
+      targetType: type,
+      action: 'UPDATE',
+      fieldName: field,
+      oldValue: oldVal,
+      newValue: newVal,
+      performedById: byId,
+      performedByName: byName,
+    );
+  }
+
+  /// Central activity logger — records every CREATE / UPDATE / DELETE operation.
+  ///
+  /// [targetType]: 'INVOICE' | 'CUSTOMER' | 'PURCHASE' | 'PAYMENT_METHOD' |
+  ///               'TRANSACTION' | 'DAILY_STAT' | 'ACCOUNTANT'
+  /// [action]:     'CREATE' | 'UPDATE' | 'DELETE'
+  Future<void> logActivity({
+    required int targetId,
+    required String targetType,
+    required String action,
+    String? fieldName,
+    String? oldValue,
+    String? newValue,
+    String? summary,
+    String? reason,
+    int? performedById,
+    String? performedByName,
+    int? storeManagerId,
+  }) async {
     final db = await database;
     final now = DateTime.now().toIso8601String();
     await db.insert('edit_history', {
       'uuid': _uuid.v4(),
+      'store_manager_id': storeManagerId,
+      'edited_by_id': performedById,
+      'edited_by_name': performedByName,
       'target_id': targetId,
-      'target_type': type,
-      'field_name': field,
-      'old_value': oldVal,
-      'new_value': newVal,
+      'target_type': targetType,
+      'action': action,
+      'field_name': fieldName,
+      'old_value': oldValue,
+      'new_value': newValue,
+      'edit_reason': reason,
+      'summary': summary,
       'version': 1,
       'created_at': now,
       'updated_at': now,
-      'is_synced': 0
+      'is_synced': 0,
     });
+  }
+
+  /// Returns the full activity log with optional filters.
+  /// [targetType] null = all types.
+  /// [action] null = all actions.
+  /// [performedById] null = all users.
+  Future<List<Map<String, dynamic>>> getActivityLog({
+    String? targetType,
+    String? action,
+    int? performedById,
+    DateTime? from,
+    DateTime? to,
+    int limit = 200,
+    int offset = 0,
+  }) async {
+    final db = await database;
+    final conditions = <String>['deleted_at IS NULL'];
+    final args = <dynamic>[];
+
+    if (targetType != null) {
+      conditions.add('target_type = ?');
+      args.add(targetType);
+    }
+    if (action != null) {
+      conditions.add('action = ?');
+      args.add(action);
+    }
+    if (performedById != null) {
+      conditions.add('edited_by_id = ?');
+      args.add(performedById);
+    }
+    if (from != null) {
+      conditions.add('created_at >= ?');
+      args.add(from.toIso8601String());
+    }
+    if (to != null) {
+      conditions.add('created_at <= ?');
+      args.add(to.toIso8601String());
+    }
+
+    return db.query(
+      'edit_history',
+      where: conditions.join(' AND '),
+      whereArgs: args.isEmpty ? null : args,
+      orderBy: 'created_at DESC',
+      limit: limit,
+      offset: offset,
+    );
   }
 
   Future<void> resetSyncStatus() async {

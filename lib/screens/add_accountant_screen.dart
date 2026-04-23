@@ -40,7 +40,17 @@ class _AddAccountantScreenState extends State<AddAccountantScreen> {
         createdAt: DateTime.now().toIso8601String(),
       );
 
-      await db.insertUser(accountant, _passwordController.text);
+      final newAccId = await db.insertUser(accountant, _passwordController.text);
+      final actUser = context.read<AuthService>().currentUser;
+      db.logActivity(
+        targetId: newAccId,
+        targetType: 'ACCOUNTANT',
+        action: 'CREATE',
+        summary: 'إضافة محاسب جديد: \${accountant.name}',
+        performedById: actUser?.id,
+        performedByName: actUser?.name,
+        storeManagerId: actUser?.parentId ?? actUser?.id,
+      ).catchError((e) => debugPrint('logActivity failed: \$e'));
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

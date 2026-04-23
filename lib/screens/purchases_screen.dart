@@ -148,7 +148,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       final now = DateTime.now();
       final dt  = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day,
           now.hour, now.minute, now.second);
-      await db.insertPurchase(Purchase(
+      final purchaseId = await db.insertPurchase(Purchase(
         merchantName:  _merchantController.text.trim(),
         amount:        amount,
         paymentSource: _selectedMethod?.type == 'app' ? 'APP' : 'CASH',
@@ -156,6 +156,16 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         notes:         _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
         createdAt:     dt.toIso8601String(),
       ));
+      final actUser = context.read<AuthService>().currentUser;
+      db.logActivity(
+        targetId: purchaseId,
+        targetType: 'PURCHASE',
+        action: 'CREATE',
+        summary: 'مشتريات جديدة من ${_merchantController.text.trim()} بمبلغ ${amount.toStringAsFixed(2)} ₪',
+        performedById: actUser?.id,
+        performedByName: actUser?.name,
+        storeManagerId: actUser?.parentId ?? actUser?.id,
+      ).catchError((e) => debugPrint('logActivity failed: $e'));
       _merchantController.clear();
       _amountController.clear();
       _notesController.clear();
@@ -186,7 +196,18 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       ),
     );
     if (confirm == true && p.id != null) {
-      await context.read<DatabaseService>().softDeletePurchase(p.id!);
+      final db2 = context.read<DatabaseService>();
+      await db2.softDeletePurchase(p.id!);
+      final actUser = context.read<AuthService>().currentUser;
+      db2.logActivity(
+        targetId: p.id!,
+        targetType: 'PURCHASE',
+        action: 'DELETE',
+        summary: 'حذف مشتريات ${p.merchantName} بمبلغ ${p.amount.toStringAsFixed(2)} ₪',
+        performedById: actUser?.id,
+        performedByName: actUser?.name,
+        storeManagerId: actUser?.parentId ?? actUser?.id,
+      ).catchError((e) => debugPrint('logActivity failed: $e'));
       await _loadData();
       _snack('تم نقل الفاتورة إلى سلة المحذوفات', Colors.redAccent);
     }
@@ -270,6 +291,16 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         editorName: editor?.name ?? 'غير معروف',
         editorId:   editor?.id ?? 0,
       );
+      db.logActivity(
+        targetId: p.id!,
+        targetType: 'PURCHASE',
+        action: 'UPDATE',
+        summary: 'تعديل مشتريات ${p.merchantName}: المبلغ من ${p.amount.toStringAsFixed(2)} إلى ${newAmount.toStringAsFixed(2)} ₪ - السبب: ${reasonCtrl.text.trim()}',
+        reason: reasonCtrl.text.trim(),
+        performedById: editor?.id,
+        performedByName: editor?.name,
+        storeManagerId: editor?.parentId ?? editor?.id,
+      ).catchError((e) => debugPrint('logActivity failed: $e'));
       await _loadData();
       _snack('تم تعديل الفاتورة بنجاح', Colors.blue);
     }

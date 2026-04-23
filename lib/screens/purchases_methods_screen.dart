@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/database_service.dart';
+import '../services/auth_service.dart';
 import '../models/models.dart';
 
 class PurchasesMethodsScreen extends StatefulWidget {
@@ -644,10 +645,29 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
                         isActive: method?.isActive ?? 1,
                         sortOrder: method?.sortOrder ?? 0,
                       );
+                      final actUser = context.read<AuthService>().currentUser;
                       if (method == null) {
-                        await db.insertPaymentMethod(newMethod);
+                        final pmId = await db.insertPaymentMethod(newMethod);
+                        db.logActivity(
+                          targetId: pmId,
+                          targetType: 'PAYMENT_METHOD',
+                          action: 'CREATE',
+                          summary: 'إضافة طريقة دفع مشتريات: ' + newMethod.name,
+                          performedById: actUser?.id,
+                          performedByName: actUser?.name,
+                          storeManagerId: actUser?.parentId ?? actUser?.id,
+                        ).catchError((e) => debugPrint('logActivity failed'));
                       } else {
                         await db.updatePaymentMethod(newMethod);
+                        db.logActivity(
+                          targetId: newMethod.id!,
+                          targetType: 'PAYMENT_METHOD',
+                          action: 'UPDATE',
+                          summary: 'تعديل طريقة دفع مشتريات: ' + newMethod.name,
+                          performedById: actUser?.id,
+                          performedByName: actUser?.name,
+                          storeManagerId: actUser?.parentId ?? actUser?.id,
+                        ).catchError((e) => debugPrint('logActivity failed'));
                       }
                       if (mounted) {
                         Navigator.pop(context);
@@ -790,6 +810,16 @@ class _PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
               onPressed: () async {
                 try {
                   await db.deletePaymentMethod(method.id!);
+                  final actUser = context.read<AuthService>().currentUser;
+                  db.logActivity(
+                    targetId: method.id!,
+                    targetType: 'PAYMENT_METHOD',
+                    action: 'DELETE',
+                    summary: 'حذف طريقة دفع مشتريات: ' + method.name,
+                    performedById: actUser?.id,
+                    performedByName: actUser?.name,
+                    storeManagerId: actUser?.parentId ?? actUser?.id,
+                  ).catchError((e) => debugPrint('logActivity failed'));
                   if (mounted) {
                     Navigator.pop(context);
                     _refreshMethods();

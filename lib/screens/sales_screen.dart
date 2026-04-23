@@ -389,7 +389,17 @@ class _SalesScreenState extends State<SalesScreen> {
         notes: _notesController.text,
       );
 
-      await db.insertInvoice(invoice);
+      final invoiceId = await db.insertInvoice(invoice);
+      final _actUser = context.read<AuthService>().currentUser;
+      db.logActivity(
+        targetId: invoiceId,
+        targetType: 'INVOICE',
+        action: 'CREATE',
+        summary: 'فاتورة جديدة للزبون ${customer.name} بمبلغ ${amount.toStringAsFixed(2)} ₪ - الحالة: $status',
+        performedById: _actUser?.id,
+        performedByName: _actUser?.name,
+        storeManagerId: _actUser?.parentId ?? _actUser?.id,
+      ).catchError((e) => debugPrint('logActivity failed: $e'));
       _clearFields();
       await _loadData();
       _showSnackBar('تم تسجيل الفاتورة بنجاح', Colors.green);
@@ -582,6 +592,17 @@ class _SalesScreenState extends State<SalesScreen> {
       );
 
       await db.updateInvoiceWithLog(oldInv: inv, newInv: newInv, reason: reasonController.text);
+      final _actUser = context.read<AuthService>().currentUser;
+      db.logActivity(
+        targetId: inv.id!,
+        targetType: 'INVOICE',
+        action: 'UPDATE',
+        summary: 'تعديل فاتورة: المبلغ من ${inv.amount.toStringAsFixed(2)} إلى ${newAmount.toStringAsFixed(2)} ₪ - السبب: ${reasonController.text}',
+        reason: reasonController.text,
+        performedById: _actUser?.id,
+        performedByName: _actUser?.name,
+        storeManagerId: _actUser?.parentId ?? _actUser?.id,
+      ).catchError((e) => debugPrint('logActivity failed: $e'));
       await _loadData();
       _showSnackBar('تم تعديل الفاتورة وتسجيل التغيير', Colors.blue);
     }
@@ -643,6 +664,16 @@ class _SalesScreenState extends State<SalesScreen> {
     if (confirm == true) {
       final db = context.read<DatabaseService>();
       await db.softDeleteInvoice(inv);
+      final _actUser = context.read<AuthService>().currentUser;
+      db.logActivity(
+        targetId: inv.id!,
+        targetType: 'INVOICE',
+        action: 'DELETE',
+        summary: 'حذف فاتورة بمبلغ ${inv.amount.toStringAsFixed(2)} ₪ - الحالة: ${inv.paymentStatus}',
+        performedById: _actUser?.id,
+        performedByName: _actUser?.name,
+        storeManagerId: _actUser?.parentId ?? _actUser?.id,
+      ).catchError((e) => debugPrint('logActivity failed: $e'));
       await _loadData();
       _showSnackBar('تم نقل الفاتورة لسلة المحذوفات', Colors.redAccent);
     }

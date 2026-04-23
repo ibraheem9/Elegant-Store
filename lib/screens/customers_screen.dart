@@ -152,6 +152,16 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
     if (confirm == true) {
       await db.softDeleteUser(customer.id!);
+      final _actUser = context.read<AuthService>().currentUser;
+      db.logActivity(
+        targetId: customer.id!,
+        targetType: 'CUSTOMER',
+        action: 'DELETE',
+        summary: 'حذف الزبون: ${customer.name}',
+        performedById: _actUser?.id,
+        performedByName: _actUser?.name,
+        storeManagerId: _actUser?.parentId ?? _actUser?.id,
+      ).catchError((e) => debugPrint('logActivity failed: $e'));
       _loadCustomers();
     }
   }
@@ -652,6 +662,16 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
 
     if (confirm == true) {
       await db.softDeleteUser(_currentCustomer.id!);
+      final _actUser = context.read<AuthService>().currentUser;
+      db.logActivity(
+        targetId: _currentCustomer.id!,
+        targetType: 'CUSTOMER',
+        action: 'DELETE',
+        summary: 'حذف الزبون: ${_currentCustomer.name}',
+        performedById: _actUser?.id,
+        performedByName: _actUser?.name,
+        storeManagerId: _actUser?.parentId ?? _actUser?.id,
+      ).catchError((e) => debugPrint('logActivity failed: $e'));
       if (mounted) Navigator.of(context).pop();
     }
   }
@@ -799,6 +819,16 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     final db = context.read<DatabaseService>();
     await db.softDeleteInvoice(inv);
     await db.recalculateUserBalance(inv.userId);
+    final _actUser = context.read<AuthService>().currentUser;
+    db.logActivity(
+      targetId: inv.id!,
+      targetType: 'INVOICE',
+      action: 'DELETE',
+      summary: 'حذف فاتورة للزبون ${_currentCustomer.name} بمبلغ ${inv.amount.toStringAsFixed(2)} ₪',
+      performedById: _actUser?.id,
+      performedByName: _actUser?.name,
+      storeManagerId: _actUser?.parentId ?? _actUser?.id,
+    ).catchError((e) => debugPrint('logActivity failed: $e'));
     _loadData();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -894,6 +924,17 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     final db = context.read<DatabaseService>();
     await db.updateInvoiceWithLog(oldInv: inv, newInv: newInv, reason: reason);
     await db.recalculateUserBalance(inv.userId);
+    final _actUser = context.read<AuthService>().currentUser;
+    db.logActivity(
+      targetId: inv.id!,
+      targetType: 'INVOICE',
+      action: 'UPDATE',
+      summary: 'تعديل فاتورة للزبون ${_currentCustomer.name}: المبلغ من ${inv.amount.toStringAsFixed(2)} إلى ${newAmount.toStringAsFixed(2)} ₪ - السبب: $reason',
+      reason: reason,
+      performedById: _actUser?.id,
+      performedByName: _actUser?.name,
+      storeManagerId: _actUser?.parentId ?? _actUser?.id,
+    ).catchError((e) => debugPrint('logActivity failed: $e'));
     _loadData();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

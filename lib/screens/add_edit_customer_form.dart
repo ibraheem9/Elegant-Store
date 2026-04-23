@@ -521,9 +521,29 @@ Future<void> _performSave(
   );
 
   if (customer == null) {
-    await db.insertUser(userData, '123');
+    final newCustId = await db.insertUser(userData, '123');
+    final _actUser = context.read<AuthService>().currentUser;
+    db.logActivity(
+      targetId: newCustId,
+      targetType: 'CUSTOMER',
+      action: 'CREATE',
+      summary: 'إضافة زبون جديد: ${userData.name}',
+      performedById: _actUser?.id,
+      performedByName: _actUser?.name,
+      storeManagerId: _actUser?.parentId ?? _actUser?.id,
+    ).catchError((e) => debugPrint('logActivity failed: $e'));
   } else {
     await db.updateUser(userData, customer);
+    final _actUserUpd = context.read<AuthService>().currentUser;
+    db.logActivity(
+      targetId: customer.id!,
+      targetType: 'CUSTOMER',
+      action: 'UPDATE',
+      summary: 'تعديل بيانات الزبون: ${userData.name}',
+      performedById: _actUserUpd?.id,
+      performedByName: _actUserUpd?.name,
+      storeManagerId: _actUserUpd?.parentId ?? _actUserUpd?.id,
+    ).catchError((e) => debugPrint('logActivity failed: $e'));
   }
 }
 

@@ -64,6 +64,16 @@ class _AccountantsScreenState extends State<AccountantsScreen> {
 
     if (confirm == true) {
       await db.softDeleteUser(accountant.id!);
+      final actUser = context.read<AuthService>().currentUser;
+      db.logActivity(
+        targetId: accountant.id!,
+        targetType: 'ACCOUNTANT',
+        action: 'DELETE',
+        summary: 'حذف المحاسب: ${accountant.name}',
+        performedById: actUser?.id,
+        performedByName: actUser?.name,
+        storeManagerId: actUser?.parentId ?? actUser?.id,
+      ).catchError((e) => debugPrint('logActivity failed: $e'));
       _loadAccountants();
     }
   }
