@@ -673,17 +673,34 @@ class _SalesScreenState extends State<SalesScreen> {
                           Text('من: $oldVal  ←  إلى: $newVal', style: const TextStyle(fontSize: 12)),
                         if (reason != null && reason.isNotEmpty)
                           Text('السبب: $reason', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                        Row(
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 2,
                           children: [
-                            if (editorName != null) ...[  
-                              const Icon(Icons.person_outline, size: 12),
-                              const SizedBox(width: 3),
-                              Text(editorName, style: const TextStyle(fontSize: 11)),
-                              const SizedBox(width: 8),
-                            ],
-                            const Icon(Icons.access_time, size: 12),
-                            const SizedBox(width: 3),
-                            Text(dateStr, style: const TextStyle(fontSize: 11)),
+                            if (editorName != null)
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.person_outline, size: 12),
+                                  const SizedBox(width: 3),
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(maxWidth: 120),
+                                    child: Text(
+                                      editorName,
+                                      style: const TextStyle(fontSize: 11),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.access_time, size: 12),
+                                const SizedBox(width: 3),
+                                Text(dateStr, style: const TextStyle(fontSize: 11)),
+                              ],
+                            ),
                           ],
                         ),
                       ],
