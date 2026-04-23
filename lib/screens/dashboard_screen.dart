@@ -15,7 +15,6 @@ import 'settings_screen.dart';
 import 'payment_methods_screen.dart';
 import 'purchases_methods_screen.dart';
 import 'recycle_bin_screen.dart';
-import 'activity_log_screen.dart';
 import 'notifications_screen.dart';
 import 'accountants_screen.dart';
 import 'sync_details_screen.dart';
@@ -47,7 +46,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 10: return const PurchasesMethodsScreen();
       case 11: return const RecycleBinScreen();
       case 12: return const SettingsScreen();
-      case 13: return const ActivityLogScreen();
       default: return const DashboardHomeScreen();
     }
   }
@@ -67,7 +65,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 10: return 'طرق دفع المشتريات';
       case 11: return 'سلة المحذوفات';
       case 12: return 'الإعدادات والسمة';
-      case 13: return 'سجل النشاط';
       default: return 'Elegant Store';
     }
   }
@@ -139,8 +136,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _buildSidebarItem(10, 'طرق دفع المشتريات', Icons.account_balance_rounded),
                 _buildSidebarItem(11, 'سلة المحذوفات', Icons.delete_sweep_rounded),
                 _buildSidebarItem(12, 'الإعدادات والسمة', Icons.settings_rounded),
-                _buildSidebarItem(13, 'سجل النشاط', Icons.history_rounded),
-                _buildSidebarItem(13, 'سجل النشاط', Icons.history_rounded),
               ],
             ),
           ),
@@ -216,7 +211,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         const NavigationRailDestination(icon: Icon(Icons.payment_rounded, color: Colors.white60), selectedIcon: Icon(Icons.payment_rounded, color: Colors.blue), label: Text('طرق الدفع')),
         const NavigationRailDestination(icon: Icon(Icons.delete_sweep_rounded, color: Colors.white60), selectedIcon: Icon(Icons.delete_sweep_rounded, color: Colors.blue), label: Text('المحذوفات')),
         const NavigationRailDestination(icon: Icon(Icons.settings_rounded, color: Colors.white60), selectedIcon: Icon(Icons.settings_rounded, color: Colors.blue), label: Text('الإعدادات')),
-        const NavigationRailDestination(icon: Icon(Icons.history_rounded, color: Colors.white60), selectedIcon: Icon(Icons.history_rounded, color: Colors.blue), label: Text('السجل')),
       ],
     );
   }

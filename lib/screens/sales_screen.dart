@@ -626,14 +626,69 @@ class _SalesScreenState extends State<SalesScreen> {
                 separatorBuilder: (_, __) => const Divider(),
                 itemBuilder: (context, index) {
                   final item = history[index];
+                  // Resolve field label
+                  final rawField = item['field_name'] as String?;
+                  final fieldLabel = rawField == 'amount'
+                      ? 'المبلغ'
+                      : rawField == 'payment_status'
+                          ? 'حالة الدفع'
+                          : rawField == 'notes'
+                              ? 'الملاحظات'
+                              : rawField == 'payment_method_id'
+                                  ? 'طريقة الدفع'
+                                  : rawField ?? 'بيانات الفاتورة';
+                  // Resolve summary (action label)
+                  final action = item['action'] as String? ?? 'UPDATE';
+                  final summary = item['summary'] as String?;
+                  final editorName = item['edited_by_name'] as String?;
+                  final oldVal = item['old_value'] as String?;
+                  final newVal = item['new_value'] as String?;
+                  final reason = item['edit_reason'] as String?;
+                  // Format date
+                  String dateStr = item['created_at'] as String? ?? '';
+                  try {
+                    final dt = DateTime.parse(dateStr).toLocal();
+                    dateStr = '${dt.year}-${dt.month.toString().padLeft(2,'0')}-${dt.day.toString().padLeft(2,'0')}  ${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
+                  } catch (_) {}
+                  // Action badge color
+                  final badgeColor = action == 'CREATE'
+                      ? Colors.green
+                      : action == 'DELETE'
+                          ? Colors.red
+                          : Colors.orange;
                   return ListTile(
-                    title: Text('تغيير ${item['field_name'] == 'amount' ? 'المبلغ' : item['field_name']}'),
+                    leading: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      decoration: BoxDecoration(color: badgeColor.withOpacity(0.15), borderRadius: BorderRadius.circular(6)),
+                      child: Text(
+                        action == 'CREATE' ? 'إضافة' : action == 'DELETE' ? 'حذف' : 'تعديل',
+                        style: TextStyle(fontSize: 11, color: badgeColor, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    title: Text(
+                      summary ?? 'تغيير $fieldLabel',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('من: ${item['old_value']} إلى: ${item['new_value']}'),
-                        Text('السبب: ${item['edit_reason']}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                        Text('التاريخ: ${item['created_at']}', style: const TextStyle(fontSize: 10)),
+                        if (oldVal != null && newVal != null)
+                          Text('من: $oldVal  ←  إلى: $newVal', style: const TextStyle(fontSize: 12)),
+                        if (reason != null && reason.isNotEmpty)
+                          Text('السبب: $reason', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        Row(
+                          children: [
+                            if (editorName != null) ...[  
+                              const Icon(Icons.person_outline, size: 12),
+                              const SizedBox(width: 3),
+                              Text(editorName, style: const TextStyle(fontSize: 11)),
+                              const SizedBox(width: 8),
+                            ],
+                            const Icon(Icons.access_time, size: 12),
+                            const SizedBox(width: 3),
+                            Text(dateStr, style: const TextStyle(fontSize: 11)),
+                          ],
+                        ),
                       ],
                     ),
                   );
@@ -1317,11 +1372,32 @@ class _SalesScreenState extends State<SalesScreen> {
           ),
           const Divider(height: 24),
           Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              IconButton(icon: Icon(Icons.history, color: isDeposit ? Colors.green[700] : isWithdrawal ? Colors.orange[700] : Colors.grey, size: 20), onPressed: () => _showEditHistory(inv.id!)),
-              IconButton(icon: Icon(Icons.edit, color: isDeposit ? Colors.green : isWithdrawal ? Colors.orange : Colors.orange, size: 20), onPressed: () => _showEditInvoiceDialog(inv)),
-              IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), onPressed: () => _deleteInvoice(inv)),
+              // Last editor label — shown on the LEFT
+              if (inv.lastEditedBy != null)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.edit_note_rounded, size: 13, color: Colors.blueGrey[400]),
+                    const SizedBox(width: 3),
+                    Text(
+                      inv.lastEditedBy!,
+                      style: TextStyle(fontSize: 11, color: Colors.blueGrey[500], fontStyle: FontStyle.italic),
+                    ),
+                  ],
+                )
+              else
+                const SizedBox.shrink(),
+              // Action buttons — always on the RIGHT
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(icon: Icon(Icons.history, color: isDeposit ? Colors.green[700] : isWithdrawal ? Colors.orange[700] : Colors.grey, size: 20), onPressed: () => _showEditHistory(inv.id!)),
+                  IconButton(icon: Icon(Icons.edit, color: isDeposit ? Colors.green : isWithdrawal ? Colors.orange : Colors.orange, size: 20), onPressed: () => _showEditInvoiceDialog(inv)),
+                  IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), onPressed: () => _deleteInvoice(inv)),
+                ],
+              ),
             ],
           ),
         ],
@@ -1378,6 +1454,12 @@ class _SalesScreenState extends State<SalesScreen> {
               DataCell(Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (inv.lastEditedBy != null) ...[  
+                    Icon(Icons.edit_note_rounded, size: 12, color: Colors.blueGrey[400]),
+                    const SizedBox(width: 2),
+                    Text(inv.lastEditedBy!, style: TextStyle(fontSize: 10, color: Colors.blueGrey[500], fontStyle: FontStyle.italic)),
+                    const SizedBox(width: 4),
+                  ],
                   IconButton(icon: Icon(Icons.history, color: isDeposit ? Colors.green[700] : isWithdrawal ? Colors.orange[700] : Colors.grey, size: 18), onPressed: () => _showEditHistory(inv.id!)),
                   IconButton(icon: Icon(Icons.edit, color: isDeposit ? Colors.green : Colors.orange, size: 18), onPressed: () => _showEditInvoiceDialog(inv)),
                   IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18), onPressed: () => _deleteInvoice(inv)),
