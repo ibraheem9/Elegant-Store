@@ -904,56 +904,48 @@ class _SalesScreenState extends State<SalesScreen> {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: isDebt ? Colors.red.withOpacity(0.3) : Colors.green.withOpacity(0.3)),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          // رصيد الزبون الحالي
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('رصيد الزبون الحالي', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+              Text(
+                currentBalance > 0
+                    ? '+${currentBalance.toStringAsFixed(2)} ₪ (دين عليه)'
+                    : currentBalance < 0
+                        ? '-${currentBalance.abs().toStringAsFixed(2)} ₪ (رصيد له)'
+                        : '0.00 ₪',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: currentBalance > 0 ? Colors.red : Colors.green,
+                ),
+              ),
+            ],
+          ),
+          // بعد الفاتورة
+          if (enteredAmount > 0) ...[
+            const Divider(height: 14, thickness: 0.6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('رصيد الزبون الحالي', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                Text('بعد الفاتورة', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
                 Text(
-                  currentBalance > 0
-                      ? '+${currentBalance.toStringAsFixed(2)} ₪ (دين عليه)'
-                      : currentBalance < 0
-                          ? '-${currentBalance.abs().toStringAsFixed(2)} ₪ (رصيد له)'
+                  projectedBalance > 0
+                      ? '+${projectedBalance.toStringAsFixed(2)} ₪ (دين عليه)'
+                      : projectedBalance < 0
+                          ? '-${projectedBalance.abs().toStringAsFixed(2)} ₪ (رصيد له)'
                           : '0.00 ₪',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
-                    color: currentBalance > 0 ? Colors.red : Colors.green,
+                    color: isDebt ? Colors.red : Colors.green,
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
               ],
-            ),
-          ),
-          if (enteredAmount > 0) ...[
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8),
-              child: Icon(Icons.arrow_forward_ios, size: 12, color: Colors.grey),
-            ),
-            Flexible(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text('بعد الفاتورة', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-                  Text(
-                    projectedBalance > 0
-                        ? '+${projectedBalance.toStringAsFixed(2)} ₪ (دين عليه)'
-                        : projectedBalance < 0
-                            ? '-${projectedBalance.abs().toStringAsFixed(2)} ₪ (رصيد له)'
-                            : '0.00 ₪',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                      color: isDebt ? Colors.red : Colors.green,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.end,
-                  ),
-                ],
-              ),
             ),
           ],
         ],
