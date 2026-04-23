@@ -1368,32 +1368,43 @@ class _SalesScreenState extends State<SalesScreen> {
             ],
           ),
           const Divider(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // Last editor label — shown on the LEFT
-              if (inv.lastEditedBy != null)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.edit_note_rounded, size: 13, color: Colors.blueGrey[400]),
-                    const SizedBox(width: 3),
-                    Text(
-                      inv.lastEditedBy!,
-                      style: TextStyle(fontSize: 11, color: Colors.blueGrey[500], fontStyle: FontStyle.italic),
-                    ),
-                  ],
-                )
-              else
-                const SizedBox.shrink(),
-              // Action buttons — always on the RIGHT
-              Row(
+          // Last editor — own line to avoid overflow
+          if (inv.lastEditedBy != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  IconButton(icon: Icon(Icons.history, color: isDeposit ? Colors.green[700] : isWithdrawal ? Colors.orange[700] : Colors.grey, size: 20), onPressed: () => _showEditHistory(inv.id!)),
-                  IconButton(icon: Icon(Icons.edit, color: isDeposit ? Colors.green : isWithdrawal ? Colors.orange : Colors.orange, size: 20), onPressed: () => _showEditInvoiceDialog(inv)),
-                  IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), onPressed: () => _deleteInvoice(inv)),
+                  Icon(Icons.edit_note_rounded, size: 13, color: Colors.blueGrey[400]),
+                  const SizedBox(width: 3),
+                  Flexible(
+                    child: Text(
+                      inv.lastEditedBy!,
+                      style: TextStyle(fontSize: 11, color: Colors.blueGrey[500], fontStyle: FontStyle.italic),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
+              ),
+            ),
+          // Action buttons row — aligned to end
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              IconButton(
+                icon: Icon(Icons.history, color: isDeposit ? Colors.green[700] : isWithdrawal ? Colors.orange[700] : Colors.grey, size: 20),
+                tooltip: 'سجل التعديلات',
+                onPressed: () => _showEditHistory(inv.id!),
+              ),
+              IconButton(
+                icon: Icon(Icons.edit, color: isDeposit ? Colors.green : isWithdrawal ? Colors.orange : Colors.orange, size: 20),
+                tooltip: 'تعديل',
+                onPressed: () => _showEditInvoiceDialog(inv),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                tooltip: 'حذف',
+                onPressed: () => _deleteInvoice(inv),
               ),
             ],
           ),
