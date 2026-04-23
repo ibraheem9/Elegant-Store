@@ -591,18 +591,15 @@ class _SalesScreenState extends State<SalesScreen> {
         isSynced: 0,
       );
 
-      await db.updateInvoiceWithLog(oldInv: inv, newInv: newInv, reason: reasonController.text);
       final _actUser = context.read<AuthService>().currentUser;
-      db.logActivity(
-        targetId: inv.id!,
-        targetType: 'INVOICE',
-        action: 'UPDATE',
-        summary: 'تعديل فاتورة: المبلغ من ${inv.amount.toStringAsFixed(2)} إلى ${newAmount.toStringAsFixed(2)} ₪ - السبب: ${reasonController.text}',
+      await db.updateInvoiceWithLog(
+        oldInv: inv,
+        newInv: newInv,
         reason: reasonController.text,
         performedById: _actUser?.id,
         performedByName: _actUser?.name,
         storeManagerId: _actUser?.parentId ?? _actUser?.id,
-      ).catchError((e) => debugPrint('logActivity failed: $e'));
+      );
       await _loadData();
       _showSnackBar('تم تعديل الفاتورة وتسجيل التغيير', Colors.blue);
     }

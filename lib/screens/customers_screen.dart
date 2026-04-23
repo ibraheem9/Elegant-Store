@@ -1037,30 +1037,72 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       backgroundColor: isDark ? const Color(0xFF071028) : const Color(0xFFF8FAFC),
       appBar: AppBar(
         // Tapping the customer name shows a dropdown: Edit / Delete
-        title: GestureDetector(
-          onTap: isManager ? () => _showNameDropdown(context, isDark) : null,
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Flexible(
-              child: Text(
-                _currentCustomer.name,
-                style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : Colors.black,
-                    fontSize: isMobile ? 16 : 20),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (_currentCustomer.creditLimit == -1) ...[
-              const SizedBox(width: 6),
-              const Icon(Icons.verified, color: Colors.blue, size: 20),
-            ],
-            if (isManager) ...[
-              const SizedBox(width: 4),
-              Icon(Icons.arrow_drop_down_rounded,
-                  color: isDark ? Colors.white54 : Colors.black38, size: 20),
-            ],
-          ]),
-        ),
+        title: isManager
+            ? PopupMenuButton<String>(
+                offset: const Offset(0, 44),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                onSelected: (value) async {
+                  if (value == 'edit') {
+                    final saved = await showAddEditCustomerForm(context, customer: _currentCustomer);
+                    if (saved) _loadData();
+                  } else if (value == 'delete') {
+                    await _deleteCustomer();
+                  }
+                },
+                itemBuilder: (_) => [
+                  PopupMenuItem(
+                    value: 'edit',
+                    child: Row(children: const [
+                      Icon(Icons.edit_outlined, color: Colors.blue, size: 18),
+                      SizedBox(width: 10),
+                      Text('تعديل بيانات الزبون'),
+                    ]),
+                  ),
+                  PopupMenuItem(
+                    value: 'delete',
+                    child: Row(children: const [
+                      Icon(Icons.delete_outline, color: Colors.red, size: 18),
+                      SizedBox(width: 10),
+                      Text('حذف الزبون', style: TextStyle(color: Colors.red)),
+                    ]),
+                  ),
+                ],
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Flexible(
+                    child: Text(
+                      _currentCustomer.name,
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : Colors.black,
+                          fontSize: isMobile ? 16 : 20),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (_currentCustomer.creditLimit == -1) ...[
+                    const SizedBox(width: 6),
+                    const Icon(Icons.verified, color: Colors.blue, size: 20),
+                  ],
+                  const SizedBox(width: 4),
+                  Icon(Icons.arrow_drop_down_rounded,
+                      color: isDark ? Colors.white54 : Colors.black38, size: 20),
+                ]),
+              )
+            : Row(mainAxisSize: MainAxisSize.min, children: [
+                Flexible(
+                  child: Text(
+                    _currentCustomer.name,
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : Colors.black,
+                        fontSize: isMobile ? 16 : 20),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (_currentCustomer.creditLimit == -1) ...[
+                  const SizedBox(width: 6),
+                  const Icon(Icons.verified, color: Colors.blue, size: 20),
+                ],
+              ]),
         actions: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),

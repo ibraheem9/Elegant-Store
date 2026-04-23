@@ -1017,7 +1017,14 @@ class DatabaseService {
     });
   }
 
-  Future<void> updateInvoiceWithLog({required Invoice oldInv, required Invoice newInv, required String reason}) async {
+  Future<void> updateInvoiceWithLog({
+    required Invoice oldInv,
+    required Invoice newInv,
+    required String reason,
+    int? performedById,
+    String? performedByName,
+    int? storeManagerId,
+  }) async {
     final db = await database;
     await db.transaction((txn) async {
       final now = DateTime.now().toIso8601String();
@@ -1025,23 +1032,65 @@ class DatabaseService {
         ...newInv.toMap(),
         'version': newInv.version + 1,
         'updated_at': now,
-        'is_synced': 0
+        'is_synced': 0,
       }, where: 'id = ?', whereArgs: [newInv.id]);
 
+      // Detect changed fields and log only those
+      final changes = <Map<String, String?>>[];
       if (oldInv.amount != newInv.amount) {
+        changes.add({'field': 'amount', 'label': 'المبلغ', 'old': oldInv.amount.toStringAsFixed(2), 'new': newInv.amount.toStringAsFixed(2)});
+      }
+      if ((oldInv.notes ?? '') != (newInv.notes ?? '')) {
+        changes.add({'field': 'notes', 'label': 'الملاحظات', 'old': oldInv.notes ?? '', 'new': newInv.notes ?? ''});
+      }
+      if (oldInv.paymentMethodId != newInv.paymentMethodId) {
+        changes.add({'field': 'payment_method_id', 'label': 'طريقة الدفع', 'old': oldInv.paymentMethodId?.toString() ?? '', 'new': newInv.paymentMethodId?.toString() ?? ''});
+      }
+      if (oldInv.paymentStatus != newInv.paymentStatus) {
+        changes.add({'field': 'payment_status', 'label': 'حالة الدفع', 'old': oldInv.paymentStatus, 'new': newInv.paymentStatus});
+      }
+
+      if (changes.isEmpty) {
+        // Nothing changed — log a single summary row
         await txn.insert('edit_history', {
           'uuid': _uuid.v4(),
+          'store_manager_id': storeManagerId,
+          'edited_by_id': performedById,
+          'edited_by_name': performedByName,
           'target_id': newInv.id,
           'target_type': 'INVOICE',
-          'field_name': 'amount',
-          'old_value': oldInv.amount.toString(),
-          'new_value': newInv.amount.toString(),
+          'action': 'UPDATE',
+          'field_name': null,
+          'old_value': null,
+          'new_value': null,
           'edit_reason': reason,
+          'summary': 'تعديل الفاتورة (بدون تغيير في القيم)',
           'version': 1,
           'created_at': now,
           'updated_at': now,
-          'is_synced': 0
+          'is_synced': 0,
         });
+      } else {
+        for (final ch in changes) {
+          await txn.insert('edit_history', {
+            'uuid': _uuid.v4(),
+            'store_manager_id': storeManagerId,
+            'edited_by_id': performedById,
+            'edited_by_name': performedByName,
+            'target_id': newInv.id,
+            'target_type': 'INVOICE',
+            'action': 'UPDATE',
+            'field_name': ch['field'],
+            'old_value': ch['old'],
+            'new_value': ch['new'],
+            'edit_reason': reason,
+            'summary': 'تعديل ${ch['label']}: من ${ch['old']} إلى ${ch['new']}',
+            'version': 1,
+            'created_at': now,
+            'updated_at': now,
+            'is_synced': 0,
+          });
+        }
       }
     });
   }
