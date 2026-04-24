@@ -466,75 +466,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
-}
-
-class DashboardHomeScreen extends StatefulWidget {
-  const DashboardHomeScreen({Key? key}) : super(key: key);
-
-  @override
-  State<DashboardHomeScreen> createState() => _DashboardHomeScreenState();
-}
-
-class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
-  String _syncStatus = "جاهز للمزامنة";
-  SyncService? _syncService;
-
-  @override
-  void initState() {
-    super.initState();
-    
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _syncService = context.read<SyncService>();
-        _syncService!.addListener(_onSyncStatusChanged);
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _syncService?.removeListener(_onSyncStatusChanged);
-    super.dispose();
-  }
-
-  void _onSyncStatusChanged() {
-    if (!mounted) return;
-  }
-
-  Future<void> _handleSync() async {
-    setState(() {
-      _syncStatus = "جاري الاتصال بالسيرفر...";
-    });
-
-    try {
-      final syncService = context.read<SyncService>();
-      await syncService.performFullSync();
-      if (mounted) {
-        setState(() => _syncStatus = "تمت المزامنة بنجاح");
-      }
-    } catch (e) {
-      if (mounted) {
-        String msg = e.toString();
-        if (msg.contains('500')) msg = "خطأ في السيرفر (500)";
-        setState(() => _syncStatus = "فشلت المزامنة: $msg");
-      }
-    } finally {
-      if (mounted) {
-        Future.delayed(const Duration(seconds: 3), () {
-          if (mounted) setState(() {
-            _syncStatus = "جاهز للمزامنة";
-          });
-        });
-      }
-    }
-  }
-
-  void _openSyncDetails() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const SyncDetailsScreen()),
-    );
-  }
 
   /// Shows a confirmation dialog, runs a pre-logout sync with a progress
   /// indicator, then calls [AuthService.logout] to sign the user out.
@@ -609,12 +540,82 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
       ),
     );
 
-    // Run sync then logout (sync is non-blocking if offline)
+    // Run sync then logout (non-blocking if offline)
     final auth = context.read<AuthService>();
     await auth.logout();
 
     // Close the progress dialog if still open
     if (mounted) Navigator.of(context, rootNavigator: true).pop();
+  }
+}
+
+class DashboardHomeScreen extends StatefulWidget {
+  const DashboardHomeScreen({Key? key}) : super(key: key);
+
+  @override
+  State<DashboardHomeScreen> createState() => _DashboardHomeScreenState();
+}
+
+class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
+  String _syncStatus = "جاهز للمزامنة";
+  SyncService? _syncService;
+
+  @override
+  void initState() {
+    super.initState();
+    
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _syncService = context.read<SyncService>();
+        _syncService!.addListener(_onSyncStatusChanged);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _syncService?.removeListener(_onSyncStatusChanged);
+    super.dispose();
+  }
+
+  void _onSyncStatusChanged() {
+    if (!mounted) return;
+  }
+
+  Future<void> _handleSync() async {
+    setState(() {
+      _syncStatus = "جاري الاتصال بالسيرفر...";
+    });
+
+    try {
+      final syncService = context.read<SyncService>();
+      await syncService.performFullSync();
+      if (mounted) {
+        setState(() => _syncStatus = "تمت المزامنة بنجاح");
+      }
+    } catch (e) {
+      if (mounted) {
+        String msg = e.toString();
+        if (msg.contains('500')) msg = "خطأ في السيرفر (500)";
+        setState(() => _syncStatus = "فشلت المزامنة: $msg");
+      }
+    } finally {
+      if (mounted) {
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) setState(() {
+            _syncStatus = "جاهز للمزامنة";
+          });
+        });
+      }
+    }
+  }
+
+  void _openSyncDetails() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SyncDetailsScreen()),
+    );
+  }
   }
 
   @override
