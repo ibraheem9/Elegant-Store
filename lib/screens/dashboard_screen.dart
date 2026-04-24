@@ -344,7 +344,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.logout_rounded, color: Colors.white54, size: 18),
-            onPressed: () => auth.logout(),
+            tooltip: 'تسجيل الخروج',
+            onPressed: _handleLogout,
           ),
         ],
       ),
@@ -533,6 +534,87 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
       context,
       MaterialPageRoute(builder: (_) => const SyncDetailsScreen()),
     );
+  }
+
+  /// Shows a confirmation dialog, runs a pre-logout sync with a progress
+  /// indicator, then calls [AuthService.logout] to sign the user out.
+  Future<void> _handleLogout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Text('تسجيل الخروج', style: TextStyle(fontWeight: FontWeight.bold)),
+            SizedBox(width: 8),
+            Icon(Icons.logout_rounded, color: Colors.red),
+          ],
+        ),
+        content: const Text(
+          'هل تريد تسجيل الخروج؟\nسيتم مزامنة بياناتك مع السيرفر قبل الخروج.',
+          textAlign: TextAlign.right,
+        ),
+        actionsAlignment: MainAxisAlignment.start,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.logout_rounded, size: 16),
+            label: const Text('تسجيل الخروج'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    // Show a non-dismissible sync progress dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              const CircularProgressIndicator(),
+              const SizedBox(height: 20),
+              const Text(
+                'جاري مزامنة البيانات...',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'يُرجى الانتظار حتى تكتمل المزامنة',
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    // Run sync then logout (sync is non-blocking if offline)
+    final auth = context.read<AuthService>();
+    await auth.logout();
+
+    // Close the progress dialog if still open
+    if (mounted) Navigator.of(context, rootNavigator: true).pop();
   }
 
   @override
