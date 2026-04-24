@@ -663,6 +663,9 @@ class DatabaseService {
     return r.map((m) => Invoice.fromMap(m)).toList();
   }
 
+  /// Soft-deletes an invoice and immediately recalculates the owner's balance.
+  /// This ensures that deleting a DEPOSIT invoice removes its credit effect
+  /// and deleting a SALE/WITHDRAWAL invoice removes its debt effect.
   Future<void> softDeleteInvoice(Invoice inv) async {
     final db = await database;
     final now = DateTime.now().toIso8601String();
@@ -672,8 +675,14 @@ class DatabaseService {
       'version': inv.version + 1,
       'updated_at': now
     }, where: 'id = ?', whereArgs: [inv.id]);
+    // Always recalculate balance after delete so the customer's balance
+    // reflects the removal of this invoice's financial effect.
+    await recalculateUserBalance(inv.userId);
   }
 
+  /// Restores a soft-deleted invoice and immediately recalculates the owner's balance.
+  /// This ensures that restoring a DEPOSIT invoice re-applies its credit effect
+  /// and restoring a SALE/WITHDRAWAL invoice re-applies its debt effect.
   Future<void> restoreInvoice(Invoice inv) async {
     final db = await database;
     final now = DateTime.now().toIso8601String();
@@ -683,6 +692,9 @@ class DatabaseService {
       'version': inv.version + 1,
       'updated_at': now
     }, where: 'id = ?', whereArgs: [inv.id]);
+    // Always recalculate balance after restore so the customer's balance
+    // reflects the re-inclusion of this invoice's financial effect.
+    await recalculateUserBalance(inv.userId);
   }
 
   /// SAFE-HOUSE: Marks the invoice as unsynced (is_synced = 0) so the next

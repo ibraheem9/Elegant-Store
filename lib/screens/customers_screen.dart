@@ -817,8 +817,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     );
     if (confirmed != true) return;
     final db = context.read<DatabaseService>();
-    await db.softDeleteInvoice(inv);
-    await db.recalculateUserBalance(inv.userId);
+    await db.softDeleteInvoice(inv); // recalculateUserBalance is called inside
     final _actUser = context.read<AuthService>().currentUser;
     db.logActivity(
       targetId: inv.id!,
