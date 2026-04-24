@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/database_service.dart';
 import '../services/auth_service.dart';
 import '../services/export_service.dart';
+import '../services/import_service.dart';
 import '../services/theme_service.dart';
 import '../services/notification_service.dart';
 import '../models/models.dart';
@@ -25,6 +26,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _biometricEnabled = false;
   bool _canCheckBiometrics = false;
   bool _isExporting = false;
+  bool _isImporting = false;
   TimeOfDay _notificationTime = const TimeOfDay(hour: 10, minute: 0);
 
   @override
@@ -117,7 +119,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // EXPORT
+  // EXPORT / IMPORT
   // ─────────────────────────────────────────────────────────────────────────
 
   Future<void> _exportData() async {
@@ -138,6 +140,122 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } finally {
       if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  Future<void> _importData() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Text('استيراد البيانات', style: TextStyle(fontWeight: FontWeight.bold)),
+            SizedBox(width: 8),
+            Icon(Icons.upload_file_rounded, color: Colors.orange),
+          ],
+        ),
+        content: const Text(
+          'سيتم دمج البيانات الواردة مع قاعدة البيانات الحالية.\n\nالسجلات الموجودة ستُحدَّث فقط إذا كان الملف أحدث منها.\n\nهل تريد المتابعة؟',
+          textAlign: TextAlign.right,
+        ),
+        actionsAlignment: MainAxisAlignment.start,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.upload_file_rounded, size: 16),
+            label: const Text('استيراد'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isImporting = true);
+    try {
+      final db = context.read<DatabaseService>();
+      final importService = ImportService(db);
+      final result = await importService.pickAndImport();
+      if (!mounted) return;
+      if (!result.success) {
+        _showSnackBar(result.message, Colors.red);
+        return;
+      }
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Text(
+                result.errors.isEmpty ? 'تم الاستيراد بنجاح ✓' : 'اكتمل الاستيراد مع تحذيرات',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: result.errors.isEmpty ? Colors.green : Colors.orange,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                result.errors.isEmpty ? Icons.check_circle_rounded : Icons.warning_rounded,
+                color: result.errors.isEmpty ? Colors.green : Colors.orange,
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(result.message, textAlign: TextAlign.right),
+                const SizedBox(height: 12),
+                const Divider(),
+                const Text('السجلات المُعالَجة:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                ...result.upsertedCounts.entries.map((e) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('${e.value}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0B74FF))),
+                      Text(e.key),
+                    ],
+                  ),
+                )),
+                if (result.errors.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Divider(),
+                  const Text('التحذيرات:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
+                  const SizedBox(height: 6),
+                  ...result.errors.take(5).map((e) => Text('• $e', style: const TextStyle(fontSize: 12, color: Colors.red))),
+                  if (result.errors.length > 5)
+                    Text('... و${result.errors.length - 5} تحذيرات أخرى', style: const TextStyle(fontSize: 12)),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إغلاق'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted) _showSnackBar('فشل الاستيراد: $e', Colors.red);
+    } finally {
+      if (mounted) setState(() => _isImporting = false);
     }
   }
 
@@ -290,8 +408,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             const SizedBox(height: 32),
 
-            // ── Data Export ───────────────────────────────────────────────
-            _buildSection('تصدير البيانات', isDark, [
+            // ── Data Export / Import ──────────────────────────────────
+            _buildSection('النسخ الاحتياطي والاستعادة', isDark, [
               ListTile(
                 leading: _isExporting
                     ? const SizedBox(
@@ -309,6 +427,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   'تصدير جميع البيانات (مستخدمون، فواتير، معاملات، مشتريات، إحصائيات) كملف JSON مترابط يمكن استخدامه لاستعادة أي قاعدة بيانات.',
                 ),
                 onTap: _isExporting ? null : _exportData,
+              ),
+              const Divider(height: 1, indent: 16, endIndent: 16),
+              ListTile(
+                leading: _isImporting
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange),
+                      )
+                    : const Icon(Icons.upload_file_rounded,
+                        color: Colors.orange, size: 28),
+                title: const Text(
+                  'استيراد من ملف JSON',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: const Text(
+                  'استعادة أو دمج البيانات من ملف نسخة احتياطية. السجلات الأحدث تُحدِّث القديمة (last-write-wins).',
+                ),
+                onTap: _isImporting ? null : _importData,
               ),
             ]),
 
