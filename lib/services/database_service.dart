@@ -710,7 +710,40 @@ class DatabaseService {
 
   Future<void> permanentDeleteInvoice(int id) async {
     final db = await database;
+    // Fetch userId before deleting so we can recalculate balance afterwards
+    final rows = await db.query('invoices', columns: ['user_id'], where: 'id = ?', whereArgs: [id], limit: 1);
+    final userId = rows.isNotEmpty ? rows.first['user_id'] as int? : null;
     await db.delete('invoices', where: 'id = ?', whereArgs: [id]);
+    if (userId != null) await recalculateUserBalance(userId);
+  }
+
+  /// Soft-deletes a customer together with all their invoices and transactions.
+  /// Used when the user wants to delete a customer that still has financial records.
+  Future<void> softDeleteCustomerWithInvoices(int customerId) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    await db.transaction((txn) async {
+      // Soft-delete all active invoices for this customer
+      await txn.rawUpdate(
+        'UPDATE invoices SET deleted_at = ?, is_synced = 0, version = version + 1, updated_at = ? WHERE user_id = ? AND deleted_at IS NULL',
+        [now, now, customerId],
+      );
+      // Soft-delete all active transactions for this customer
+      await txn.rawUpdate(
+        'UPDATE transactions SET deleted_at = ?, is_synced = 0, version = version + 1, updated_at = ? WHERE buyer_id = ? AND deleted_at IS NULL',
+        [now, now, customerId],
+      );
+      // Soft-delete the customer (balance becomes 0 since all invoices are deleted)
+      final existing = await txn.query('users', columns: ['version'], where: 'id = ?', whereArgs: [customerId], limit: 1);
+      final currentVersion = existing.isNotEmpty ? (existing.first['version'] as int? ?? 0) : 0;
+      await txn.update('users', {
+        'deleted_at': now,
+        'is_synced': 0,
+        'version': currentVersion + 1,
+        'updated_at': now,
+        'balance': 0.0,
+      }, where: 'id = ?', whereArgs: [customerId]);
+    });
   }
 
   Future<List<Invoice>> getCustomerInvoices(int id, {bool unpaidOnly = false}) async {

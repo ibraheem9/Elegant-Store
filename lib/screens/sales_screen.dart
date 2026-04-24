@@ -600,6 +600,8 @@ class _SalesScreenState extends State<SalesScreen> {
         performedByName: _actUser?.name,
         storeManagerId: _actUser?.parentId ?? _actUser?.id,
       );
+      // Recalculate balance in case amount or payment_status changed
+      await db.recalculateUserBalance(inv.userId);
       await _loadData();
       _showSnackBar('تم تعديل الفاتورة وتسجيل التغيير', Colors.blue);
     }

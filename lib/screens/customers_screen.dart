@@ -113,24 +113,66 @@ class _CustomersScreenState extends State<CustomersScreen> {
     if (!mounted) return;
 
     if (linkedCount > 0) {
-      showDialog(
+      // Customer has linked records — offer two options: delete alone (blocked) or delete with all invoices
+      final choice = await showDialog<String>(
         context: context,
         builder: (_) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: const Row(children: [
-            Icon(Icons.block_rounded, color: Colors.red, size: 24),
+            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
             SizedBox(width: 10),
-            Text('لا يمكن الحذف', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            Text('حذف الزبون', style: TextStyle(fontWeight: FontWeight.bold)),
           ]),
           content: Text(
-            'الزبون "${customer.name}" مرتبط بـ $linkedCount سجل مالي.\n'
-            'لا يمكن حذفه للحفاظ على سلامة الحسابات.',
+            'الزبون "${customer.name}" مرتبط بـ $linkedCount سجل مالي.\n\n'
+            'اختر طريقة الحذف:',
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً')),
+            TextButton(onPressed: () => Navigator.pop(context, null), child: const Text('إلغاء')),
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'with_invoices'),
+              child: const Text('حذف مع كافة الفواتير', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            ),
           ],
         ),
       );
+      if (choice == 'with_invoices') {
+        final confirm2 = await showDialog<bool>(
+          context: context,
+          builder: (_) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Row(children: [
+              Icon(Icons.delete_forever, color: Colors.red, size: 24),
+              SizedBox(width: 10),
+              Text('تأكيد نهائي', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            ]),
+            content: Text(
+              'سيتم حذف الزبون "${customer.name}" وجميع فواتيره ($linkedCount سجل).\nهذا الإجراء لا يمكن التراجع عنه. هل أنت متأكد؟',
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('نعم، احذف كل شيء', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        );
+        if (confirm2 == true) {
+          await db.softDeleteCustomerWithInvoices(customer.id!);
+          final _actUser = context.read<AuthService>().currentUser;
+          db.logActivity(
+            targetId: customer.id!,
+            targetType: 'CUSTOMER',
+            action: 'DELETE',
+            summary: 'حذف الزبون مع جميع فواتيره: ${customer.name}',
+            performedById: _actUser?.id,
+            performedByName: _actUser?.name,
+            storeManagerId: _actUser?.parentId ?? _actUser?.id,
+          ).catchError((e) => debugPrint('logActivity failed: $e'));
+          _loadCustomers();
+        }
+      }
       return;
     }
 
@@ -334,15 +376,23 @@ class _CustomersScreenState extends State<CustomersScreen> {
   Widget _buildCustomerCard(User customer, bool isDark) {
     final isVerified = customer.creditLimit == -1;
     final isManager = context.read<AuthService>().isManager();
+    final isZeroBalance = customer.balance == 0.0;
 
     return GestureDetector(
       onTap: () => _navigateToDetails(customer),
       child: Container(
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF0F172A) : Colors.white,
+          // Zero-balance customers get a subtle green tint to indicate settled debt
+          color: isZeroBalance
+              ? (isDark ? const Color(0xFF0A2E1A) : const Color(0xFFF0FDF4))
+              : (isDark ? const Color(0xFF0F172A) : Colors.white),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+            color: isZeroBalance
+                ? (isDark ? const Color(0xFF166534) : const Color(0xFF86EFAC))
+                : (isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+            width: isZeroBalance ? 1.5 : 1.0,
+          ),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         child: Row(
@@ -366,6 +416,25 @@ class _CustomersScreenState extends State<CustomersScreen> {
                       if (isVerified) ...[
                         const SizedBox(width: 4),
                         const Icon(Icons.verified, color: Colors.blue, size: 14),
+                      ],
+                      // Zero-balance badge: settled indicator
+                      if (isZeroBalance) ...[
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.check_circle_outline, color: Colors.green, size: 10),
+                              SizedBox(width: 2),
+                              Text('مسدد', style: TextStyle(fontSize: 9, color: Colors.green, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
                       ],
                     ],
                   ),
@@ -621,25 +690,66 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     if (!mounted) return;
 
     if (linkedCount > 0) {
-      showDialog(
+      // Customer has linked records — offer option to delete with all invoices
+      final choice = await showDialog<String>(
         context: context,
         builder: (_) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: const Row(children: [
-            Icon(Icons.block_rounded, color: Colors.red, size: 24),
+            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
             SizedBox(width: 10),
-            Text('لا يمكن الحذف',
-                style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            Text('حذف الزبون', style: TextStyle(fontWeight: FontWeight.bold)),
           ]),
           content: Text(
-            'الزبون "${_currentCustomer.name}" مرتبط بـ $linkedCount سجل مالي.\n'
-            'لا يمكن حذفه للحفاظ على سلامة الحسابات.',
+            'الزبون "${_currentCustomer.name}" مرتبط بـ $linkedCount سجل مالي.\n\n'
+            'اختر طريقة الحذف:',
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً')),
+            TextButton(onPressed: () => Navigator.pop(context, null), child: const Text('إلغاء')),
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'with_invoices'),
+              child: const Text('حذف مع كافة الفواتير', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            ),
           ],
         ),
       );
+      if (choice == 'with_invoices') {
+        final confirm2 = await showDialog<bool>(
+          context: context,
+          builder: (_) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Row(children: [
+              Icon(Icons.delete_forever, color: Colors.red, size: 24),
+              SizedBox(width: 10),
+              Text('تأكيد نهائي', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            ]),
+            content: Text(
+              'سيتم حذف الزبون "${_currentCustomer.name}" وجميع فواتيره ($linkedCount سجل).\nهذا الإجراء لا يمكن التراجع عنه. هل أنت متأكد؟',
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('نعم، احذف كل شيء', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        );
+        if (confirm2 == true) {
+          await db.softDeleteCustomerWithInvoices(_currentCustomer.id!);
+          final _actUser = context.read<AuthService>().currentUser;
+          db.logActivity(
+            targetId: _currentCustomer.id!,
+            targetType: 'CUSTOMER',
+            action: 'DELETE',
+            summary: 'حذف الزبون مع جميع فواتيره: ${_currentCustomer.name}',
+            performedById: _actUser?.id,
+            performedByName: _actUser?.name,
+            storeManagerId: _actUser?.parentId ?? _actUser?.id,
+          ).catchError((e) => debugPrint('logActivity failed: $e'));
+          if (mounted) Navigator.of(context).pop();
+        }
+      }
       return;
     }
 
