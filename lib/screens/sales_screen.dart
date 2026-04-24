@@ -390,6 +390,8 @@ class _SalesScreenState extends State<SalesScreen> {
       );
 
       final invoiceId = await db.insertInvoice(invoice);
+      // Always recalculate after insert to ensure balance reflects the new invoice correctly
+      await db.recalculateUserBalance(invoice.userId);
       final _actUser = context.read<AuthService>().currentUser;
       db.logActivity(
         targetId: invoiceId,
@@ -907,7 +909,10 @@ class _SalesScreenState extends State<SalesScreen> {
     if (_selectedCustomer == null || _selectedCustomerBalance == null) return const SizedBox.shrink();
     final enteredAmount = double.tryParse(_amountController.text) ?? 0.0;
     final currentBalance = _selectedCustomerBalance!;
-    final projectedBalance = currentBalance + enteredAmount;
+    // PAID methods (cash/app) do not affect customer balance — only unpaid/deferred/credit do
+    final isPaidMethod = _selectedPaymentMethod?.type == 'cash' || _selectedPaymentMethod?.type == 'app';
+    final effectiveDebt = isPaidMethod ? 0.0 : enteredAmount;
+    final projectedBalance = currentBalance + effectiveDebt;
     final isDebt = projectedBalance > 0;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
