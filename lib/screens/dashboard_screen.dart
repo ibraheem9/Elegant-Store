@@ -616,7 +616,6 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
       MaterialPageRoute(builder: (_) => const SyncDetailsScreen()),
     );
   }
-  }
 
   @override
   Widget build(BuildContext context) {
