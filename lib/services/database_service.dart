@@ -626,7 +626,8 @@ class DatabaseService {
       map['paid_amount'] = finalPaidAmount;
       map['payment_status'] = finalStatus;
       map['version'] = 1;
-      map['created_at'] = now;
+      // Preserve the accountant's manually entered date if provided; fall back to now.
+      map['created_at'] = (inv.createdAt.isNotEmpty) ? inv.createdAt : now;
       map['updated_at'] = now;
       map['is_synced'] = 0;
       return await txn.insert('invoices', map);
