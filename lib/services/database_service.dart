@@ -628,7 +628,8 @@ class DatabaseService {
       map['version'] = 1;
       // Preserve the accountant's manually entered date if provided; fall back to now.
       map['created_at'] = (inv.createdAt.isNotEmpty) ? inv.createdAt : now;
-      map['updated_at'] = now;
+      // On insert, updated_at matches created_at (accountant's date).
+      map['updated_at'] = map['created_at'];
       map['is_synced'] = 0;
       return await txn.insert('invoices', map);
     });
@@ -1277,7 +1278,8 @@ class DatabaseService {
     map.remove('id');
     map['uuid'] = (p.uuid.isEmpty) ? _uuid.v4() : p.uuid;
     map['version'] = 1;
-    map['updated_at'] = now;
+    // On insert, updated_at matches created_at (accountant's date).
+    map['updated_at'] = (p.createdAt.isNotEmpty) ? p.createdAt : now;
     map['is_synced'] = 0;
     return await db.insert('purchases', map);
   }
