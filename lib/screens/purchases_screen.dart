@@ -355,41 +355,61 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                   padding: EdgeInsets.all(16),
                   child: Text('لا توجد تعديلات مسجلة'),
                 )
-              : ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: history.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (_, i) {
-                    final h = history[i];
-                    final fieldLabel = _fieldLabel(h['field_name'] as String? ?? '');
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(children: [
-                            const Icon(Icons.edit, size: 14, color: Colors.orange),
-                            const SizedBox(width: 4),
-                            Text(fieldLabel,
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                          ]),
-                          const SizedBox(height: 2),
-                          Text('من: ${h['old_value']}  →  إلى: ${h['new_value']}',
-                              style: const TextStyle(fontSize: 12)),
-                          Text('السبب: ${h['edit_reason'] ?? '-'}',
-                              style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                          Text('بواسطة: ${h['edited_by_name'] ?? '-'}',
-                              style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                          Text(
-                            DateFormat('yyyy/MM/dd HH:mm').format(
-                                DateTime.tryParse(h['created_at'] as String? ?? '') ?? DateTime.now()),
-                            style: const TextStyle(fontSize: 10, color: Colors.grey),
+              : Builder(builder: (_) {
+                    // Filter out null→null entries (no meaningful change)
+                    final filtered = history.where((h) {
+                      final oldVal = h['old_value'] as String?;
+                      final newVal = h['new_value'] as String?;
+                      return !(oldVal == null && newVal == null);
+                    }).toList();
+                    if (filtered.isEmpty) {
+                      return const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Text('لا توجد تعديلات مسجلة'),
+                      );
+                    }
+                    return ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (_, i) {
+                        final h = filtered[i];
+                        final fieldName = h['field_name'] as String? ?? '';
+                        final fieldLabel = _fieldLabel(fieldName);
+                        final rawOld = h['old_value'] as String?;
+                        final rawNew = h['new_value'] as String?;
+                        // Format ISO date strings to readable format
+                        final displayOld = _formatHistoryValue(fieldName, rawOld);
+                        final displayNew = _formatHistoryValue(fieldName, rawNew);
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(children: [
+                                const Icon(Icons.edit, size: 14, color: Colors.orange),
+                                const SizedBox(width: 4),
+                                Text(fieldLabel,
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              ]),
+                              const SizedBox(height: 2),
+                              Text('من: $displayOld  →  إلى: $displayNew',
+                                  style: const TextStyle(fontSize: 12)),
+                              Text('السبب: ${h['edit_reason'] ?? '-'}',
+                                  style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                              Text('بواسطة: ${h['edited_by_name'] ?? '-'}',
+                                  style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                              Text(
+                                DateFormat('yyyy/MM/dd HH:mm').format(
+                                    DateTime.tryParse(h['created_at'] as String? ?? '') ?? DateTime.now()),
+                                style: const TextStyle(fontSize: 10, color: Colors.grey),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        );
+                      },
                     );
-                  },
-                ),
+                  }),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إغلاق')),
@@ -403,8 +423,20 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       case 'amount':        return 'المبلغ';
       case 'merchant_name': return 'اسم المورد';
       case 'notes':         return 'الملاحظات';
-      default:              return field;
+      case 'created_at':    return 'تاريخ الفاتورة';
+      case 'payment_method_id': return 'طريقة الدفع';
+      default:              return field.isEmpty ? 'تعديل عام' : field;
     }
+  }
+
+  /// Formats a raw history value — if it looks like an ISO date, convert to readable format.
+  String _formatHistoryValue(String fieldName, String? raw) {
+    if (raw == null || raw == 'null') return '-';
+    if (fieldName == 'created_at') {
+      final dt = DateTime.tryParse(raw);
+      if (dt != null) return DateFormat('yyyy/MM/dd').format(dt);
+    }
+    return raw;
   }
 
   // ── Recycle bin dialog ───────────────────────────────────────────────────
