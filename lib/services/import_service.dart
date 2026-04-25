@@ -207,7 +207,7 @@ class ImportService {
             }
 
             // ── Step 1: Look up by UUID ────────────────────────────────────
-            int? existingId = uuidToIdCache[table]?[uuid];
+            int? existingId = uuidToIdCache.containsKey(table) ? uuidToIdCache[table]![uuid] : null;
 
             // ── Step 2: Fallback lookup by secondary unique field ──────────
             if (existingId == null && secondaryField != null) {
@@ -441,6 +441,6 @@ class ImportService {
   ) {
     final String? uuid = row[uuidKey] as String?;
     row.remove(uuidKey);
-    row[idKey] = uuid != null ? cache[targetTable]?[uuid] : null;
+    row[idKey] = (uuid != null && cache.containsKey(targetTable)) ? cache[targetTable]![uuid] : null;
   }
 }
