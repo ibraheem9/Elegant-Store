@@ -827,12 +827,15 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   /// Translates English status keywords in any summary string to Arabic.
+  /// IMPORTANT: 'UNPAID' must be replaced before 'PAID' to avoid partial match.
+  /// Also fixes legacy broken values like 'UNمدفوع' that were stored incorrectly.
   String _translateSummary(String? text) {
     if (text == null) return '';
     return text
         .replaceAll('DEFERRED', 'دين')
-        .replaceAll('PAID', 'مدفوع')
-        .replaceAll('UNPAID', 'غير مدفوع');
+        .replaceAll('UNPAID', 'غير مدفوع')
+        .replaceAll('UNمدفوع', 'غير مدفوع')  // fix legacy broken value
+        .replaceAll('PAID', 'مدفوع');
   }
 
   void _applyDateFilter(String mode) {
