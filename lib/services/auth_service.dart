@@ -254,23 +254,52 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<bool> updateProfile(String name, String username) async {
-    if (_token == null) return false;
+    if (_currentUser == null) return false;
     try {
-      final response = await _dio.put('me',
-        data: {'name': name, 'username': username},
-        options: Options(headers: {'Authorization': 'Bearer $_token'})
+      // Always update locally first — instant and offline-safe.
+      final db = await _dbService.database;
+      final now = DateTime.now().toIso8601String();
+      await db.update(
+        'users',
+        {'name': name, 'username': username, 'updated_at': now, 'is_synced': 0},
+        where: 'id = ?',
+        whereArgs: [_currentUser!.id],
       );
+      _currentUser = User(
+        id: _currentUser!.id,
+        uuid: _currentUser!.uuid,
+        username: username,
+        name: name,
+        role: _currentUser!.role,
+        balance: _currentUser!.balance,
+        isPermanentCustomer: _currentUser!.isPermanentCustomer,
+        createdAt: _currentUser!.createdAt,
+        updatedAt: now,
+        parentId: _currentUser!.parentId,
+        nickname: _currentUser!.nickname,
+        phone: _currentUser!.phone,
+        notes: _currentUser!.notes,
+        creditLimit: _currentUser!.creditLimit,
+      );
+      notifyListeners();
 
-      if (response.statusCode == 200 && response.data['success'] == true) {
-        final Map<String, dynamic> userData = response.data['data'];
-        final int localId = await _dbService.upsertFromSync('users', userData);
-        userData['id'] = localId;
-        _currentUser = User.fromMap(userData);
-        notifyListeners();
-        return true;
+      // Attempt remote sync in the background — failure is silent.
+      if (_token != null) {
+        _dio.put(
+          'me',
+          data: {'name': name, 'username': username},
+          options: Options(headers: {'Authorization': 'Bearer $_token'}),
+        ).then((response) {
+          if (response.statusCode == 200 && response.data['success'] == true) {
+            dev.log('Profile synced to server', name: 'AuthService');
+          }
+        }).catchError((e) {
+          dev.log('Profile remote sync failed (offline): $e', name: 'AuthService');
+        });
       }
-      return false;
+      return true;
     } catch (e) {
+      dev.log('updateProfile error: $e', name: 'AuthService');
       return false;
     }
   }

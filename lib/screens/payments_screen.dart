@@ -108,17 +108,18 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                 inv.type != 'WITHDRAWAL')
             .toList();
 
-        // Paid: all paid, exclude WITHDRAWAL
+        // Paid via app method only (all invoice types, exclude WITHDRAWAL)
+        final appMethodIds = methods
+            .where((m) => m.type == 'app')
+            .map((m) => m.id)
+            .toSet();
         _paidInvoices = allInvoices
             .where((inv) =>
                 (inv.paymentStatus == 'PAID' || inv.paymentStatus == 'paid') &&
-                inv.type != 'WITHDRAWAL')
+                inv.type != 'WITHDRAWAL' &&
+                appMethodIds.contains(inv.paymentMethodId))
             .toList();
-
-        // Transfers (DEPOSIT type)
-        _transferInvoices = allInvoices
-            .where((inv) => inv.type == 'DEPOSIT')
-            .toList();
+        _transferInvoices = []; // Transfers section removed
 
         _isLoading = false;
       });
@@ -400,15 +401,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
           _buildAppMethodsSection(isDark, isMobile),
           const SizedBox(height: 20),
 
-          // ── Transfers (DEPOSIT) section ──────────────────────────────────
-          _buildSectionHeader(
-            isDark,
-            icon: Icons.swap_horiz_rounded,
-            title: 'الحوالات',
-            color: Colors.teal,
-          ),
-          const SizedBox(height: 8),
-          _buildTransfersList(isDark, isMobile),
+          // Transfers section removed — all app-paid invoices shown above
         ],
       ),
     );
@@ -665,7 +658,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
           builder: (ctx, setModalState) {
             return Container(
               padding: EdgeInsets.only(
-                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + MediaQuery.of(ctx).padding.bottom + 24,
                 top: 24,
                 left: 20,
                 right: 20,
