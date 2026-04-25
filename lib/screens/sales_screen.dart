@@ -531,6 +531,9 @@ class _SalesScreenState extends State<SalesScreen> {
     } catch (_) {
       selectedMethod = _paymentMethods.isNotEmpty ? _paymentMethods.first : null;
     }
+    // Parse existing createdAt to pre-fill the date picker
+    DateTime editSelectedDate = DateTime.tryParse(inv.createdAt) ?? DateTime.now();
+
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -550,6 +553,31 @@ class _SalesScreenState extends State<SalesScreen> {
                 items: _paymentMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name))).toList(),
                 onChanged: (v) => setDialogState(() => selectedMethod = v),
                 decoration: const InputDecoration(labelText: 'طريقة الدفع'),
+              ),
+              const SizedBox(height: 12),
+              // Date picker for invoice date
+              InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: editSelectedDate,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2101),
+                  );
+                  if (picked != null) {
+                    setDialogState(() => editSelectedDate = DateTime(
+                      picked.year, picked.month, picked.day,
+                      editSelectedDate.hour, editSelectedDate.minute, editSelectedDate.second,
+                    ));
+                  }
+                },
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'تاريخ الفاتورة',
+                    prefixIcon: Icon(Icons.calendar_today, size: 18),
+                  ),
+                  child: Text(DateFormat('yyyy/MM/dd').format(editSelectedDate)),
+                ),
               ),
               const SizedBox(height: 12),
               TextField(controller: notesController, decoration: const InputDecoration(labelText: 'ملاحظات')),
@@ -577,16 +605,20 @@ class _SalesScreenState extends State<SalesScreen> {
     if (result == true) {
       final db = context.read<DatabaseService>();
       final newAmount = double.tryParse(amountController.text) ?? inv.amount;
+      // Build new createdAt from the selected date + original time
+      final newCreatedAt = editSelectedDate.toIso8601String();
+      // Update invoice_date text to match the new date
+      final newInvoiceDate = DateFormat('dd-MM-yyyy EEEE', 'ar').format(editSelectedDate);
       final newInv = Invoice(
         id: inv.id,
         uuid: inv.uuid,
         userId: inv.userId,
-        invoiceDate: inv.invoiceDate,
+        invoiceDate: newInvoiceDate,
         amount: newAmount,
         paidAmount: inv.paidAmount,
         paymentStatus: inv.paymentStatus,
         paymentMethodId: selectedMethod?.id,
-        createdAt: inv.createdAt,
+        createdAt: newCreatedAt,
         notes: notesController.text,
         type: inv.type,
         version: inv.version,

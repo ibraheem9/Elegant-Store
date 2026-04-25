@@ -221,49 +221,78 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     final merchantCtrl = TextEditingController(text: p.merchantName);
     final notesCtrl    = TextEditingController(text: p.notes ?? '');
     final reasonCtrl   = TextEditingController();
+    // Parse existing createdAt to pre-fill the date picker
+    DateTime editSelectedDate = DateTime.tryParse(p.createdAt) ?? DateTime.now();
 
     final result = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('تعديل فاتورة مشتريات'),
-        content: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(
-              controller: merchantCtrl,
-              decoration: const InputDecoration(labelText: 'اسم المورد', prefixIcon: Icon(Icons.business, size: 18)),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: amountCtrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
-              decoration: const InputDecoration(labelText: 'المبلغ الجديد', prefixIcon: Icon(Icons.payments, size: 18)),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: notesCtrl,
-              decoration: const InputDecoration(labelText: 'ملاحظات', prefixIcon: Icon(Icons.note, size: 18)),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: reasonCtrl,
-              decoration: const InputDecoration(
-                labelText: 'سبب التعديل *',
-                prefixIcon: Icon(Icons.edit_note, size: 18),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('تعديل فاتورة مشتريات'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(
+                controller: merchantCtrl,
+                decoration: const InputDecoration(labelText: 'اسم المورد', prefixIcon: Icon(Icons.business, size: 18)),
               ),
-            ),
-          ]),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
-          ElevatedButton(
-            onPressed: () {
-              if (reasonCtrl.text.trim().isEmpty) return;
-              Navigator.pop(ctx, true);
-            },
-            child: const Text('حفظ'),
+              const SizedBox(height: 10),
+              TextField(
+                controller: amountCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+                decoration: const InputDecoration(labelText: 'المبلغ الجديد', prefixIcon: Icon(Icons.payments, size: 18)),
+              ),
+              const SizedBox(height: 10),
+              // Date picker
+              InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: ctx,
+                    initialDate: editSelectedDate,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2101),
+                  );
+                  if (picked != null) {
+                    setDialogState(() => editSelectedDate = DateTime(
+                      picked.year, picked.month, picked.day,
+                      editSelectedDate.hour, editSelectedDate.minute, editSelectedDate.second,
+                    ));
+                  }
+                },
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'تاريخ الفاتورة',
+                    prefixIcon: Icon(Icons.calendar_today, size: 18),
+                  ),
+                  child: Text(DateFormat('yyyy/MM/dd').format(editSelectedDate)),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: notesCtrl,
+                decoration: const InputDecoration(labelText: 'ملاحظات', prefixIcon: Icon(Icons.note, size: 18)),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: reasonCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'سبب التعديل *',
+                  prefixIcon: Icon(Icons.edit_note, size: 18),
+                ),
+              ),
+            ]),
           ),
-        ],
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+            ElevatedButton(
+              onPressed: () {
+                if (reasonCtrl.text.trim().isEmpty) return;
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('حفظ'),
+            ),
+          ],
+        ),
       ),
     );
 
@@ -273,6 +302,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       final auth   = context.read<AuthService>();
       final editor = auth.currentUser;
       final db     = context.read<DatabaseService>();
+      // Build new createdAt from selected date + original time
+      final newCreatedAt = editSelectedDate.toIso8601String();
       await db.editPurchaseWithLog(
         oldPurchase: p,
         newPurchase: Purchase(
@@ -285,7 +316,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           paymentMethodId: p.paymentMethodId,
           notes:          notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim(),
           version:        p.version,
-          createdAt:      p.createdAt,
+          createdAt:      newCreatedAt,
           isSynced:       0,
         ),
         reason:     reasonCtrl.text.trim(),

@@ -1075,13 +1075,14 @@ class DatabaseService {
     final db = await database;
     await db.transaction((txn) async {
       final now = DateTime.now().toIso8601String();
-      await txn.update('invoices', {
+       await txn.update('invoices', {
         ...newInv.toMap(),
         'version': newInv.version + 1,
+        // Preserve the accountant's chosen created_at (may have changed if date was edited)
+        'created_at': newInv.createdAt.isNotEmpty ? newInv.createdAt : oldInv.createdAt,
         'updated_at': now,
         'is_synced': 0,
       }, where: 'id = ?', whereArgs: [newInv.id]);
-
       // Detect changed fields and log only those
       final changes = <Map<String, String?>>[];
       if (oldInv.amount != newInv.amount) {
@@ -1095,6 +1096,9 @@ class DatabaseService {
       }
       if (oldInv.paymentStatus != newInv.paymentStatus) {
         changes.add({'field': 'payment_status', 'label': 'حالة الدفع', 'old': oldInv.paymentStatus, 'new': newInv.paymentStatus});
+      }
+      if (oldInv.createdAt != newInv.createdAt) {
+        changes.add({'field': 'created_at', 'label': 'تاريخ الفاتورة', 'old': oldInv.createdAt, 'new': newInv.createdAt});
       }
 
       if (changes.isEmpty) {
@@ -1376,12 +1380,33 @@ class DatabaseService {
         {
           ...newPurchase.toMap(),
           'version': oldPurchase.version + 1,
+          // Preserve the accountant's chosen created_at (may have changed if date was edited)
+          'created_at': newPurchase.createdAt.isNotEmpty ? newPurchase.createdAt : oldPurchase.createdAt,
           'updated_at': now,
           'is_synced': 0,
         },
         where: 'id = ?',
         whereArgs: [oldPurchase.id],
       );
+      // Log date change
+      if (oldPurchase.createdAt != newPurchase.createdAt) {
+        await txn.insert('edit_history', {
+          'uuid': _uuid.v4(),
+          'target_id': oldPurchase.id,
+          'target_type': 'PURCHASE',
+          'action': 'UPDATE',
+          'field_name': 'created_at',
+          'old_value': oldPurchase.createdAt,
+          'new_value': newPurchase.createdAt,
+          'edit_reason': reason,
+          'edited_by_id': editorId,
+          'edited_by_name': editorName,
+          'version': 1,
+          'created_at': now,
+          'updated_at': now,
+          'is_synced': 0,
+        });
+      }
       // Log amount change
       if (oldPurchase.amount != newPurchase.amount) {
         await txn.insert('edit_history', {
@@ -1456,6 +1481,8 @@ class DatabaseService {
     await db.update('invoices', {
       ...inv.toMap(),
       'version': inv.version + 1,
+      // Preserve accountant's chosen created_at
+      'created_at': inv.createdAt.isNotEmpty ? inv.createdAt : now,
       'is_synced': 0,
       'updated_at': now
     }, where: 'id = ?', whereArgs: [inv.id]);
