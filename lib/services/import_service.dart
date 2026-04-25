@@ -21,11 +21,18 @@ class ImportResult {
 
 /// Handles importing a JSON backup file back into the local SQLite database.
 ///
-/// Strategy: **UUID-based upsert (merge)**
-/// - If a record with the same UUID already exists → update it only if the
-///   incoming `version` is higher (last-write-wins by version).
-/// - If no record with that UUID exists → insert it.
-/// - Local records that are NOT in the JSON file are left untouched.
+/// Strategy: **UUID-first dual-lookup upsert (merge)**
+///
+/// For each incoming record:
+/// 1. Look up by UUID in the local DB → if found, update (version-gated).
+/// 2. If not found by UUID, look up by the table's secondary unique key
+///    (e.g. `username` for users, `statistic_date` for daily_statistics).
+///    If found that way, update the record AND patch its UUID to match the
+///    incoming one so future syncs stay consistent.
+/// 3. If still not found → insert using `INSERT OR IGNORE` so any remaining
+///    edge-case constraint conflicts are silently skipped rather than crashing.
+///
+/// Local records that are NOT in the JSON file are left untouched.
 ///
 /// After all tables are imported, all customer balances are recalculated from
 /// scratch to ensure consistency.
@@ -45,16 +52,25 @@ class ImportService {
     'edit_history',
   ];
 
+  /// Secondary unique fields used as fallback lookup when UUID is not found.
+  /// Maps table name → column name (nullable = no fallback).
+  static const Map<String, String?> _secondaryUniqueField = {
+    'users': 'username',
+    'payment_methods': null,
+    'invoices': null,
+    'transactions': null,
+    'purchases': null,
+    'daily_statistics': 'statistic_date',
+    'edit_history': null,
+  };
+
   // ─────────────────────────────────────────────────────────────────────────
   // PUBLIC API
   // ─────────────────────────────────────────────────────────────────────────
 
   /// Opens a file picker, reads the selected JSON file, validates it, and
   /// imports all records into the local database.
-  ///
-  /// Returns an [ImportResult] describing what happened.
   Future<ImportResult> pickAndImport() async {
-    // 1. Let the user pick a file
     final FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['json'],
@@ -80,7 +96,6 @@ class ImportService {
       );
     }
 
-    // 2. Read file content
     final String jsonString;
     try {
       jsonString = await File(filePath).readAsString(encoding: utf8);
@@ -93,12 +108,10 @@ class ImportService {
       );
     }
 
-    // 3. Parse and import
     return importFromJsonString(jsonString);
   }
 
   /// Parses [jsonString] and imports all records.
-  /// Useful for testing or custom import flows.
   Future<ImportResult> importFromJsonString(String jsonString) async {
     // ── Parse JSON ──────────────────────────────────────────────────────────
     Map<String, dynamic> payload;
@@ -142,8 +155,7 @@ class ImportService {
 
     final db = await _dbService.database;
 
-    // Build a UUID→localId cache for FK resolution during import
-    // (populated lazily per table as we go)
+    // UUID→localId cache populated per table for FK resolution
     final Map<String, Map<String, int>> uuidToIdCache = {};
 
     await db.transaction((txn) async {
@@ -154,11 +166,30 @@ class ImportService {
           continue;
         }
 
-        // Populate UUID→id cache for this table (needed for FK resolution)
-        final existingRows = await txn.query(table, columns: ['id', 'uuid']);
+        // Build UUID→id cache for this table
+        final existingRows = await txn.query(
+          table,
+          columns: ['id', 'uuid'],
+        );
         uuidToIdCache[table] = {
-          for (final r in existingRows) r['uuid'] as String: r['id'] as int,
+          for (final r in existingRows)
+            if (r['uuid'] != null) r['uuid'] as String: r['id'] as int,
         };
+
+        // Build secondary-key→id cache if applicable
+        final String? secondaryField = _secondaryUniqueField[table];
+        Map<String, int> secondaryKeyCache = {};
+        if (secondaryField != null) {
+          final secRows = await txn.query(
+            table,
+            columns: ['id', 'uuid', secondaryField],
+          );
+          secondaryKeyCache = {
+            for (final r in secRows)
+              if (r[secondaryField] != null)
+                r[secondaryField] as String: r['id'] as int,
+          };
+        }
 
         int count = 0;
         for (final dynamic rawRow in rows) {
@@ -175,17 +206,41 @@ class ImportService {
               continue;
             }
 
-            final int? existingId = uuidToIdCache[table]?[uuid];
+            // ── Step 1: Look up by UUID ────────────────────────────────────
+            int? existingId = uuidToIdCache[table]?[uuid];
+
+            // ── Step 2: Fallback lookup by secondary unique field ──────────
+            if (existingId == null && secondaryField != null) {
+              final secondaryValue = row[secondaryField] as String?;
+              if (secondaryValue != null) {
+                existingId = secondaryKeyCache[secondaryValue];
+                if (existingId != null) {
+                  // Patch the UUID in DB so future lookups work by UUID
+                  await txn.update(
+                    table,
+                    {'uuid': uuid},
+                    where: 'id = ?',
+                    whereArgs: [existingId],
+                  );
+                  // Update caches
+                  uuidToIdCache[table]![uuid] = existingId;
+                  debugPrint(
+                    '[ImportService] [$table] UUID patched for $secondaryField=$secondaryValue',
+                  );
+                }
+              }
+            }
+
             if (existingId != null) {
-              // Record exists — update only if incoming version is higher
-              final existingVersion = await txn.query(
+              // ── Record exists → update only if incoming version ≥ local ──
+              final versionResult = await txn.query(
                 table,
                 columns: ['version'],
                 where: 'id = ?',
                 whereArgs: [existingId],
               );
               final int localVersion =
-                  (existingVersion.first['version'] as int?) ?? 0;
+                  (versionResult.first['version'] as int?) ?? 0;
               final int incomingVersion = (row['version'] as int?) ?? 1;
 
               if (incomingVersion >= localVersion) {
@@ -193,21 +248,38 @@ class ImportService {
                 await txn.update(
                   table,
                   row,
-                  where: 'uuid = ?',
-                  whereArgs: [uuid],
+                  where: 'id = ?',
+                  whereArgs: [existingId],
                 );
                 count++;
               }
-              // else: local version is newer — skip
+              // else: local version is newer — skip silently
             } else {
-              // New record — insert
+              // ── New record → insert with OR IGNORE to skip constraint ─────
+              // conflicts that may still occur (e.g. duplicate uuid race).
               row.remove('id'); // let SQLite assign a new local id
-              row['is_synced'] = 0; // mark as not synced to server
-              final int newId = await txn.insert(table, row);
-              // Update cache so subsequent tables can resolve this FK
-              uuidToIdCache[table] ??= {};
-              uuidToIdCache[table]![uuid] = newId;
-              count++;
+              row['is_synced'] = 0; // mark as not yet synced to server
+
+              final int newId = await txn.rawInsert(
+                _buildInsertOrIgnoreSql(table, row),
+                row.values.toList(),
+              );
+
+              if (newId > 0) {
+                // Update caches so subsequent tables can resolve this FK
+                uuidToIdCache[table] ??= {};
+                uuidToIdCache[table]![uuid] = newId;
+                if (secondaryField != null) {
+                  final secVal = row[secondaryField] as String?;
+                  if (secVal != null) secondaryKeyCache[secVal] = newId;
+                }
+                count++;
+              } else {
+                // INSERT OR IGNORE skipped the row — log as warning
+                errors.add(
+                  '[$table] تم تخطي سجل (تعارض في القيد الفريد): uuid=$uuid',
+                );
+              }
             }
           } catch (e) {
             errors.add('[$table] خطأ: $e');
@@ -239,6 +311,21 @@ class ImportService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // PRIVATE: BUILD INSERT OR IGNORE SQL
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Builds an `INSERT OR IGNORE INTO <table> (col1, col2, ...) VALUES (?, ?, ...)`
+  /// statement from the given [row] map.
+  String _buildInsertOrIgnoreSql(
+    String table,
+    Map<String, dynamic> row,
+  ) {
+    final columns = row.keys.join(', ');
+    final placeholders = List.filled(row.length, '?').join(', ');
+    return 'INSERT OR IGNORE INTO $table ($columns) VALUES ($placeholders)';
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // PRIVATE: FK RESOLUTION (UUID → local integer id)
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -254,37 +341,93 @@ class ImportService {
       case 'invoices':
         _replaceUuidWithId(row, 'user_uuid', 'user_id', 'users', cache);
         _replaceUuidWithId(
-            row, 'payment_method_uuid', 'payment_method_id', 'payment_methods', cache);
+          row,
+          'payment_method_uuid',
+          'payment_method_id',
+          'payment_methods',
+          cache,
+        );
         _replaceUuidWithId(
-            row, 'store_manager_uuid', 'store_manager_id', 'users', cache);
+          row,
+          'store_manager_uuid',
+          'store_manager_id',
+          'users',
+          cache,
+        );
         break;
       case 'transactions':
         _replaceUuidWithId(row, 'buyer_uuid', 'buyer_id', 'users', cache);
-        _replaceUuidWithId(row, 'invoice_uuid', 'invoice_id', 'invoices', cache);
         _replaceUuidWithId(
-            row, 'payment_method_uuid', 'payment_method_id', 'payment_methods', cache);
+          row,
+          'invoice_uuid',
+          'invoice_id',
+          'invoices',
+          cache,
+        );
         _replaceUuidWithId(
-            row, 'store_manager_uuid', 'store_manager_id', 'users', cache);
+          row,
+          'payment_method_uuid',
+          'payment_method_id',
+          'payment_methods',
+          cache,
+        );
+        _replaceUuidWithId(
+          row,
+          'store_manager_uuid',
+          'store_manager_id',
+          'users',
+          cache,
+        );
         break;
       case 'purchases':
         _replaceUuidWithId(
-            row, 'payment_method_uuid', 'payment_method_id', 'payment_methods', cache);
+          row,
+          'payment_method_uuid',
+          'payment_method_id',
+          'payment_methods',
+          cache,
+        );
         _replaceUuidWithId(
-            row, 'store_manager_uuid', 'store_manager_id', 'users', cache);
+          row,
+          'store_manager_uuid',
+          'store_manager_id',
+          'users',
+          cache,
+        );
         break;
       case 'daily_statistics':
         _replaceUuidWithId(
-            row, 'store_manager_uuid', 'store_manager_id', 'users', cache);
+          row,
+          'store_manager_uuid',
+          'store_manager_id',
+          'users',
+          cache,
+        );
         break;
       case 'edit_history':
         _replaceUuidWithId(
-            row, 'edited_by_uuid', 'edited_by_id', 'users', cache);
+          row,
+          'edited_by_uuid',
+          'edited_by_id',
+          'users',
+          cache,
+        );
         _replaceUuidWithId(
-            row, 'store_manager_uuid', 'store_manager_id', 'users', cache);
+          row,
+          'store_manager_uuid',
+          'store_manager_id',
+          'users',
+          cache,
+        );
         break;
       case 'payment_methods':
         _replaceUuidWithId(
-            row, 'store_manager_uuid', 'store_manager_id', 'users', cache);
+          row,
+          'store_manager_uuid',
+          'store_manager_id',
+          'users',
+          cache,
+        );
         break;
     }
   }
@@ -298,10 +441,6 @@ class ImportService {
   ) {
     final String? uuid = row[uuidKey] as String?;
     row.remove(uuidKey);
-    if (uuid != null) {
-      row[idKey] = cache[targetTable]?[uuid]; // null if not found yet
-    } else {
-      row[idKey] = null;
-    }
+    row[idKey] = uuid != null ? cache[targetTable]?[uuid] : null;
   }
 }
