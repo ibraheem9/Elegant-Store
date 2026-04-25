@@ -384,7 +384,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         isMobile ? 12 : 24,
         0,
         isMobile ? 12 : 24,
-        80,
+        MediaQuery.of(context).padding.bottom + 100,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
