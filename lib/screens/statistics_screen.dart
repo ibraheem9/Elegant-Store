@@ -6,16 +6,24 @@ import '../models/models.dart';
 import '../services/database_service.dart';
 import '../widgets/shimmer_loading.dart';
 
+// ── Filter mode ────────────────────────────────────────────────────────────
+enum _FilterMode { day, week, month, year, custom }
+
 class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({Key? key}) : super(key: key);
-
   @override
   State<StatisticsScreen> createState() => _StatisticsScreenState();
 }
 
 class _StatisticsScreenState extends State<StatisticsScreen> {
-  // ── Selected date (defaults to today) ─────────────────────────────────────
-  DateTime _selectedDate = DateTime.now();
+  // ── Filter ─────────────────────────────────────────────────────────────────
+  _FilterMode _filterMode = _FilterMode.day;
+  DateTime _selectedDate  = DateTime.now();   // single-day anchor
+  DateTime? _rangeStart;
+  DateTime? _rangeEnd;
+
+  // ── Cash box date (editable by user, defaults to today) ────────────────────
+  DateTime _cashBoxDate = DateTime.now();
 
   // ── Manual inputs ──────────────────────────────────────────────────────────
   final _todayCashController = TextEditingController();
@@ -27,11 +35,70 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   double _cashPurchases       = 0.0;
   double _appPurchases        = 0.0;
   double _yesterdayCash       = 0.0;
-  double _cashDebtRepayment   = 0.0; // إجمالي سداد الدين النقدي
-
-  bool _isLoading = false;
+  double _cashDebtRepayment   = 0.0;
+  bool   _isLoading           = false;
   DailyStatistics? _savedStats;
   Map<String, double> _monthlyData = {};
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  /// True when the current filter is a single specific day (not a range).
+  bool get _isSingleDay =>
+      _filterMode == _FilterMode.day || _filterMode == _FilterMode.custom;
+
+  /// The effective start date for DB queries.
+  DateTime get _queryStart {
+    switch (_filterMode) {
+      case _FilterMode.day:
+        return DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+      case _FilterMode.week:
+        final d = _selectedDate;
+        return d.subtract(Duration(days: d.weekday % 7));
+      case _FilterMode.month:
+        return DateTime(_selectedDate.year, _selectedDate.month, 1);
+      case _FilterMode.year:
+        return DateTime(_selectedDate.year, 1, 1);
+      case _FilterMode.custom:
+        return _rangeStart ?? _selectedDate;
+    }
+  }
+
+  /// The effective end date for DB queries.
+  DateTime get _queryEnd {
+    switch (_filterMode) {
+      case _FilterMode.day:
+        return DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, 23, 59, 59);
+      case _FilterMode.week:
+        return _queryStart.add(const Duration(days: 6, hours: 23, minutes: 59, seconds: 59));
+      case _FilterMode.month:
+        return DateTime(_selectedDate.year, _selectedDate.month + 1, 0, 23, 59, 59);
+      case _FilterMode.year:
+        return DateTime(_selectedDate.year, 12, 31, 23, 59, 59);
+      case _FilterMode.custom:
+        return _rangeEnd != null
+            ? DateTime(_rangeEnd!.year, _rangeEnd!.month, _rangeEnd!.day, 23, 59, 59)
+            : DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, 23, 59, 59);
+    }
+  }
+
+  String get _filterLabel {
+    switch (_filterMode) {
+      case _FilterMode.day:
+        final isToday = DateFormat('yyyy-MM-dd').format(_selectedDate) ==
+            DateFormat('yyyy-MM-dd').format(DateTime.now());
+        return isToday ? 'اليوم' : DateFormat('dd/MM/yyyy').format(_selectedDate);
+      case _FilterMode.week:
+        return 'أسبوع: ${DateFormat('dd/MM').format(_queryStart)} - ${DateFormat('dd/MM').format(_queryEnd)}';
+      case _FilterMode.month:
+        return DateFormat('MMMM yyyy', 'ar').format(_selectedDate);
+      case _FilterMode.year:
+        return 'سنة ${_selectedDate.year}';
+      case _FilterMode.custom:
+        if (_rangeStart != null && _rangeEnd != null) {
+          return '${DateFormat('dd/MM').format(_rangeStart!)} - ${DateFormat('dd/MM').format(_rangeEnd!)}';
+        }
+        return 'تاريخ محدد';
+    }
+  }
 
   @override
   void initState() {
@@ -52,22 +119,31 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       _todayCashController.clear();
     });
     final db = context.read<DatabaseService>();
+    final start = _queryStart;
+    final end   = _queryEnd;
 
-    final detailedStats = await db.getDetailedTodayStats(date: _selectedDate);
-    final savedStats    = await db.getTodayStatistics(date: _selectedDate);
-    final yesterdayCash = await db.getYesterdayCashInBox(date: _selectedDate);
-    final monthly       = await db.getMonthlySales(_selectedDate.year, _selectedDate.month);
+    final detailedStats = await db.getDetailedStatsByRange(start: start, end: end);
+    final yesterdayCash = await db.getYesterdayCashInBox(date: start);
+    final monthly       = await db.getMonthlySales(start.year, start.month);
+
+    // For single-day mode, also load saved cash box stats
+    DailyStatistics? savedStats;
+    if (_isSingleDay) {
+      final anchor = _filterMode == _FilterMode.custom && _rangeStart != null
+          ? _rangeStart!
+          : _selectedDate;
+      savedStats = await db.getTodayStatistics(date: anchor);
+    }
 
     setState(() {
-      _appSales            = detailedStats['app_sales']          ?? 0.0;
-      _appDebt             = detailedStats['app_debt']           ?? 0.0;
-      _cashWithdrawals     = detailedStats['cash_withdrawals']   ?? 0.0;
-      _cashPurchases       = detailedStats['cash_purchases']     ?? 0.0;
-      _appPurchases        = detailedStats['app_purchases']      ?? 0.0;
-      _cashDebtRepayment   = detailedStats['cash_debt_repayment'] ?? 0.0;
-      _yesterdayCash       = yesterdayCash;
-      _monthlyData     = monthly;
-
+      _appSales          = detailedStats['app_sales']           ?? 0.0;
+      _appDebt           = detailedStats['app_debt']            ?? 0.0;
+      _cashWithdrawals   = detailedStats['cash_withdrawals']    ?? 0.0;
+      _cashPurchases     = detailedStats['cash_purchases']      ?? 0.0;
+      _appPurchases      = detailedStats['app_purchases']       ?? 0.0;
+      _cashDebtRepayment = detailedStats['cash_debt_repayment'] ?? 0.0;
+      _yesterdayCash     = yesterdayCash;
+      _monthlyData       = monthly;
       if (savedStats != null) {
         _savedStats = savedStats;
         _todayCashController.text = savedStats.todayCashInBox.toStringAsFixed(2);
@@ -76,7 +152,33 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     });
   }
 
-  Future<void> _pickDate(BuildContext context) async {
+  // ── Filter actions ─────────────────────────────────────────────────────────
+  Future<void> _applyFilter(_FilterMode mode) async {
+    if (mode == _FilterMode.custom) {
+      final range = await showDateRangePicker(
+        context: context,
+        firstDate: DateTime(2020),
+        lastDate: DateTime.now(),
+        locale: const Locale('ar'),
+      );
+      if (range == null) return;
+      setState(() {
+        _filterMode  = _FilterMode.custom;
+        _rangeStart  = range.start;
+        _rangeEnd    = range.end;
+        _selectedDate = range.start;
+      });
+    } else {
+      setState(() {
+        _filterMode = mode;
+        _rangeStart = null;
+        _rangeEnd   = null;
+      });
+    }
+    await _loadData();
+  }
+
+  Future<void> _pickSingleDay() async {
     final picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
@@ -84,30 +186,41 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       lastDate: DateTime.now(),
       locale: const Locale('ar'),
     );
-    if (picked != null && picked != _selectedDate) {
-      setState(() => _selectedDate = picked);
+    if (picked != null) {
+      setState(() {
+        _selectedDate = picked;
+        _filterMode   = _FilterMode.day;
+        _rangeStart   = null;
+        _rangeEnd     = null;
+      });
       await _loadData();
     }
   }
 
-  // ── Derived values ─────────────────────────────────────────────────────────
+  Future<void> _pickCashBoxDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _cashBoxDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      locale: const Locale('ar'),
+    );
+    if (picked != null) {
+      setState(() => _cashBoxDate = picked);
+    }
+  }
 
-  /// إجمالي الصندوق اليوم مُدخل؟
+  // ── Derived values ─────────────────────────────────────────────────────────
   bool get _cashEntered => _todayCashController.text.trim().isNotEmpty;
 
-  /// إجمالي البيع النقدي = صندوق اليوم + إجمالي الدين النقدي + إجمالي المشتريات نقدي
-  ///                      - صندوق الأمس - إجمالي سداد الدين النقدي
   double get _cashSales {
     if (!_cashEntered) return 0.0;
     final today = double.tryParse(_todayCashController.text) ?? 0.0;
     return today + _cashWithdrawals + _cashPurchases - _yesterdayCash - _cashDebtRepayment;
   }
 
-  /// إجمالي المشتريات = نقدي + تطبيق
   double get _totalPurchases => _cashPurchases + _appPurchases;
-
-  /// إجمالي البيع الكلي = مبيعات تطبيق + بيع نقدي
-  double get _totalSales => _appSales + _cashSales;
+  double get _totalSales     => _appSales + _cashSales;
 
   // ── Save ───────────────────────────────────────────────────────────────────
   Future<void> _saveStats() async {
@@ -115,33 +228,31 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       final confirm = await _showPurchaseWarning();
       if (!confirm) return;
     }
-
     setState(() => _isLoading = true);
-    final db  = context.read<DatabaseService>();
-    final now = DateTime.now();
-
+    final db = context.read<DatabaseService>();
     final stats = DailyStatistics(
-      statisticDate:           DateFormat('yyyy-MM-dd').format(_selectedDate),
-      yesterdayCashInBox:      _yesterdayCash,
-      todayCashInBox:          double.tryParse(_todayCashController.text) ?? 0.0,
-      totalCashDebtRepayment:  0.0, // سداد ديون نقدي ملغي
-      totalAppDebtRepayment:   _appDebt,
-      totalCashPurchases:      _cashPurchases + _cashWithdrawals,
-      totalAppPurchases:       _appPurchases,
-      totalSalesCash:          _cashSales,
-      totalSalesCredit:        _appSales,
-      createdAt:               _selectedDate.toIso8601String(),
+      statisticDate:          DateFormat('yyyy-MM-dd').format(_cashBoxDate),
+      yesterdayCashInBox:     _yesterdayCash,
+      todayCashInBox:         double.tryParse(_todayCashController.text) ?? 0.0,
+      totalCashDebtRepayment: 0.0,
+      totalAppDebtRepayment:  _appDebt,
+      totalCashPurchases:     _cashPurchases + _cashWithdrawals,
+      totalAppPurchases:      _appPurchases,
+      totalSalesCash:         _cashSales,
+      totalSalesCredit:       _appSales,
+      createdAt:              _cashBoxDate.toIso8601String(),
     );
-
     await db.insertDailyStatistics(stats);
     setState(() {
-      _savedStats  = stats;
-      _isLoading   = false;
+      _savedStats = stats;
+      _isLoading  = false;
     });
-
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم حفظ إحصائيات اليوم بنجاح'), backgroundColor: Colors.green),
+        const SnackBar(
+          content: Text('تم حفظ إحصائيات اليوم بنجاح'),
+          backgroundColor: Colors.green,
+        ),
       );
     }
   }
@@ -160,8 +271,14 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء وتدقيق المشتريات')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('متابعة الحفظ على أي حال')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء وتدقيق المشتريات'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('متابعة الحفظ على أي حال'),
+          ),
         ],
       ),
     ) ?? false;
@@ -172,25 +289,51 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   Widget build(BuildContext context) {
     final isDark  = Theme.of(context).brightness == Brightness.dark;
     final isSmall = MediaQuery.of(context).size.width < 800;
-
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
       body: _isLoading
           ? ShimmerLoading(isDark: isDark, itemCount: 5)
           : SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(isSmall ? 16 : 32, isSmall ? 16 : 32, isSmall ? 16 : 32, 40),
+              padding: EdgeInsets.fromLTRB(
+                isSmall ? 16 : 32,
+                isSmall ? 16 : 32,
+                isSmall ? 16 : 32,
+                MediaQuery.of(context).padding.bottom + 100,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildHeader(isDark),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 16),
+                  _buildFilterBar(isDark),
+                  const SizedBox(height: 24),
                   _buildInputSection(isDark, isSmall),
                   const SizedBox(height: 24),
                   _buildAutoSection(isDark, isSmall),
                   const SizedBox(height: 32),
                   _buildSummarySection(isDark, isSmall),
                   const SizedBox(height: 32),
-                  _buildSaveButton(),
+                  if (_isSingleDay) _buildSaveButton(),
+                  if (!_isSingleDay)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.orange.withOpacity(0.4)),
+                      ),
+                      child: Row(children: [
+                        const Icon(Icons.info_outline_rounded, color: Colors.orange),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'لا يمكن تعديل الصندوق عند اختيار نطاق زمني. اختر يوماً محدداً لتعديل الصندوق.',
+                            style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ]),
+                    ),
                   if (_savedStats != null) ...[
                     const SizedBox(height: 48),
                     const Divider(),
@@ -203,9 +346,66 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
+  // ── Filter bar ─────────────────────────────────────────────────────────────
+  Widget _buildFilterBar(bool isDark) {
+    final options = [
+      (_FilterMode.day,    'يوم',      Icons.today_rounded),
+      (_FilterMode.week,   'أسبوع',    Icons.date_range_rounded),
+      (_FilterMode.month,  'شهر',      Icons.calendar_month_rounded),
+      (_FilterMode.year,   'سنة',      Icons.calendar_today_rounded),
+      (_FilterMode.custom, 'تاريخ محدد', Icons.tune_rounded),
+    ];
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: options.map((opt) {
+          final (mode, label, icon) = opt;
+          final isActive = _filterMode == mode;
+          return Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: GestureDetector(
+              onTap: () => _applyFilter(mode),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? const Color(0xFF0F172A)
+                      : (isDark ? const Color(0xFF1E293B) : Colors.white),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: isActive
+                        ? const Color(0xFF0F172A)
+                        : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                  ),
+                  boxShadow: isActive
+                      ? [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 8, offset: const Offset(0, 3))]
+                      : [],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: 16,
+                        color: isActive ? Colors.white : (isDark ? Colors.white60 : Colors.grey)),
+                    const SizedBox(width: 6),
+                    Text(label,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: isActive ? Colors.white : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                        )),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  // ── Header ─────────────────────────────────────────────────────────────────
   Widget _buildHeader(bool isDark) {
-    final isToday = DateFormat('yyyy-MM-dd').format(_selectedDate) ==
-        DateFormat('yyyy-MM-dd').format(DateTime.now());
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -214,68 +414,62 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('إحصائيات ونهاية اليوم',
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900,
-                      color: isDark ? Colors.white : const Color(0xFF0F172A))),
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  )),
               const SizedBox(height: 4),
               Text(
-                'مراجعة وتأكيد المبالغ المالية ليوم: ${DateFormat('dd-MM-yyyy EEEE', 'ar').format(_selectedDate)}',
-                style: TextStyle(color: isDark ? Colors.white60 : const Color(0xFF64748B)),
+                _filterMode == _FilterMode.day
+                    ? 'ليوم: ${DateFormat('dd-MM-yyyy EEEE', 'ar').format(_selectedDate)}'
+                    : 'الفترة: $_filterLabel',
+                style: TextStyle(
+                  color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                  fontSize: 13,
+                ),
               ),
             ],
           ),
         ),
-        const SizedBox(width: 16),
-        // ── Date picker button ──
-        InkWell(
-          onTap: () => _pickDate(context),
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              color: isToday
-                  ? Colors.blue.withOpacity(0.1)
-                  : Colors.orange.withOpacity(0.15),
-              border: Border.all(
-                color: isToday ? Colors.blue : Colors.orange,
-                width: 1.5,
+        // Quick day-picker button (only in day mode)
+        if (_filterMode == _FilterMode.day)
+          InkWell(
+            onTap: _pickSingleDay,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                border: Border.all(color: Colors.blue, width: 1.5),
+                borderRadius: BorderRadius.circular(12),
               ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.calendar_today_rounded,
-                    size: 18,
-                    color: isToday ? Colors.blue : Colors.orange),
-                const SizedBox(width: 8),
-                Text(
-                  isToday
-                      ? 'اليوم'
-                      : DateFormat('dd/MM/yyyy').format(_selectedDate),
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: isToday ? Colors.blue : Colors.orange,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.calendar_today_rounded, size: 16, color: Colors.blue),
+                  const SizedBox(width: 6),
+                  Text(
+                    DateFormat('dd/MM/yyyy').format(_selectedDate),
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 13),
                   ),
-                ),
-                const SizedBox(width: 4),
-                Icon(Icons.arrow_drop_down_rounded,
-                    color: isToday ? Colors.blue : Colors.orange),
-              ],
+                  const Icon(Icons.arrow_drop_down_rounded, color: Colors.blue),
+                ],
+              ),
             ),
           ),
-        ),
       ],
     );
   }
 
   // ── Manual input section ───────────────────────────────────────────────────
   Widget _buildInputSection(bool isDark, bool isSmall) {
+    final canEdit = _isSingleDay;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionTitle('المطابقة النقدية', Icons.account_balance_rounded, Colors.green, isDark),
         const SizedBox(height: 16),
-        // صندوق الأمس — تلقائي
         _buildAutoDisplay(
           'إجمالي الصندوق أمس (تلقائي)',
           _yesterdayCash,
@@ -284,15 +478,65 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           isDark,
         ),
         const SizedBox(height: 16),
-        // صندوق اليوم — يدوي
-        _buildManualInput(
-          'إجمالي الصندوق اليوم',
-          _todayCashController,
-          Icons.account_balance_wallet_rounded,
-          Colors.green,
-          isDark,
-          onChanged: (_) => setState(() {}),
+        // صندوق اليوم — يدوي (disabled in range mode)
+        Opacity(
+          opacity: canEdit ? 1.0 : 0.5,
+          child: IgnorePointer(
+            ignoring: !canEdit,
+            child: _buildManualInput(
+              'إجمالي الصندوق اليوم',
+              _todayCashController,
+              Icons.account_balance_wallet_rounded,
+              Colors.green,
+              isDark,
+              onChanged: (_) => setState(() {}),
+            ),
+          ),
         ),
+        if (canEdit) ...[
+          const SizedBox(height: 12),
+          // ── Cash box date field ──
+          GestureDetector(
+            onTap: _pickCashBoxDate,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.green.withOpacity(0.4), width: 1.5),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.event_rounded, color: Colors.green, size: 22),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('تاريخ الصندوق',
+                            style: TextStyle(
+                              color: Colors.green,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            )),
+                        const SizedBox(height: 2),
+                        Text(
+                          DateFormat('dd-MM-yyyy EEEE', 'ar').format(_cashBoxDate),
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: isDark ? Colors.white : const Color(0xFF0F172A),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.edit_calendar_rounded, color: Colors.green, size: 18),
+                ],
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -312,39 +556,37 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           mainAxisSpacing: 16,
           childAspectRatio: isSmall ? 2.8 : 3.8,
           children: [
-            _buildAutoDisplay('إجمالي المبيعات على التطبيق',     _appSales,           Icons.phonelink_ring_rounded,  Colors.blue,    isDark),
-            _buildAutoDisplay('إجمالي الدين على التطبيق',        _appDebt,            Icons.account_balance_rounded, Colors.purple,  isDark),
-            _buildAutoDisplay('إجمالي الدين النقدي (سحب)',       _cashWithdrawals,    Icons.money_off_rounded,       Colors.red,     isDark),
-            _buildAutoDisplay('إجمالي سداد الدين النقدي',        _cashDebtRepayment,  Icons.payments_rounded,        Colors.teal,    isDark),
-            _buildAutoDisplay('إجمالي المشتريات تطبيق',          _appPurchases,       Icons.mobile_friendly_rounded, Colors.indigo,  isDark),
-            _buildAutoDisplay('إجمالي المشتريات نقدي',           _cashPurchases,      Icons.shopping_bag_rounded,    Colors.orange,  isDark),
+            _buildAutoDisplay('إجمالي المبيعات على التطبيق',  _appSales,          Icons.phonelink_ring_rounded,  Colors.blue,    isDark),
+            _buildAutoDisplay('إجمالي الدين على التطبيق',     _appDebt,           Icons.account_balance_rounded, Colors.purple,  isDark),
+            _buildAutoDisplay('إجمالي الدين النقدي (سحب)',    _cashWithdrawals,   Icons.money_off_rounded,       Colors.red,     isDark),
+            _buildAutoDisplay('إجمالي سداد الدين النقدي',     _cashDebtRepayment, Icons.payments_rounded,        Colors.teal,    isDark),
+            _buildAutoDisplay('إجمالي المشتريات تطبيق',       _appPurchases,      Icons.mobile_friendly_rounded, Colors.indigo,  isDark),
+            _buildAutoDisplay('إجمالي المشتريات نقدي',        _cashPurchases,     Icons.shopping_bag_rounded,    Colors.orange,  isDark),
           ],
         ),
       ],
     );
   }
 
-  // ── Summary / derived section ──────────────────────────────────────────────
+  // ── Summary section ────────────────────────────────────────────────────────
   Widget _buildSummarySection(bool isDark, bool isSmall) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionTitle('ملخص العمليات', Icons.summarize_rounded, Colors.teal, isDark),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
         GridView.count(
-          crossAxisCount: isSmall ? 1 : 3,
+          crossAxisCount: isSmall ? 1 : 2,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           crossAxisSpacing: 16,
           mainAxisSpacing: 16,
-          childAspectRatio: isSmall ? 2.2 : 2.8,
+          childAspectRatio: isSmall ? 2.8 : 3.5,
           children: [
-            _buildDerivedCard('إجمالي البيع النقدي',  _cashSales,      Colors.green,  isDark,
-                subtitle: 'اليوم + دين نقدي + مشتريات - أمس - سداد الدين'),
-            _buildDerivedCard('إجمالي المشتريات',     _totalPurchases, Colors.orange, isDark,
-                subtitle: 'نقدي + تطبيق'),
-            _buildDerivedCard('إجمالي البيع الكلي',   _totalSales,     Colors.blue,   isDark,
-                subtitle: 'تطبيق + نقدي'),
+            _buildDerivedCard('إجمالي البيع الكلي',    _totalSales,     Colors.blue,   isDark),
+            _buildDerivedCard('إجمالي البيع نقدي',     _cashSales,      Colors.green,  isDark),
+            _buildDerivedCard('إجمالي المبيعات تطبيق', _appSales,       Colors.purple, isDark),
+            _buildDerivedCard('إجمالي المشتريات',      _totalPurchases, Colors.orange, isDark),
           ],
         ),
       ],
@@ -359,8 +601,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       child: ElevatedButton.icon(
         onPressed: _isLoading ? null : _saveStats,
         icon: const Icon(Icons.check_circle_rounded, color: Colors.white),
-        label: const Text('حفظ إحصائيات اليوم النهائية',
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+        label: const Text(
+          'حفظ إحصائيات اليوم النهائية',
+          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+        ),
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF0F172A),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -369,21 +613,23 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
-  // ── Chart ──────────────────────────────────────────────────────────────────
+  // ── Chart (kept but not called in build) ──────────────────────────────────
   Widget _buildChartSection(bool isDark, bool isSmall) {
     if (_monthlyData.isEmpty) return const SizedBox.shrink();
-
     final sortedKeys = _monthlyData.keys.toList()..sort();
     final last7 = sortedKeys.length > 7 ? sortedKeys.sublist(sortedKeys.length - 7) : sortedKeys;
-
     final barGroups = <BarChartGroupData>[];
     for (int i = 0; i < last7.length; i++) {
       barGroups.add(BarChartGroupData(
         x: i,
-        barRods: [BarChartRodData(toY: _monthlyData[last7[i]]!, color: Colors.blue, width: 16, borderRadius: BorderRadius.circular(4))],
+        barRods: [BarChartRodData(
+          toY: _monthlyData[last7[i]]!,
+          color: Colors.blue,
+          width: 16,
+          borderRadius: BorderRadius.circular(4),
+        )],
       ));
     }
-
     return Container(
       height: 350,
       padding: const EdgeInsets.all(24),
@@ -430,10 +676,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   // ── Saved results section ──────────────────────────────────────────────────
   Widget _buildResultsSection(bool isDark, bool isSmall) {
     final s = _savedStats!;
-    final cashSalesStored = s.todayCashInBox - s.yesterdayCashInBox;
-    final totalSalesStored = s.totalSalesCredit + cashSalesStored;
+    final cashSalesStored    = s.todayCashInBox - s.yesterdayCashInBox;
+    final totalSalesStored   = s.totalSalesCredit + cashSalesStored;
     final totalPurchasesStored = s.totalCashPurchases + s.totalAppPurchases;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -449,10 +694,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           mainAxisSpacing: 20,
           childAspectRatio: 3,
           children: [
-            _buildResultCard('إجمالي البيع الكلي',    totalSalesStored,     Colors.blue,   isDark),
-            _buildResultCard('إجمالي البيع نقدي',      cashSalesStored,      Colors.green,  isDark),
-            _buildResultCard('إجمالي المبيعات تطبيق', s.totalSalesCredit,   Colors.purple, isDark),
-            _buildResultCard('إجمالي المشتريات',      totalPurchasesStored, Colors.orange, isDark),
+            _buildResultCard('إجمالي البيع الكلي',    totalSalesStored,      Colors.blue,   isDark),
+            _buildResultCard('إجمالي البيع نقدي',      cashSalesStored,       Colors.green,  isDark),
+            _buildResultCard('إجمالي المبيعات تطبيق', s.totalSalesCredit,    Colors.purple, isDark),
+            _buildResultCard('إجمالي المشتريات',      totalPurchasesStored,  Colors.orange, isDark),
           ],
         ),
       ],
@@ -460,20 +705,26 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   }
 
   // ── Reusable widgets ───────────────────────────────────────────────────────
-
   Widget _sectionTitle(String title, IconData icon, Color color, bool isDark) {
     return Row(children: [
       Icon(icon, color: color, size: 20),
       const SizedBox(width: 8),
       Text(title, style: TextStyle(
-        fontSize: 16, fontWeight: FontWeight.bold,
+        fontSize: 16,
+        fontWeight: FontWeight.bold,
         color: isDark ? Colors.white70 : const Color(0xFF334155),
       )),
     ]);
   }
 
-  Widget _buildManualInput(String label, TextEditingController controller,
-      IconData icon, Color color, bool isDark, {ValueChanged<String>? onChanged}) {
+  Widget _buildManualInput(
+    String label,
+    TextEditingController controller,
+    IconData icon,
+    Color color,
+    bool isDark, {
+    ValueChanged<String>? onChanged,
+  }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: BoxDecoration(
@@ -481,19 +732,18 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: color.withOpacity(0.5), width: 2),
         boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          )
+          BoxShadow(color: color.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4)),
         ],
       ),
       child: TextField(
         controller: controller,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         onChanged: onChanged,
-        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900,
-            color: isDark ? Colors.white : Colors.black),
+        style: TextStyle(
+          fontSize: 24,
+          fontWeight: FontWeight.w900,
+          color: isDark ? Colors.white : Colors.black,
+        ),
         decoration: InputDecoration(
           labelText: label,
           labelStyle: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 14),
@@ -508,7 +758,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   }
 
   Widget _buildAutoDisplay(String label, double value, IconData icon, Color color, bool isDark) {
-    final isNegative = value < 0;
+    final isNegative   = value < 0;
     final displayColor = isNegative ? Colors.redAccent : color;
     return Container(
       padding: const EdgeInsets.all(20),
@@ -533,8 +783,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           children: [
             Text(label, style: TextStyle(color: displayColor, fontWeight: FontWeight.bold, fontSize: 12)),
             Text('${value.toStringAsFixed(2)} ₪',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900,
-                    color: isDark ? Colors.white : const Color(0xFF0F172A))),
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                )),
           ],
         )),
         const Icon(Icons.lock_outline_rounded, color: Colors.grey, size: 16),
@@ -543,7 +796,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   }
 
   Widget _buildDerivedCard(String title, double value, Color color, bool isDark, {String? subtitle}) {
-    final isNegative = value < 0;
+    final isNegative   = value < 0;
     final displayColor = isNegative ? Colors.redAccent : color;
     return Container(
       padding: const EdgeInsets.all(16),

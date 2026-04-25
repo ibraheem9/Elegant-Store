@@ -1214,6 +1214,56 @@ class DatabaseService {
     };
   }
 
+  /// Returns aggregated stats for a date range [start]..[end].
+  /// Queries invoices and purchases whose `created_at` falls within the range.
+  Future<Map<String, double>> getDetailedStatsByRange({
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    final db = await database;
+    final startStr = start.toIso8601String();
+    final endStr   = end.toIso8601String();
+    final invRows = await db.rawQuery('''
+      SELECT
+        COALESCE(SUM(CASE
+          WHEN i.payment_status IN ('PAID','paid') AND pm.type = 'app'
+          THEN i.amount ELSE 0 END), 0) AS app_sales,
+        COALESCE(SUM(CASE
+          WHEN i.payment_status IN ('UNPAID','pending') AND pm.type = 'app'
+          THEN i.amount ELSE 0 END), 0) AS app_unpaid,
+        COALESCE(SUM(CASE
+          WHEN i.type = 'WITHDRAWAL'
+          THEN i.amount ELSE 0 END), 0) AS cash_withdrawals,
+        COALESCE(SUM(CASE
+          WHEN i.type = 'DEPOSIT' AND pm.type = 'cash'
+          THEN i.amount ELSE 0 END), 0) AS cash_debt_repayment
+      FROM invoices i
+      LEFT JOIN payment_methods pm ON i.payment_method_id = pm.id
+      WHERE i.created_at >= ? AND i.created_at <= ? AND i.deleted_at IS NULL
+    ''', [startStr, endStr]);
+    final purRows = await db.rawQuery('''
+      SELECT
+        COALESCE(SUM(CASE WHEN payment_source = 'CASH' THEN amount ELSE 0 END), 0) AS cash_purchases,
+        COALESCE(SUM(CASE WHEN payment_source = 'APP'  THEN amount ELSE 0 END), 0) AS app_purchases
+      FROM purchases
+      WHERE created_at >= ? AND created_at <= ? AND deleted_at IS NULL
+    ''', [startStr, endStr]);
+    final inv = invRows.first;
+    final pur = purRows.first;
+    final double appSalesTotal  = (inv['app_sales'] as num?)?.toDouble() ?? 0.0;
+    final double appUnpaidTotal = (inv['app_unpaid'] as num?)?.toDouble() ?? 0.0;
+    final double appDebt = (appUnpaidTotal - appSalesTotal).clamp(0.0, double.infinity);
+    return {
+      'app_sales':           appSalesTotal,
+      'app_debt':            appDebt,
+      'cash_withdrawals':    (inv['cash_withdrawals'] as num?)?.toDouble() ?? 0.0,
+      'cash_purchases':      (pur['cash_purchases'] as num?)?.toDouble() ?? 0.0,
+      'app_purchases':       (pur['app_purchases'] as num?)?.toDouble() ?? 0.0,
+      'cash_debt_repayment': (inv['cash_debt_repayment'] as num?)?.toDouble() ?? 0.0,
+      'app_debt_repayment':  appSalesTotal,
+    };
+  }
+
   /// [date] defaults to today if null.
   Future<DailyStatistics?> getTodayStatistics({DateTime? date}) async {
     final today = DateFormat('yyyy-MM-dd').format(date ?? DateTime.now());
