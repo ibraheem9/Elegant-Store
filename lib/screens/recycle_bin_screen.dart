@@ -107,11 +107,7 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
         centerTitle: true,
         elevation: 0,
         backgroundColor: Colors.transparent,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, color: isDark ? Colors.blue[300] : Colors.blue[800], size: 20),
-          onPressed: () => Navigator.pop(context),
-          tooltip: 'رجوع',
-        ),
+        automaticallyImplyLeading: false,
       ),
       body: Column(
         children: [

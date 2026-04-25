@@ -191,8 +191,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   _buildSummarySection(isDark, isSmall),
                   const SizedBox(height: 32),
                   _buildSaveButton(),
-                  const SizedBox(height: 48),
-                  _buildChartSection(isDark, isSmall),
                   if (_savedStats != null) ...[
                     const SizedBox(height: 48),
                     const Divider(),

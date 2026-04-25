@@ -10,7 +10,6 @@ import 'statistics_screen.dart';
 import 'purchases_screen.dart';
 import 'customers_screen.dart';
 import 'payments_screen.dart';
-import 'calendar_screen.dart';
 import 'settings_screen.dart';
 import 'payment_methods_screen.dart';
 import 'purchases_methods_screen.dart';
@@ -44,7 +43,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 5: return const AccountantsScreen();
       case 6: return const PaymentsScreen();
       case 7: return const CustomerBalancesScreen();
-      case 8: return const CalendarScreen();
       case 9: return PaymentMethodsScreen(key: _paymentMethodsKey);
       case 10: return PurchasesMethodsScreen(key: _purchasesMethodsKey);
       case 11: return const RecycleBinScreen();
@@ -63,7 +61,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 5: return 'إدارة الموظفين';
       case 6: return 'مراجعة المدفوعات';
       case 7: return 'أرصدة الزبائن';
-      case 8: return 'التقويم المالي';
       case 9: return 'طرق دفع المبيعات';
       case 10: return 'طرق دفع المشتريات';
       case 11: return 'سلة المحذوفات';
@@ -133,7 +130,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   _buildSidebarItem(5, 'إدارة الموظفين', Icons.badge_rounded),
                 _buildSidebarItem(6, 'مراجعة المدفوعات', Icons.payments_rounded),
                 _buildSidebarItem(7, 'أرصدة الزبائن', Icons.account_balance_wallet_rounded),
-                _buildSidebarItem(8, 'التقويم المالي', Icons.calendar_month_rounded),
                 const Divider(color: Colors.white10, indent: 20, endIndent: 20),
                 _buildSidebarItem(9, 'طرق دفع المبيعات', Icons.payment_rounded),
                 _buildSidebarItem(10, 'طرق دفع المشتريات', Icons.account_balance_rounded),
@@ -173,7 +169,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                    _buildSidebarItem(5, 'إدارة الموظفين', Icons.badge_rounded),
                 _buildSidebarItem(6, 'مراجعة المدفوعات', Icons.payments_rounded),
                 _buildSidebarItem(7, 'أرصدة الزبائن', Icons.account_balance_wallet_rounded),
-                _buildSidebarItem(8, 'التقويم المالي', Icons.calendar_month_rounded),
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 10, horizontal: 10),
                   child: Divider(color: Colors.white10),
@@ -210,7 +205,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (auth.isManager())
           const NavigationRailDestination(icon: Icon(Icons.badge_rounded, color: Colors.white60), selectedIcon: Icon(Icons.badge_rounded, color: Colors.blue), label: Text('إدارة الموظفين')),
         const NavigationRailDestination(icon: Icon(Icons.payments_rounded, color: Colors.white60), selectedIcon: Icon(Icons.payments_rounded, color: Colors.blue), label: Text('مراجعة المدفوعات')),
-        const NavigationRailDestination(icon: Icon(Icons.calendar_month_rounded, color: Colors.white60), selectedIcon: Icon(Icons.calendar_month_rounded, color: Colors.blue), label: Text('التقويم المالي')),
         const NavigationRailDestination(icon: Icon(Icons.payment_rounded, color: Colors.white60), selectedIcon: Icon(Icons.payment_rounded, color: Colors.blue), label: Text('طرق الدفع')),
         const NavigationRailDestination(icon: Icon(Icons.delete_sweep_rounded, color: Colors.white60), selectedIcon: Icon(Icons.delete_sweep_rounded, color: Colors.blue), label: Text('المحذوفات')),
         const NavigationRailDestination(icon: Icon(Icons.settings_rounded, color: Colors.white60), selectedIcon: Icon(Icons.settings_rounded, color: Colors.blue), label: Text('الإعدادات')),
