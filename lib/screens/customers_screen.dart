@@ -1031,19 +1031,16 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       isSynced: 0,
     );
     final db = context.read<DatabaseService>();
-    await db.updateInvoiceWithLog(oldInv: inv, newInv: newInv, reason: reason);
-    await db.recalculateUserBalance(inv.userId);
     final _actUser = context.read<AuthService>().currentUser;
-    db.logActivity(
-      targetId: inv.id!,
-      targetType: 'INVOICE',
-      action: 'UPDATE',
-      summary: 'تعديل فاتورة للزبون ${_currentCustomer.name}: المبلغ من ${inv.amount.toStringAsFixed(2)} إلى ${newAmount.toStringAsFixed(2)} ₪ - السبب: $reason',
+    await db.updateInvoiceWithLog(
+      oldInv: inv,
+      newInv: newInv,
       reason: reason,
       performedById: _actUser?.id,
       performedByName: _actUser?.name,
       storeManagerId: _actUser?.parentId ?? _actUser?.id,
-    ).catchError((e) => debugPrint('logActivity failed: $e'));
+    );
+    await db.recalculateUserBalance(inv.userId);
     _loadData();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

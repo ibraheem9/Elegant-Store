@@ -323,16 +323,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         editorName: editor?.name ?? 'غير معروف',
         editorId:   editor?.id ?? 0,
       );
-      db.logActivity(
-        targetId: p.id!,
-        targetType: 'PURCHASE',
-        action: 'UPDATE',
-        summary: 'تعديل مشتريات ${p.merchantName}: المبلغ من ${p.amount.toStringAsFixed(2)} إلى ${newAmount.toStringAsFixed(2)} ₪ - السبب: ${reasonCtrl.text.trim()}',
-        reason: reasonCtrl.text.trim(),
-        performedById: editor?.id,
-        performedByName: editor?.name,
-        storeManagerId: editor?.parentId ?? editor?.id,
-      ).catchError((e) => debugPrint('logActivity failed: $e'));
       await _loadData();
       _snack('تم تعديل الفاتورة بنجاح', Colors.blue);
     }
