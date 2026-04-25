@@ -570,6 +570,16 @@ class DatabaseService {
     }, where: 'id = ?', whereArgs: [id]);
   }
 
+  /// Converts English payment status enum to Arabic display label.
+  static String _statusAr(String status) {
+    switch (status) {
+      case 'DEFERRED': return 'دين';
+      case 'PAID':     return 'مدفوع';
+      case 'UNPAID':   return 'غير مدفوع';
+      default:         return status;
+    }
+  }
+
   Future<int> insertInvoice(Invoice inv) async {
     final db = await database;
     return await db.transaction((txn) async {
@@ -1095,7 +1105,7 @@ class DatabaseService {
         changes.add({'field': 'payment_method_id', 'label': 'طريقة الدفع', 'old': oldInv.paymentMethodId?.toString() ?? '', 'new': newInv.paymentMethodId?.toString() ?? ''});
       }
       if (oldInv.paymentStatus != newInv.paymentStatus) {
-        changes.add({'field': 'payment_status', 'label': 'حالة الدفع', 'old': oldInv.paymentStatus, 'new': newInv.paymentStatus});
+        changes.add({'field': 'payment_status', 'label': 'حالة الدفع', 'old': _statusAr(oldInv.paymentStatus), 'new': _statusAr(newInv.paymentStatus)});
       }
       if (oldInv.createdAt != newInv.createdAt) {
         changes.add({'field': 'created_at', 'label': 'تاريخ الفاتورة', 'old': oldInv.createdAt, 'new': newInv.createdAt});

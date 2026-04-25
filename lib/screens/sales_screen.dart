@@ -397,7 +397,7 @@ class _SalesScreenState extends State<SalesScreen> {
         targetId: invoiceId,
         targetType: 'INVOICE',
         action: 'CREATE',
-        summary: 'فاتورة جديدة للزبون ${customer.name} بمبلغ ${amount.toStringAsFixed(2)} ₪ - الحالة: $status',
+        summary: 'فاتورة جديدة للزبون ${customer.name} بمبلغ ${amount.toStringAsFixed(2)} ₪ - الحالة: ${_translateHistoryValue('payment_status', status)}',
         performedById: _actUser?.id,
         performedByName: _actUser?.name,
         storeManagerId: _actUser?.parentId ?? _actUser?.id,
@@ -669,13 +669,25 @@ class _SalesScreenState extends State<SalesScreen> {
                               ? 'الملاحظات'
                               : rawField == 'payment_method_id'
                                   ? 'طريقة الدفع'
-                                  : rawField ?? 'بيانات الفاتورة';
+                                  : rawField == 'created_at'
+                                      ? 'تاريخ الفاتورة'
+                                      : rawField ?? 'بيانات الفاتورة';
                   // Resolve summary (action label)
                   final action = item['action'] as String? ?? 'UPDATE';
-                  final summary = item['summary'] as String?;
+                  // Translate status values in summary text
+                  String? summary = item['summary'] as String?;
+                  if (summary != null) {
+                    summary = summary
+                        .replaceAll('DEFERRED', 'دين')
+                        .replaceAll('PAID', 'مدفوع')
+                        .replaceAll('UNPAID', 'غير مدفوع');
+                  }
                   final editorName = item['edited_by_name'] as String?;
-                  final oldVal = item['old_value'] as String?;
-                  final newVal = item['new_value'] as String?;
+                  final rawOldVal = item['old_value'] as String?;
+                  final rawNewVal = item['new_value'] as String?;
+                  // Translate status values and format dates in old/new values
+                  final oldVal = _translateHistoryValue(rawField ?? '', rawOldVal);
+                  final newVal = _translateHistoryValue(rawField ?? '', rawNewVal);
                   final reason = item['edit_reason'] as String?;
                   // Format date
                   String dateStr = item['created_at'] as String? ?? '';
@@ -786,7 +798,7 @@ class _SalesScreenState extends State<SalesScreen> {
         targetId: inv.id!,
         targetType: 'INVOICE',
         action: 'DELETE',
-        summary: 'حذف فاتورة بمبلغ ${inv.amount.toStringAsFixed(2)} ₪ - الحالة: ${inv.paymentStatus}',
+        summary: 'حذف فاتورة بمبلغ ${inv.amount.toStringAsFixed(2)} ₪ - الحالة: ${_translateHistoryValue('payment_status', inv.paymentStatus)}',
         performedById: _actUser?.id,
         performedByName: _actUser?.name,
         storeManagerId: _actUser?.parentId ?? _actUser?.id,
@@ -794,6 +806,23 @@ class _SalesScreenState extends State<SalesScreen> {
       await _loadData();
       _showSnackBar('تم نقل الفاتورة لسلة المحذوفات', Colors.redAccent);
     }
+  }
+
+  /// Translates raw DB values to Arabic for display in edit history.
+  String _translateHistoryValue(String field, String? raw) {
+    if (raw == null || raw.isEmpty || raw == 'null') return '-';
+    if (field == 'payment_status') {
+      switch (raw) {
+        case 'DEFERRED': return 'دين';
+        case 'PAID':     return 'مدفوع';
+        case 'UNPAID':   return 'غير مدفوع';
+      }
+    }
+    if (field == 'created_at') {
+      final dt = DateTime.tryParse(raw);
+      if (dt != null) return DateFormat('yyyy/MM/dd').format(dt);
+    }
+    return raw;
   }
 
   void _applyDateFilter(String mode) {
