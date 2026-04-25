@@ -89,9 +89,7 @@ class _SalesScreenState extends State<SalesScreen> {
       DateTime rangeStart = DateTime(_startDate.year, _startDate.month, _startDate.day);
       DateTime rangeEnd = DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59);
       final stats = await db.getSalesStats(start: rangeStart, end: rangeEnd);
-      // Fetch all invoices then filter by invoice_date (manually entered by accountant)
-      final allInvoices = await db.getInvoices();
-      final invoices = _filterByInvoiceDate(allInvoices);
+      final invoices = await db.getInvoices(start: rangeStart, end: rangeEnd);
       if (mounted) {
         setState(() {
           _invoices = invoices;
@@ -118,9 +116,7 @@ class _SalesScreenState extends State<SalesScreen> {
       DateTime rangeEnd = DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59);
       
       final stats = await db.getSalesStats(start: rangeStart, end: rangeEnd);
-      // Fetch all invoices then filter by invoice_date (manually entered by accountant)
-      final allInvoices = await db.getInvoices();
-      final invoices = _filterByInvoiceDate(allInvoices);
+      final invoices = await db.getInvoices(start: rangeStart, end: rangeEnd);
 
       if (mounted) {
         setState(() {
@@ -766,27 +762,6 @@ class _SalesScreenState extends State<SalesScreen> {
       await _loadData();
       _showSnackBar('تم نقل الفاتورة لسلة المحذوفات', Colors.redAccent);
     }
-  }
-
-  /// Filters invoices by their manually-entered invoice_date field.
-  /// invoice_date is stored as 'dd-MM-yyyy EEEE' (e.g. '25-04-2026 السبت').
-  /// We parse the dd-MM-yyyy prefix and compare against [_startDate]..[_endDate].
-  List<Invoice> _filterByInvoiceDate(List<Invoice> all) {
-    return all.where((inv) {
-      // Extract only the date portion (first 10 chars: dd-MM-yyyy)
-      final raw = inv.invoiceDate.length >= 10 ? inv.invoiceDate.substring(0, 10) : inv.invoiceDate;
-      // Parse dd-MM-yyyy
-      final parts = raw.split('-');
-      if (parts.length < 3) return false;
-      final day   = int.tryParse(parts[0]);
-      final month = int.tryParse(parts[1]);
-      final year  = int.tryParse(parts[2]);
-      if (day == null || month == null || year == null) return false;
-      final invDate = DateTime(year, month, day);
-      final rangeStart = DateTime(_startDate.year, _startDate.month, _startDate.day);
-      final rangeEnd   = DateTime(_endDate.year, _endDate.month, _endDate.day);
-      return !invDate.isBefore(rangeStart) && !invDate.isAfter(rangeEnd);
-    }).toList();
   }
 
   void _applyDateFilter(String mode) {
