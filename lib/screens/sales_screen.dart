@@ -674,14 +674,10 @@ class _SalesScreenState extends State<SalesScreen> {
                                       : rawField ?? 'بيانات الفاتورة';
                   // Resolve summary (action label)
                   final action = item['action'] as String? ?? 'UPDATE';
-                  // Translate status values in summary text
-                  String? summary = item['summary'] as String?;
-                  if (summary != null) {
-                    summary = summary
-                        .replaceAll('DEFERRED', 'دين')
-                        .replaceAll('PAID', 'مدفوع')
-                        .replaceAll('UNPAID', 'غير مدفوع');
-                  }
+                  // Translate status values in summary text (handles old stored English values too)
+                  final String? summary = _translateSummary(item['summary'] as String?).isNotEmpty
+                      ? _translateSummary(item['summary'] as String?)
+                      : null;
                   final editorName = item['edited_by_name'] as String?;
                   final rawOldVal = item['old_value'] as String?;
                   final rawNewVal = item['new_value'] as String?;
@@ -811,6 +807,7 @@ class _SalesScreenState extends State<SalesScreen> {
   /// Translates raw DB values to Arabic for display in edit history.
   String _translateHistoryValue(String field, String? raw) {
     if (raw == null || raw.isEmpty || raw == 'null') return '-';
+    // Translate payment status
     if (field == 'payment_status') {
       switch (raw) {
         case 'DEFERRED': return 'دين';
@@ -818,11 +815,24 @@ class _SalesScreenState extends State<SalesScreen> {
         case 'UNPAID':   return 'غير مدفوع';
       }
     }
-    if (field == 'created_at') {
+    // Format ISO date strings to readable local time
+    if (field == 'created_at' || raw.contains('T') || raw.contains('Z')) {
       final dt = DateTime.tryParse(raw);
-      if (dt != null) return DateFormat('yyyy/MM/dd').format(dt);
+      if (dt != null) {
+        final local = dt.toLocal();
+        return DateFormat('yyyy/MM/dd  HH:mm').format(local);
+      }
     }
     return raw;
+  }
+
+  /// Translates English status keywords in any summary string to Arabic.
+  String _translateSummary(String? text) {
+    if (text == null) return '';
+    return text
+        .replaceAll('DEFERRED', 'دين')
+        .replaceAll('PAID', 'مدفوع')
+        .replaceAll('UNPAID', 'غير مدفوع');
   }
 
   void _applyDateFilter(String mode) {
