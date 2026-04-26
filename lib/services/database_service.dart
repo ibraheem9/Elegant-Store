@@ -1170,11 +1170,16 @@ class DatabaseService {
     // Single query to get all invoice-based stats for the day
     final invRows = await db.rawQuery('''
       SELECT
+        -- app_sales = (SALE + PAID + app) + (DEPOSIT + app)
         COALESCE(SUM(CASE
-          WHEN i.payment_status IN ('PAID','paid') AND pm.type = 'app'
-          THEN i.amount ELSE 0 END), 0) AS app_sales,
+          WHEN i.type = 'SALE' AND i.payment_status IN ('PAID','paid') AND pm.type = 'app'
+          THEN i.amount
+          WHEN i.type = 'DEPOSIT' AND pm.type = 'app'
+          THEN i.amount
+          ELSE 0 END), 0) AS app_sales,
+        -- app_debt = SALE + UNPAID + app
         COALESCE(SUM(CASE
-          WHEN i.payment_status IN ('UNPAID','pending') AND pm.type = 'app'
+          WHEN i.type = 'SALE' AND i.payment_status IN ('UNPAID','pending') AND pm.type = 'app'
           THEN i.amount ELSE 0 END), 0) AS app_unpaid,
         COALESCE(SUM(CASE
           WHEN i.type = 'WITHDRAWAL'
@@ -1225,11 +1230,16 @@ class DatabaseService {
     final endStr   = end.toIso8601String();
     final invRows = await db.rawQuery('''
       SELECT
+        -- app_sales = (SALE + PAID + app) + (DEPOSIT + app)
         COALESCE(SUM(CASE
-          WHEN i.payment_status IN ('PAID','paid') AND pm.type = 'app'
-          THEN i.amount ELSE 0 END), 0) AS app_sales,
+          WHEN i.type = 'SALE' AND i.payment_status IN ('PAID','paid') AND pm.type = 'app'
+          THEN i.amount
+          WHEN i.type = 'DEPOSIT' AND pm.type = 'app'
+          THEN i.amount
+          ELSE 0 END), 0) AS app_sales,
+        -- app_debt = SALE + UNPAID + app
         COALESCE(SUM(CASE
-          WHEN i.payment_status IN ('UNPAID','pending') AND pm.type = 'app'
+          WHEN i.type = 'SALE' AND i.payment_status IN ('UNPAID','pending') AND pm.type = 'app'
           THEN i.amount ELSE 0 END), 0) AS app_unpaid,
         COALESCE(SUM(CASE
           WHEN i.type = 'WITHDRAWAL'
