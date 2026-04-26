@@ -1177,13 +1177,15 @@ class DatabaseService {
           WHEN i.type = 'DEPOSIT' AND pm.type = 'app'
           THEN i.amount
           ELSE 0 END), 0) AS app_sales,
-        -- app_debt = SALE + UNPAID + app
+        -- app_debt = SALE + (UNPAID or DEFERRED), any payment method
         COALESCE(SUM(CASE
-          WHEN i.type = 'SALE' AND i.payment_status IN ('UNPAID','pending') AND pm.type = 'app'
-          THEN i.amount ELSE 0 END), 0) AS app_unpaid,
+          WHEN i.type = 'SALE'
+            AND i.payment_status IN ('UNPAID','DEFERRED','unpaid','deferred','pending')
+          THEN i.amount ELSE 0 END), 0) AS app_debt,
+        -- cash_debt = all WITHDRAWAL invoices
         COALESCE(SUM(CASE
           WHEN i.type = 'WITHDRAWAL'
-          THEN i.amount ELSE 0 END), 0) AS cash_withdrawals,
+          THEN i.amount ELSE 0 END), 0) AS cash_debt,
         COALESCE(SUM(CASE
           WHEN i.type = 'DEPOSIT' AND pm.type = 'cash'
           THEN i.amount ELSE 0 END), 0) AS cash_debt_repayment
@@ -1203,19 +1205,17 @@ class DatabaseService {
 
     final inv = invRows.first;
     final pur = purRows.first;
-    final double appSalesTotal  = (inv['app_sales'] as num?)?.toDouble() ?? 0.0;
-    final double appUnpaidTotal = (inv['app_unpaid'] as num?)?.toDouble() ?? 0.0;
-    final double appDebt = (appUnpaidTotal - appSalesTotal).clamp(0.0, double.infinity);
 
     return {
-      'app_sales':           appSalesTotal,
-      'app_debt':            appDebt,
-      'cash_withdrawals':    (inv['cash_withdrawals'] as num?)?.toDouble() ?? 0.0,
+      'app_sales':           (inv['app_sales'] as num?)?.toDouble() ?? 0.0,
+      'app_debt':            (inv['app_debt'] as num?)?.toDouble() ?? 0.0,
+      'cash_debt':           (inv['cash_debt'] as num?)?.toDouble() ?? 0.0,
+      // keep legacy key for backward compatibility
+      'cash_withdrawals':    (inv['cash_debt'] as num?)?.toDouble() ?? 0.0,
       'cash_purchases':      (pur['cash_purchases'] as num?)?.toDouble() ?? 0.0,
       'app_purchases':       (pur['app_purchases'] as num?)?.toDouble() ?? 0.0,
       'cash_debt_repayment': (inv['cash_debt_repayment'] as num?)?.toDouble() ?? 0.0,
-      // legacy key kept for backward compatibility
-      'app_debt_repayment':  appSalesTotal,
+      'app_debt_repayment':  (inv['app_sales'] as num?)?.toDouble() ?? 0.0,
     };
   }
 
@@ -1237,13 +1237,15 @@ class DatabaseService {
           WHEN i.type = 'DEPOSIT' AND pm.type = 'app'
           THEN i.amount
           ELSE 0 END), 0) AS app_sales,
-        -- app_debt = SALE + UNPAID + app
+        -- app_debt = SALE + (UNPAID or DEFERRED), any payment method
         COALESCE(SUM(CASE
-          WHEN i.type = 'SALE' AND i.payment_status IN ('UNPAID','pending') AND pm.type = 'app'
-          THEN i.amount ELSE 0 END), 0) AS app_unpaid,
+          WHEN i.type = 'SALE'
+            AND i.payment_status IN ('UNPAID','DEFERRED','unpaid','deferred','pending')
+          THEN i.amount ELSE 0 END), 0) AS app_debt,
+        -- cash_debt = all WITHDRAWAL invoices
         COALESCE(SUM(CASE
           WHEN i.type = 'WITHDRAWAL'
-          THEN i.amount ELSE 0 END), 0) AS cash_withdrawals,
+          THEN i.amount ELSE 0 END), 0) AS cash_debt,
         COALESCE(SUM(CASE
           WHEN i.type = 'DEPOSIT' AND pm.type = 'cash'
           THEN i.amount ELSE 0 END), 0) AS cash_debt_repayment
@@ -1260,17 +1262,17 @@ class DatabaseService {
     ''', [startStr, endStr]);
     final inv = invRows.first;
     final pur = purRows.first;
-    final double appSalesTotal  = (inv['app_sales'] as num?)?.toDouble() ?? 0.0;
-    final double appUnpaidTotal = (inv['app_unpaid'] as num?)?.toDouble() ?? 0.0;
-    final double appDebt = (appUnpaidTotal - appSalesTotal).clamp(0.0, double.infinity);
+
     return {
-      'app_sales':           appSalesTotal,
-      'app_debt':            appDebt,
-      'cash_withdrawals':    (inv['cash_withdrawals'] as num?)?.toDouble() ?? 0.0,
+      'app_sales':           (inv['app_sales'] as num?)?.toDouble() ?? 0.0,
+      'app_debt':            (inv['app_debt'] as num?)?.toDouble() ?? 0.0,
+      'cash_debt':           (inv['cash_debt'] as num?)?.toDouble() ?? 0.0,
+      // keep legacy key for backward compatibility
+      'cash_withdrawals':    (inv['cash_debt'] as num?)?.toDouble() ?? 0.0,
       'cash_purchases':      (pur['cash_purchases'] as num?)?.toDouble() ?? 0.0,
       'app_purchases':       (pur['app_purchases'] as num?)?.toDouble() ?? 0.0,
       'cash_debt_repayment': (inv['cash_debt_repayment'] as num?)?.toDouble() ?? 0.0,
-      'app_debt_repayment':  appSalesTotal,
+      'app_debt_repayment':  (inv['app_sales'] as num?)?.toDouble() ?? 0.0,
     };
   }
 
