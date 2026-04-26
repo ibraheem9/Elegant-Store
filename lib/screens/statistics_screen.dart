@@ -417,17 +417,17 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         dateText = DateFormat('dd-MM-yyyy EEEE', 'ar').format(_selectedDate);
         break;
       case _FilterMode.week:
-        dateText = 'من \${DateFormat("dd/MM/yyyy").format(_queryStart)} إلى \${DateFormat("dd/MM/yyyy").format(_queryEnd)}';
+        dateText = 'من ${DateFormat("dd/MM/yyyy").format(_queryStart)} إلى ${DateFormat("dd/MM/yyyy").format(_queryEnd)}';
         break;
       case _FilterMode.month:
         dateText = DateFormat('MMMM yyyy', 'ar').format(_selectedDate);
         break;
       case _FilterMode.year:
-        dateText = 'سنة \${_selectedDate.year}';
+        dateText = 'سنة ${_selectedDate.year}';
         break;
       case _FilterMode.custom:
         if (_rangeStart != null && _rangeEnd != null) {
-          dateText = 'من \${DateFormat("dd/MM/yyyy").format(_rangeStart!)} إلى \${DateFormat("dd/MM/yyyy").format(_rangeEnd!)}';
+          dateText = 'من ${DateFormat("dd/MM/yyyy").format(_rangeStart!)} إلى ${DateFormat("dd/MM/yyyy").format(_rangeEnd!)}';
         } else {
           dateText = DateFormat('dd-MM-yyyy').format(_selectedDate);
         }
