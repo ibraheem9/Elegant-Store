@@ -7,6 +7,7 @@ import '../models/models.dart';
 import '../widgets/shimmer_loading.dart';
 import '../services/database_service.dart';
 import '../services/auth_service.dart';
+import '../core/constants/app_colors.dart';
 import 'customers_screen.dart';
 import 'recycle_bin_screen.dart';
 
@@ -1405,19 +1406,35 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Widget _buildSingleInvoiceCard(Invoice inv, bool isDark) {
-    bool isDeposit = inv.type == 'DEPOSIT';
-    bool isWithdrawal = inv.type == 'WITHDRAWAL';
-    Color cardColor = isDeposit
-        ? Colors.green.withOpacity(0.1)
-        : isWithdrawal
-            ? Colors.orange.withOpacity(0.08)
-            : (isDark ? const Color(0xFF0F172A) : Colors.white);
-    Color borderColor = isDeposit
-        ? Colors.green.withOpacity(0.3)
-        : isWithdrawal
-            ? Colors.orange.withOpacity(0.4)
-            : (isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0));
-    Color nameColor = isDeposit ? Colors.green[800]! : isWithdrawal ? Colors.orange[800]! : Colors.blue;
+    final isDeposit    = inv.type == 'DEPOSIT';
+    final isWithdrawal = inv.type == 'WITHDRAWAL';
+    // Unified color system:
+    //   DEPOSIT    → green  (customer paying us back)
+    //   WITHDRAWAL → orange (cash withdrawal from register)
+    //   SALE+PAID  → blue   (paid invoice)
+    //   SALE+UNPAID/DEFERRED → red (debt)
+    final Color cardColor;
+    final Color borderColor;
+    final Color nameColor;
+    final Color statusChipColor;
+
+    if (isDeposit) {
+      cardColor       = AppColors.invoiceDepositBackground;
+      borderColor     = AppColors.invoiceDepositBorder;
+      nameColor       = AppColors.invoiceDeposit;
+      statusChipColor = AppColors.invoiceDeposit;
+    } else if (isWithdrawal) {
+      cardColor       = const Color(0xFFFFF7ED); // orange-50
+      borderColor     = const Color(0xFFFED7AA); // orange-200
+      nameColor       = const Color(0xFFEA580C); // orange-600
+      statusChipColor = const Color(0xFFEA580C);
+    } else {
+      // SALE — color by payment status
+      cardColor       = AppColors.invoiceStatusBackground(inv.paymentStatus);
+      borderColor     = AppColors.invoiceStatusBorder(inv.paymentStatus);
+      nameColor       = AppColors.invoiceStatusColor(inv.paymentStatus);
+      statusChipColor = AppColors.invoiceStatusColor(inv.paymentStatus);
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1425,7 +1442,7 @@ class _SalesScreenState extends State<SalesScreen> {
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor, width: (isDeposit || isWithdrawal) ? 2 : 1),
+        border: Border.all(color: borderColor, width: (isDeposit || isWithdrawal) ? 1.5 : 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1440,11 +1457,11 @@ class _SalesScreenState extends State<SalesScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(inv.customerName ?? 'عابر', style: TextStyle(color: nameColor, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
-                      if (isDeposit) Text('فاتورة تسديد ديون', style: TextStyle(color: Colors.green[700], fontSize: 10, fontWeight: FontWeight.bold)),
+                      if (isDeposit) Text('دفعة سداد ديون', style: TextStyle(color: nameColor.withOpacity(0.8), fontSize: 10, fontWeight: FontWeight.bold)),
                       if (isWithdrawal) Row(children: [
-                        Icon(Icons.account_balance_wallet, size: 11, color: Colors.orange[700]),
+                        Icon(Icons.account_balance_wallet, size: 11, color: nameColor.withOpacity(0.8)),
                         const SizedBox(width: 3),
-                        Flexible(child: Text('سحب نقدي من الصندوق', style: TextStyle(color: Colors.orange[700], fontSize: 10, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                        Flexible(child: Text('سحب نقدي من الصندوق', style: TextStyle(color: nameColor.withOpacity(0.8), fontSize: 10, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
                       ]),
                     ],
                   ),
@@ -1457,15 +1474,17 @@ class _SalesScreenState extends State<SalesScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(inv.invoiceDate, style: TextStyle(color: isDeposit ? Colors.green[700]!.withOpacity(0.7) : isWithdrawal ? Colors.orange[700]!.withOpacity(0.7) : Colors.grey[500], fontSize: 12)),
+              Text(inv.invoiceDate, style: TextStyle(color: nameColor.withOpacity(0.6), fontSize: 12)),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: (isDeposit ? Colors.green : isWithdrawal ? Colors.orange : Colors.blue).withOpacity(0.1),
+                  color: statusChipColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: Text(isWithdrawal ? 'سحب نقدي' : (inv.methodName ?? '-'),
-                  style: TextStyle(fontSize: 10, color: isDeposit ? Colors.green[800] : isWithdrawal ? Colors.orange[800] : Colors.blue, fontWeight: FontWeight.bold)),
+                child: Text(
+                  isWithdrawal ? 'سحب نقدي' : (inv.methodName ?? '-'),
+                  style: TextStyle(fontSize: 10, color: statusChipColor, fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           ),
@@ -1494,12 +1513,12 @@ class _SalesScreenState extends State<SalesScreen> {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               IconButton(
-                icon: Icon(Icons.history, color: isDeposit ? Colors.green[700] : isWithdrawal ? Colors.orange[700] : Colors.grey, size: 20),
+                icon: Icon(Icons.history, color: statusChipColor.withOpacity(0.7), size: 20),
                 tooltip: 'سجل التعديلات',
                 onPressed: () => _showEditHistory(inv.id!),
               ),
               IconButton(
-                icon: Icon(Icons.edit, color: isDeposit ? Colors.green : isWithdrawal ? Colors.orange : Colors.orange, size: 20),
+                icon: Icon(Icons.edit, color: statusChipColor, size: 20),
                 tooltip: 'تعديل',
                 onPressed: () => _showEditInvoiceDialog(inv),
               ),
@@ -1534,15 +1553,23 @@ class _SalesScreenState extends State<SalesScreen> {
               const DataColumn(label: Text('الإجراءات')),
             ],
             rows: displayedInvoices.map((inv) {
-          bool isDeposit = inv.type == 'DEPOSIT';
-          bool isWithdrawal = inv.type == 'WITHDRAWAL';
-          Color rowNameColor = isDeposit ? Colors.green[800]! : isWithdrawal ? Colors.orange[800]! : Colors.blue;
+          final isDeposit    = inv.type == 'DEPOSIT';
+          final isWithdrawal = inv.type == 'WITHDRAWAL';
+          // Unified color system per invoice type/status
+          final Color rowColor;
+          final Color rowNameColor;
+          if (isDeposit) {
+            rowColor     = AppColors.invoiceDepositBackground;
+            rowNameColor = AppColors.invoiceDeposit;
+          } else if (isWithdrawal) {
+            rowColor     = const Color(0xFFFFF7ED);
+            rowNameColor = const Color(0xFFEA580C);
+          } else {
+            rowColor     = AppColors.invoiceStatusBackground(inv.paymentStatus);
+            rowNameColor = AppColors.invoiceStatusColor(inv.paymentStatus);
+          }
           return DataRow(
-            color: isDeposit
-                ? MaterialStateProperty.all(Colors.green.withOpacity(0.05))
-                : isWithdrawal
-                    ? MaterialStateProperty.all(Colors.orange.withOpacity(0.05))
-                    : null,
+            color: MaterialStateProperty.all(rowColor.withOpacity(0.5)),
             cells: [
               DataCell(
                 InkWell(
@@ -1552,15 +1579,15 @@ class _SalesScreenState extends State<SalesScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(inv.customerName ?? 'عابر', style: TextStyle(color: rowNameColor, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
-                      if (isDeposit) Text('فاتورة تسديد ديون', style: TextStyle(color: Colors.green[700], fontSize: 9, fontWeight: FontWeight.bold)),
-                      if (isWithdrawal) Text('سحب نقدي من الصندوق', style: TextStyle(color: Colors.orange[700], fontSize: 9, fontWeight: FontWeight.bold)),
+                      if (isDeposit) Text('دفعة سداد ديون', style: TextStyle(color: rowNameColor.withOpacity(0.8), fontSize: 9, fontWeight: FontWeight.bold)),
+                      if (isWithdrawal) Text('سحب نقدي من الصندوق', style: TextStyle(color: rowNameColor.withOpacity(0.8), fontSize: 9, fontWeight: FontWeight.bold)),
                     ],
                   ),
                 )
               ),
-              DataCell(Text(inv.invoiceDate, style: TextStyle(color: isDeposit ? Colors.green[800] : isWithdrawal ? Colors.orange[800] : null))),
-              DataCell(Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(color: rowNameColor, fontWeight: (isDeposit || isWithdrawal) ? FontWeight.bold : null))),
-              DataCell(Text(isWithdrawal ? 'سحب نقدي' : (inv.methodName ?? '-'), style: TextStyle(color: isDeposit ? Colors.green[800] : isWithdrawal ? Colors.orange[800] : null))),
+              DataCell(Text(inv.invoiceDate, style: TextStyle(color: rowNameColor.withOpacity(0.7), fontSize: 12))),
+              DataCell(Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(color: rowNameColor, fontWeight: FontWeight.bold))),
+              DataCell(Text(isWithdrawal ? 'سحب نقدي' : (inv.methodName ?? '-'), style: TextStyle(color: rowNameColor.withOpacity(0.8)))),
               DataCell(Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -1570,8 +1597,8 @@ class _SalesScreenState extends State<SalesScreen> {
                     Text(inv.lastEditedBy!, style: TextStyle(fontSize: 10, color: Colors.blueGrey[500], fontStyle: FontStyle.italic)),
                     const SizedBox(width: 4),
                   ],
-                  IconButton(icon: Icon(Icons.history, color: isDeposit ? Colors.green[700] : isWithdrawal ? Colors.orange[700] : Colors.grey, size: 18), onPressed: () => _showEditHistory(inv.id!)),
-                  IconButton(icon: Icon(Icons.edit, color: isDeposit ? Colors.green : Colors.orange, size: 18), onPressed: () => _showEditInvoiceDialog(inv)),
+                  IconButton(icon: Icon(Icons.history, color: rowNameColor.withOpacity(0.7), size: 18), onPressed: () => _showEditHistory(inv.id!)),
+                  IconButton(icon: Icon(Icons.edit, color: rowNameColor, size: 18), onPressed: () => _showEditInvoiceDialog(inv)),
                   IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18), onPressed: () => _deleteInvoice(inv)),
                 ],
               )),

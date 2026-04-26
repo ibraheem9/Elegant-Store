@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/auth_service.dart';
+import '../core/constants/app_colors.dart';
 import 'add_edit_customer_form.dart';
 import '../widgets/shimmer_loading.dart';
 
@@ -12,11 +13,9 @@ import '../widgets/shimmer_loading.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 String _fmt(double? value) => (value ?? 0.0).toStringAsFixed(2);
 
-Color _balanceColor(double balance) {
-  if (balance > 0) return Colors.redAccent;
-  if (balance < 0) return Colors.green;
-  return const Color(0xFFD4A574); // skin/beige for zero
-}
+/// Returns the balance text color using the unified AppColors system.
+/// balance > 0 → debtor (red) | balance < 0 → has credit (green) | 0 → grey
+Color _balanceColor(double balance) => AppColors.balanceTextColor(balance);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CustomersScreen
@@ -376,23 +375,22 @@ class _CustomersScreenState extends State<CustomersScreen> {
   Widget _buildCustomerCard(User customer, bool isDark) {
     final isVerified = customer.creditLimit == -1;
     final isManager = context.read<AuthService>().isManager();
-    final isZeroBalance = customer.balance == 0.0;
+    final balance = customer.balance;
+    // Unified color system:
+    //   balance > 0 → debtor (red tint)
+    //   balance < 0 → has credit with us (green tint)
+    //   balance = 0 → settled (neutral grey)
+    final cardBg     = AppColors.customerCardBackground(balance, isDark: isDark);
+    final cardBorder = AppColors.customerCardBorder(balance, isDark: isDark);
+    final borderWidth = balance == 0.0 ? 1.0 : 1.5;
 
     return GestureDetector(
       onTap: () => _navigateToDetails(customer),
       child: Container(
         decoration: BoxDecoration(
-          // Zero-balance customers get a subtle green tint to indicate settled debt
-          color: isZeroBalance
-              ? (isDark ? const Color(0xFF0A2E1A) : const Color(0xFFF0FDF4))
-              : (isDark ? const Color(0xFF0F172A) : Colors.white),
+          color: cardBg,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: isZeroBalance
-                ? (isDark ? const Color(0xFF166534) : const Color(0xFF86EFAC))
-                : (isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
-            width: isZeroBalance ? 1.5 : 1.0,
-          ),
+          border: Border.all(color: cardBorder, width: borderWidth),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         child: Row(
@@ -417,21 +415,55 @@ class _CustomersScreenState extends State<CustomersScreen> {
                         const SizedBox(width: 4),
                         const Icon(Icons.verified, color: Colors.blue, size: 14),
                       ],
-                      // Zero-balance badge: settled indicator
-                      if (isZeroBalance) ...[
+                      // Balance status badge
+                      if (balance == 0.0) ...[  // settled
                         const SizedBox(width: 4),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                           decoration: BoxDecoration(
-                            color: Colors.green.withOpacity(0.15),
+                            color: AppColors.zeroBadge.withOpacity(0.12),
                             borderRadius: BorderRadius.circular(6),
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.check_circle_outline, color: Colors.green, size: 10),
-                              SizedBox(width: 2),
-                              Text('مسدد', style: TextStyle(fontSize: 9, color: Colors.green, fontWeight: FontWeight.bold)),
+                              Icon(Icons.check_circle_outline, color: AppColors.zeroBadge, size: 10),
+                              const SizedBox(width: 2),
+                              Text('مسدد', style: TextStyle(fontSize: 9, color: AppColors.zeroBadge, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                      ] else if (balance > 0) ...[  // debtor
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: AppColors.debtorBadge.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.warning_amber_rounded, color: AppColors.debtorBadge, size: 10),
+                              const SizedBox(width: 2),
+                              Text('مدين', style: TextStyle(fontSize: 9, color: AppColors.debtorBadge, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                      ] else ...[  // has credit
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: AppColors.creditBadge.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.account_balance_wallet_rounded, color: AppColors.creditBadge, size: 10),
+                              const SizedBox(width: 2),
+                              Text('رصيد', style: TextStyle(fontSize: 9, color: AppColors.creditBadge, fontWeight: FontWeight.bold)),
                             ],
                           ),
                         ),
@@ -539,6 +571,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 rows: displayed.map((c) {
                   final isVerified = c.creditLimit == -1;
                   return DataRow(
+                    color: MaterialStateProperty.all(
+                      AppColors.customerCardBackground(c.balance, isDark: isDark)
+                          .withOpacity(c.balance == 0.0 ? 0 : 0.35),
+                    ),
                     cells: [
                       // Name cell — tap to go to details
                       DataCell(
@@ -1451,141 +1487,105 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         itemBuilder: (_, index) {
           final inv = displayed[index];
           final edited = _wasEdited(inv);
-          final isDeposit = inv.type == 'DEPOSIT';
-          final isPaid =
-              inv.paymentStatus == 'PAID' || inv.paymentStatus == 'paid';
+          final isDeposit    = inv.type == 'DEPOSIT';
+          final isWithdrawal = inv.type == 'WITHDRAWAL';
+
+          // Unified color system for invoice cards in customer detail
+          final Color invCardBg;
+          final Color invCardBorder;
+          final Color invAccent;
+          final IconData invIcon;
+          final String invLabel;
 
           if (isDeposit) {
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                color: Colors.green[600]!.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                    color: Colors.green[600]!.withOpacity(0.3), width: 1.5),
-              ),
-              child: Column(children: [
-                Padding(
-                  padding: EdgeInsets.all(isMobile ? 14 : 18),
-                  child: Row(children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                          color: Colors.green[600],
-                          borderRadius: BorderRadius.circular(10)),
-                      child: const Icon(Icons.payments_rounded,
-                          color: Colors.white, size: 18),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('دفعة سداد ديون',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                    color: Colors.green[800])),
-                            if (inv.methodName != null)
-                              Text('عبر: ${inv.methodName}',
-                                  style: TextStyle(
-                                      color: Colors.green[700],
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 11)),
-                            Text('التاريخ: ${inv.invoiceDate}',
-                                style: TextStyle(
-                                    color: Colors.green[800]!.withOpacity(0.7),
-                                    fontSize: 11)),
-                            if (inv.notes != null)
-                              Text(inv.notes!,
-                                  style: TextStyle(
-                                      fontSize: 11, color: Colors.green[900])),
-                          ]),
-                    ),
-                    Text('${_fmt(inv.amount)} ₪',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: isMobile ? 16 : 20,
-                            color: Colors.green[800])),
-                  ]),
-                ),
-                _buildInvoiceActions(inv, edited),
-              ]),
-            );
+            invCardBg     = AppColors.invoiceDepositBackground;
+            invCardBorder = AppColors.invoiceDepositBorder;
+            invAccent     = AppColors.invoiceDeposit;
+            invIcon       = Icons.payments_rounded;
+            invLabel      = 'دفعة سداد ديون';
+          } else if (isWithdrawal) {
+            invCardBg     = const Color(0xFFFFF7ED);
+            invCardBorder = const Color(0xFFFED7AA);
+            invAccent     = const Color(0xFFEA580C);
+            invIcon       = Icons.account_balance_wallet_rounded;
+            invLabel      = 'سحب نقدي';
+          } else {
+            invCardBg     = AppColors.invoiceStatusBackground(inv.paymentStatus);
+            invCardBorder = AppColors.invoiceStatusBorder(inv.paymentStatus);
+            invAccent     = AppColors.invoiceStatusColor(inv.paymentStatus);
+            invIcon       = Icons.receipt_long_rounded;
+            invLabel      = '';
           }
 
           return Container(
             margin: const EdgeInsets.only(bottom: 10),
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF0F172A) : Colors.white,
+              color: invCardBg,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+              border: Border.all(color: invCardBorder, width: 1.5),
             ),
             child: Column(children: [
-              ListTile(
-                contentPadding: EdgeInsets.symmetric(
-                    horizontal: isMobile ? 14 : 18, vertical: 8),
-                title: Row(children: [
-                  Flexible(
-                    child: Text('${_fmt(inv.amount)} ₪',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 16,
-                            color: isDark ? Colors.white : Colors.black),
-                        overflow: TextOverflow.ellipsis),
+              Padding(
+                padding: EdgeInsets.fromLTRB(isMobile ? 14 : 18, isMobile ? 12 : 16, isMobile ? 14 : 18, 8),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  // Icon badge
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: invAccent.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(invIcon, color: invAccent, size: 18),
                   ),
-                ]),
-                subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Builder(builder: (_) {
-                        final methodName = inv.methodName ?? '';
-                        final isDeferred = methodName == 'غير مدفوع' ||
-                            methodName == 'دين' ||
-                            methodName == 'آجل' ||
-                            methodName.toLowerCase() == 'unpaid' ||
-                            methodName.toLowerCase() == 'deferred' ||
-                            methodName.toLowerCase() == 'debt';
-                        if (isDeferred || inv.methodName == null) {
-                          return Text(
-                            methodName == 'دين' ||
-                                    methodName.toLowerCase() == 'debt'
-                                ? 'حالة الفاتورة: دين'
-                                : 'حالة الفاتورة: غير مدفوع',
-                            style: const TextStyle(
-                                color: Colors.orange,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12),
-                          );
-                        }
-                        return Text('وسيلة الدفع: $methodName',
-                            style: TextStyle(
-                                color: isPaid ? Colors.blue : Colors.orange,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12));
-                      }),
+                  const SizedBox(width: 12),
+                  // Details
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      if (invLabel.isNotEmpty)
+                        Text(invLabel, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: invAccent)),
+                      // Amount
+                      Text('${_fmt(inv.amount)} ₪',
+                          style: TextStyle(fontWeight: FontWeight.w900, fontSize: isMobile ? 16 : 20, color: invAccent)),
+                      const SizedBox(height: 2),
+                      // Payment method / status
+                      if (inv.methodName != null)
+                        Text('وسيلة الدفع: ${inv.methodName}',
+                            style: TextStyle(color: invAccent.withOpacity(0.8), fontWeight: FontWeight.w600, fontSize: 11)),
+                      // Date
                       Text('التاريخ: ${inv.invoiceDate}',
-                          style: const TextStyle(
-                              color: Colors.grey, fontSize: 11)),
+                          style: TextStyle(color: invAccent.withOpacity(0.6), fontSize: 11)),
                       if (inv.notes != null)
                         Text('ملاحظات: ${inv.notes}',
-                            style: const TextStyle(
-                                fontSize: 11, fontStyle: FontStyle.italic)),
+                            style: TextStyle(fontSize: 11, color: invAccent.withOpacity(0.7), fontStyle: FontStyle.italic)),
                     ]),
+                  ),
+                  // Status chip
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: invAccent.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      isDeposit ? 'سداد' : isWithdrawal ? 'سحب' : _translateStatus(inv.paymentStatus),
+                      style: TextStyle(fontSize: 10, color: invAccent, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ]),
               ),
-              _buildInvoiceActions(inv, edited),
+              // Bottom accent bar
               Container(
                 height: 3,
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  color: isPaid ? Colors.blue : Colors.orange,
+                  color: invAccent,
                   borderRadius: const BorderRadius.only(
                     bottomLeft: Radius.circular(14),
                     bottomRight: Radius.circular(14),
                   ),
                 ),
               ),
+              _buildInvoiceActions(inv, edited),
             ]),
           );
         },
@@ -1605,6 +1605,16 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
           ),
         ),
     ]);
+  }
+
+  /// Translates payment_status enum to Arabic label.
+  String _translateStatus(String? status) {
+    switch (status?.toUpperCase()) {
+      case 'PAID':     return 'مدفوع';
+      case 'UNPAID':   return 'غير مدفوع';
+      case 'DEFERRED': return 'دين';
+      default:         return status ?? '-';
+    }
   }
 
   Widget _buildInvoiceActions(Invoice inv, bool edited) {
