@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
@@ -33,6 +34,14 @@ import 'database_service.dart';
 ///   }
 /// }
 /// ```
+///
+/// Platform behaviour:
+/// - **Windows**: Opens a native "Save As" dialog so the user can choose the
+///   destination folder and file name before writing.
+/// - **Android / iOS**: Writes to the app documents directory then opens the
+///   system share sheet.
+/// - **macOS / Linux**: Writes to the Downloads folder then opens the share
+///   sheet.
 class ExportService {
   final DatabaseService _dbService;
 
@@ -57,12 +66,21 @@ class ExportService {
   // PUBLIC API
   // ─────────────────────────────────────────────────────────────────────────
 
-  /// Exports all data to a JSON file and opens the system share sheet so the
-  /// user can save it to Files, send it via email, etc.
+  /// Exports all data to a JSON file.
   ///
-  /// Returns the path of the written file.
-  Future<String> exportAndShare() async {
+  /// - On **Windows**: shows a native Save-As dialog so the user picks the
+  ///   destination folder and file name. Returns `null` if the user cancels.
+  /// - On all other platforms: writes to the default export directory and
+  ///   opens the system share sheet.
+  ///
+  /// Returns the final file path, or `null` if the user cancelled (Windows).
+  Future<String?> exportAndShare() async {
     final jsonString = await _buildExportJson();
+
+    if (Platform.isWindows) {
+      return _exportWindows(jsonString);
+    }
+
     final filePath = await _writeToFile(jsonString);
     await _shareFile(filePath);
     return filePath;
@@ -71,6 +89,42 @@ class ExportService {
   /// Exports all data and returns the raw JSON string (useful for testing or
   /// custom save flows).
   Future<String> exportToJsonString() => _buildExportJson();
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PRIVATE: WINDOWS — Save-As dialog
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Opens the native Windows "Save As" dialog, writes the JSON to the chosen
+  /// path, and returns that path. Returns `null` if the user cancels.
+  Future<String?> _exportWindows(String jsonString) async {
+    final String suggestedName =
+        'elegant_store_export_${DateFormat("yyyy-MM-dd_HH-mm-ss").format(DateTime.now())}.json';
+
+    // FilePicker.saveFile returns the full path chosen by the user, or null
+    // if the dialog is dismissed.
+    final String? savePath = await FilePicker.platform.saveFile(
+      dialogTitle: 'حفظ ملف التصدير',
+      fileName: suggestedName,
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+    );
+
+    if (savePath == null) {
+      // User cancelled the dialog — nothing to do.
+      debugPrint('[ExportService] Windows save dialog cancelled by user.');
+      return null;
+    }
+
+    // Ensure the path ends with .json (some Windows versions strip the
+    // extension when the user types a custom name without it).
+    final String finalPath =
+        savePath.endsWith('.json') ? savePath : '$savePath.json';
+
+    final File file = File(finalPath);
+    await file.writeAsString(jsonString, encoding: utf8, flush: true);
+    debugPrint('[ExportService] Written to: ${file.path}');
+    return file.path;
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // PRIVATE: BUILD JSON
@@ -93,14 +147,16 @@ class ExportService {
     for (final table in _tableOrder) {
       final rows = await db.query(table);
       exportData[table] = rows
-          .map((row) => _resolveRowForeignKeys(table, Map<String, dynamic>.from(row)))
+          .map((row) =>
+              _resolveRowForeignKeys(table, Map<String, dynamic>.from(row)))
           .toList();
     }
 
     final payload = {
       'meta': {
         'app': 'Elegant Store',
-        'exported_at': DateFormat("yyyy-MM-dd'T'HH:mm:ss").format(DateTime.now()),
+        'exported_at':
+            DateFormat("yyyy-MM-dd'T'HH:mm:ss").format(DateTime.now()),
         'schema_version': 4,
         'tables': _tableOrder,
         'record_counts': {
@@ -161,8 +217,7 @@ class ExportService {
         break;
 
       case 'edit_history':
-        _replaceIdWithUuid(
-            row, 'edited_by_id', 'edited_by_uuid', 'users');
+        _replaceIdWithUuid(row, 'edited_by_id', 'edited_by_uuid', 'users');
         _replaceIdWithUuid(
             row, 'store_manager_id', 'store_manager_uuid', 'users');
         break;
@@ -194,7 +249,7 @@ class ExportService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // PRIVATE: FILE I/O
+  // PRIVATE: FILE I/O (non-Windows)
   // ─────────────────────────────────────────────────────────────────────────
 
   Future<String> _writeToFile(String jsonString) async {
@@ -214,7 +269,7 @@ class ExportService {
       // accessible via the Files app on iOS / file manager on Android.
       return getApplicationDocumentsDirectory();
     }
-    // Desktop / other platforms — use the Downloads folder
+    // macOS / Linux — use the Downloads folder
     final downloads = await getDownloadsDirectory();
     return downloads ?? await getApplicationDocumentsDirectory();
   }

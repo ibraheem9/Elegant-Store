@@ -127,13 +127,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final db = context.read<DatabaseService>();
       final exportService = ExportService(db);
-      final filePath = await exportService.exportAndShare();
-      if (mounted) {
-        _showSnackBar(
-          'تم تصدير البيانات بنجاح ✓',
-          Colors.green,
-        );
+      final String? filePath = await exportService.exportAndShare();
+      if (!mounted) return;
+      if (filePath == null) {
+        // User cancelled the Save-As dialog (Windows) — no feedback needed.
+        return;
       }
+      _showSnackBar('تم تصدير البيانات بنجاح ✓', Colors.green);
     } catch (e) {
       if (mounted) {
         _showSnackBar('فشل التصدير: $e', Colors.red);
