@@ -303,10 +303,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildHeader(isDark),
-                  const SizedBox(height: 16),
                   _buildFilterBar(isDark),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 10),
+                  _buildFilterDateLabel(isDark),
+                  const SizedBox(height: 20),
                   _buildInputSection(isDark, isSmall),
                   const SizedBox(height: 24),
                   _buildAutoSection(isDark, isSmall),
@@ -348,112 +348,134 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
   // ── Filter bar ─────────────────────────────────────────────────────────────
   Widget _buildFilterBar(bool isDark) {
-    final options = [
-      (_FilterMode.day,    'يوم',      Icons.today_rounded),
-      (_FilterMode.week,   'أسبوع',    Icons.date_range_rounded),
-      (_FilterMode.month,  'شهر',      Icons.calendar_month_rounded),
-      (_FilterMode.year,   'سنة',      Icons.calendar_today_rounded),
-      (_FilterMode.custom, 'تاريخ محدد', Icons.tune_rounded),
+    const options = [
+      (_FilterMode.day,    'يوم'),
+      (_FilterMode.week,   'أسبوع'),
+      (_FilterMode.month,  'شهر'),
+      (_FilterMode.year,   'سنة'),
+      (_FilterMode.custom, 'تاريخ محدد'),
     ];
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
+    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFF0F172A);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
       child: Row(
-        children: options.map((opt) {
-          final (mode, label, icon) = opt;
+        children: List.generate(options.length, (i) {
+          final (mode, label) = options[i];
           final isActive = _filterMode == mode;
-          return Padding(
-            padding: const EdgeInsets.only(left: 8),
+          final isFirst  = i == 0;
+          final isLast   = i == options.length - 1;
+          return Expanded(
             child: GestureDetector(
               onTap: () => _applyFilter(mode),
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                duration: const Duration(milliseconds: 180),
+                height: 40,
                 decoration: BoxDecoration(
                   color: isActive
                       ? const Color(0xFF0F172A)
                       : (isDark ? const Color(0xFF1E293B) : Colors.white),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(
-                    color: isActive
-                        ? const Color(0xFF0F172A)
-                        : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                  border: Border(
+                    top:    BorderSide(color: borderColor),
+                    bottom: BorderSide(color: borderColor),
+                    left:   BorderSide(color: borderColor, width: isFirst ? 1 : 0.4),
+                    right:  BorderSide(color: borderColor, width: isLast  ? 1 : 0.4),
                   ),
-                  boxShadow: isActive
-                      ? [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 8, offset: const Offset(0, 3))]
-                      : [],
+                  borderRadius: isFirst
+                      ? const BorderRadius.only(
+                          topRight:    Radius.circular(10),
+                          bottomRight: Radius.circular(10))
+                      : isLast
+                          ? const BorderRadius.only(
+                              topLeft:    Radius.circular(10),
+                              bottomLeft: Radius.circular(10))
+                          : BorderRadius.zero,
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(icon, size: 16,
-                        color: isActive ? Colors.white : (isDark ? Colors.white60 : Colors.grey)),
-                    const SizedBox(width: 6),
-                    Text(label,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: isActive ? Colors.white : (isDark ? Colors.white70 : const Color(0xFF334155)),
-                        )),
-                  ],
+                alignment: Alignment.center,
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: isActive
+                        ? Colors.white
+                        : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                  ),
                 ),
               ),
             ),
           );
-        }).toList(),
+        }),
       ),
     );
   }
 
-  // ── Header ─────────────────────────────────────────────────────────────────
-  Widget _buildHeader(bool isDark) {
+  // ── Filter date label (replaces old header) ─────────────────────────────────
+  Widget _buildFilterDateLabel(bool isDark) {
+    String dateText;
+    switch (_filterMode) {
+      case _FilterMode.day:
+        dateText = DateFormat('dd-MM-yyyy EEEE', 'ar').format(_selectedDate);
+        break;
+      case _FilterMode.week:
+        dateText = 'من \${DateFormat('dd/MM/yyyy').format(_queryStart)} إلى \${DateFormat('dd/MM/yyyy').format(_queryEnd)}';
+        break;
+      case _FilterMode.month:
+        dateText = DateFormat('MMMM yyyy', 'ar').format(_selectedDate);
+        break;
+      case _FilterMode.year:
+        dateText = 'سنة \${_selectedDate.year}';
+        break;
+      case _FilterMode.custom:
+        if (_rangeStart != null && _rangeEnd != null) {
+          dateText = 'من \${DateFormat('dd/MM/yyyy').format(_rangeStart!)} إلى \${DateFormat('dd/MM/yyyy').format(_rangeEnd!)}';
+        } else {
+          dateText = DateFormat('dd-MM-yyyy').format(_selectedDate);
+        }
+        break;
+    }
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('إحصائيات ونهاية اليوم',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w900,
-                    color: isDark ? Colors.white : const Color(0xFF0F172A),
-                  )),
-              const SizedBox(height: 4),
-              Text(
-                _filterMode == _FilterMode.day
-                    ? 'ليوم: ${DateFormat('dd-MM-yyyy EEEE', 'ar').format(_selectedDate)}'
-                    : 'الفترة: $_filterLabel',
-                style: TextStyle(
-                  color: isDark ? Colors.white60 : const Color(0xFF64748B),
-                  fontSize: 13,
-                ),
-              ),
-            ],
+        Icon(Icons.event_note_rounded,
+            size: 15,
+            color: isDark ? Colors.white54 : const Color(0xFF64748B)),
+        const SizedBox(width: 6),
+        Text(
+          'المطابقة النقدية: ',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            color: isDark ? Colors.white54 : const Color(0xFF64748B),
           ),
         ),
-        // Quick day-picker button (only in day mode)
+        Expanded(
+          child: Text(
+            dateText,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: isDark ? Colors.white : const Color(0xFF0F172A),
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        // Quick day-picker button only in day mode
         if (_filterMode == _FilterMode.day)
-          InkWell(
+          GestureDetector(
             onTap: _pickSingleDay,
-            borderRadius: BorderRadius.circular(12),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
                 color: Colors.blue.withOpacity(0.1),
-                border: Border.all(color: Colors.blue, width: 1.5),
-                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.withOpacity(0.5)),
+                borderRadius: BorderRadius.circular(8),
               ),
-              child: Row(
+              child: const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.calendar_today_rounded, size: 16, color: Colors.blue),
-                  const SizedBox(width: 6),
-                  Text(
-                    DateFormat('dd/MM/yyyy').format(_selectedDate),
-                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 13),
-                  ),
-                  const Icon(Icons.arrow_drop_down_rounded, color: Colors.blue),
+                  Icon(Icons.edit_calendar_rounded, size: 14, color: Colors.blue),
+                  SizedBox(width: 4),
+                  Text('تغيير',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue)),
                 ],
               ),
             ),
