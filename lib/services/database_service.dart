@@ -35,7 +35,7 @@ class DatabaseService {
 
     final db = await openDatabase(
       path,
-      version: 7,
+      version: 8,
       onCreate: (db, version) async {
         await _createTables(db);
         await _createTriggers(db);
@@ -128,9 +128,37 @@ class DatabaseService {
         }
         if (oldVersion < 7) {
           // Fix balance triggers: use full invoice amount (not amount-paid_amount).
-          // The old triggers used (amount - paid_amount) for SALE/WITHDRAWAL which
-          // caused balances to be wrong whenever paid_amount was auto-set.
-          // New formula: SALE/WITHDRAWAL → +amount, DEPOSIT → -amount.
+          try {
+            await db.execute('DROP TRIGGER IF EXISTS trg_invoice_insert');
+          } catch (_) {}
+          try {
+            await db.execute('DROP TRIGGER IF EXISTS trg_invoice_update');
+          } catch (_) {}
+          try {
+            await db.execute('DROP TRIGGER IF EXISTS trg_invoice_delete');
+          } catch (_) {}
+          await _createTriggers(db);
+          await db.rawUpdate('''
+            UPDATE users SET balance = (
+              SELECT COALESCE(SUM(
+                CASE
+                  WHEN i.type IN ('SALE', 'WITHDRAWAL') THEN i.amount
+                  WHEN i.type = 'DEPOSIT'               THEN -i.amount
+                  ELSE 0
+                END
+              ), 0)
+              FROM invoices i
+              WHERE i.user_id = users.id AND i.deleted_at IS NULL
+            )
+            WHERE role = 'CUSTOMER' AND deleted_at IS NULL
+          ''');
+        }
+        if (oldVersion < 8) {
+          // v8: Correct balance formula — payment_status now drives the balance.
+          //   DEPOSIT  PAID                  → -amount  (credit)
+          //   SALE     UNPAID|DEFERRED       → +amount  (debt)
+          //   WITHDRAWAL UNPAID              → +amount  (debt)
+          //   All other combinations         → 0  (settled, no effect)
           try {
             await db.execute('DROP TRIGGER IF EXISTS trg_invoice_insert');
           } catch (_) {}
@@ -146,8 +174,9 @@ class DatabaseService {
             UPDATE users SET balance = (
               SELECT COALESCE(SUM(
                 CASE
-                  WHEN i.type IN ('SALE', 'WITHDRAWAL') THEN i.amount
-                  WHEN i.type = 'DEPOSIT'               THEN -i.amount
+                  WHEN i.type = 'DEPOSIT'    AND i.payment_status IN ('PAID','paid')                          THEN -i.amount
+                  WHEN i.type = 'SALE'       AND i.payment_status IN ('UNPAID','DEFERRED','unpaid','deferred') THEN  i.amount
+                  WHEN i.type = 'WITHDRAWAL' AND i.payment_status IN ('UNPAID','unpaid')                      THEN  i.amount
                   ELSE 0
                 END
               ), 0)
@@ -321,42 +350,66 @@ class DatabaseService {
   }
 
   Future<void> _createTriggers(Database db) async {
-    // Balance formula:
-    //   SALE / WITHDRAWAL  → +amount  (customer owes us)
-    //   DEPOSIT            → -amount  (credit toward customer)
-    // We use the full invoice amount, NOT (amount - paid_amount), because
-    // payment_status is set by the user and does not drive the balance.
-    const String insertSql =
-        "(CASE WHEN new.type IN ('SALE', 'WITHDRAWAL') THEN new.amount WHEN new.type = 'DEPOSIT' THEN (-new.amount) ELSE 0 END)";
-    const String oldSql =
-        "(CASE WHEN old.type IN ('SALE', 'WITHDRAWAL') THEN old.amount WHEN old.type = 'DEPOSIT' THEN (-old.amount) ELSE 0 END)";
-    const String updateNewSql =
-        "(CASE WHEN new.type IN ('SALE', 'WITHDRAWAL') THEN new.amount WHEN new.type = 'DEPOSIT' THEN (-new.amount) ELSE 0 END)";
+    // Balance formula (v8):
+    //   DEPOSIT  + PAID                        → -amount  (credit: customer paid us)
+    //   SALE     + UNPAID or DEFERRED          → +amount  (debt: customer owes us)
+    //   WITHDRAWAL + UNPAID                   → +amount  (debt: customer owes us)
+    //
+    // Invoices that are PAID SALE or PAID WITHDRAWAL do NOT affect balance
+    // because they are already settled — no outstanding debt.
+    //
+    // Triggers use a full-recalculation approach on INSERT/UPDATE/DELETE
+    // to avoid incremental drift from status changes.
 
+    // Contribution of a single invoice row to the balance:
+    //   DEPOSIT  PAID                 → -amount
+    //   SALE     UNPAID|DEFERRED      → +amount
+    //   WITHDRAWAL UNPAID             → +amount
+    //   anything else                 → 0
+    const String _contribution = """
+      CASE
+        WHEN new.type = 'DEPOSIT'    AND new.payment_status IN ('PAID','paid')                          THEN -new.amount
+        WHEN new.type = 'SALE'       AND new.payment_status IN ('UNPAID','DEFERRED','unpaid','deferred') THEN  new.amount
+        WHEN new.type = 'WITHDRAWAL' AND new.payment_status IN ('UNPAID','unpaid')                      THEN  new.amount
+        ELSE 0
+      END""";
+
+    const String _oldContribution = """
+      CASE
+        WHEN old.type = 'DEPOSIT'    AND old.payment_status IN ('PAID','paid')                          THEN -old.amount
+        WHEN old.type = 'SALE'       AND old.payment_status IN ('UNPAID','DEFERRED','unpaid','deferred') THEN  old.amount
+        WHEN old.type = 'WITHDRAWAL' AND old.payment_status IN ('UNPAID','unpaid')                      THEN  old.amount
+        ELSE 0
+      END""";
+
+    // INSERT: add contribution of new row
     await db.execute('''
       CREATE TRIGGER IF NOT EXISTS trg_invoice_insert AFTER INSERT ON invoices
       WHEN (new.deleted_at IS NULL)
       BEGIN
-        UPDATE users SET balance = balance + $insertSql
+        UPDATE users SET balance = balance + ($_contribution)
         WHERE id = new.user_id;
       END;
     ''');
 
+    // UPDATE: subtract old contribution, add new contribution
+    // (handles status changes like UNPAID → PAID correctly)
     await db.execute('''
       CREATE TRIGGER IF NOT EXISTS trg_invoice_update AFTER UPDATE ON invoices
       BEGIN
-        UPDATE users SET balance = balance - $oldSql
+        UPDATE users SET balance = balance - ($_oldContribution)
         WHERE id = old.user_id AND old.deleted_at IS NULL;
-        
-        UPDATE users SET balance = balance + $updateNewSql
+
+        UPDATE users SET balance = balance + ($_contribution)
         WHERE id = new.user_id AND new.deleted_at IS NULL;
       END;
     ''');
 
+    // DELETE (hard delete): subtract old contribution
     await db.execute('''
       CREATE TRIGGER IF NOT EXISTS trg_invoice_delete AFTER DELETE ON invoices
       BEGIN
-        UPDATE users SET balance = balance - $oldSql
+        UPDATE users SET balance = balance - ($_oldContribution)
         WHERE id = old.user_id AND old.deleted_at IS NULL;
       END;
     ''');
@@ -978,6 +1031,12 @@ class DatabaseService {
   ///   SALE / WITHDRAWAL  → +amount  (customer owes us)
   ///   DEPOSIT            → -amount  (we owe customer / credit)
   /// Invoice payment_status is NEVER changed here — it is set only by the user.
+  ///
+  /// Balance formula (v8):
+  ///   DEPOSIT  PAID                  → -amount  (credit)
+  ///   SALE     UNPAID|DEFERRED       → +amount  (debt)
+  ///   WITHDRAWAL UNPAID              → +amount  (debt)
+  ///   All other combinations         → 0
   Future<void> recalculateUserBalance(int userId) async {
     final db = await database;
     final now = DateTime.now().toUtc().toIso8601String();
@@ -987,8 +1046,9 @@ class DatabaseService {
         balance = (
           SELECT COALESCE(SUM(
             CASE
-              WHEN i.type IN ('SALE', 'WITHDRAWAL') THEN i.amount
-              WHEN i.type = 'DEPOSIT'               THEN -i.amount
+              WHEN i.type = 'DEPOSIT'    AND i.payment_status IN ('PAID','paid')                          THEN -i.amount
+              WHEN i.type = 'SALE'       AND i.payment_status IN ('UNPAID','DEFERRED','unpaid','deferred') THEN  i.amount
+              WHEN i.type = 'WITHDRAWAL' AND i.payment_status IN ('UNPAID','unpaid')                      THEN  i.amount
               ELSE 0
             END
           ), 0)
@@ -1005,15 +1065,21 @@ class DatabaseService {
 
   /// Recalculates balances for ALL customers.
   /// Only needed after a full sync where multiple customers may be affected.
-  /// Balance = sum(SALE+WITHDRAWAL amounts) - sum(DEPOSIT amounts) for each customer.
+  ///
+  /// Balance formula (v8):
+  ///   DEPOSIT  PAID                  → -amount  (credit)
+  ///   SALE     UNPAID|DEFERRED       → +amount  (debt)
+  ///   WITHDRAWAL UNPAID              → +amount  (debt)
+  ///   All other combinations         → 0
   Future<void> recalculateAllBalances() async {
     final db = await database;
     await db.rawUpdate('''
       UPDATE users SET balance = (
         SELECT COALESCE(SUM(
           CASE
-            WHEN i.type IN ('SALE', 'WITHDRAWAL') THEN i.amount
-            WHEN i.type = 'DEPOSIT'               THEN -i.amount
+            WHEN i.type = 'DEPOSIT'    AND i.payment_status IN ('PAID','paid')                          THEN -i.amount
+            WHEN i.type = 'SALE'       AND i.payment_status IN ('UNPAID','DEFERRED','unpaid','deferred') THEN  i.amount
+            WHEN i.type = 'WITHDRAWAL' AND i.payment_status IN ('UNPAID','unpaid')                      THEN  i.amount
             ELSE 0
           END
         ), 0)
