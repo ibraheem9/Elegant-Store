@@ -866,8 +866,8 @@ class _SalesScreenState extends State<SalesScreen> {
           _endDate = now;
           break;
         case 'week':
-          final weekStart = now.subtract(Duration(days: now.weekday - 1));
-          _startDate = weekStart;
+          // Last 7 days (today + 6 previous days)
+          _startDate = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 6));
           _endDate = now;
           break;
         case 'month':
@@ -1218,7 +1218,7 @@ class _SalesScreenState extends State<SalesScreen> {
       },
       itemBuilder: (context) => [
         _buildDateMenuItem('day', 'اليوم', Icons.today_rounded),
-        _buildDateMenuItem('week', 'هذا الأسبوع', Icons.date_range_rounded),
+        _buildDateMenuItem('week', 'آخر 7 أيام', Icons.date_range_rounded),
         _buildDateMenuItem('month', 'هذا الشهر', Icons.calendar_month_rounded),
         _buildDateMenuItem('custom', 'تاريخ محدد', Icons.edit_calendar_rounded),
       ],

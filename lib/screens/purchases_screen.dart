@@ -57,8 +57,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         _startDate = DateTime(now.year, now.month, now.day);
         _endDate   = DateTime(now.year, now.month, now.day, 23, 59, 59);
       } else if (filter == 'week') {
-        _startDate = DateTime(now.year, now.month, now.day)
-            .subtract(Duration(days: now.weekday - 1));
+        // Last 7 days (today + 6 previous days)
+        _startDate = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 6));
         _endDate   = DateTime(now.year, now.month, now.day, 23, 59, 59);
       } else if (filter == 'month') {
         _startDate = DateTime(now.year, now.month, 1);

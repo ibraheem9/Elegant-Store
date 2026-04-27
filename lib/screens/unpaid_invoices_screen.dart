@@ -11,7 +11,7 @@ extension _DateFilterLabel on _DateFilter {
     switch (this) {
       case _DateFilter.all:    return 'كل الفترات';
       case _DateFilter.today:  return 'اليوم';
-      case _DateFilter.week:   return 'هذا الأسبوع';
+      case _DateFilter.week:   return 'آخر 7 أيام';
       case _DateFilter.month:  return 'هذا الشهر';
       case _DateFilter.year:   return 'هذه السنة';
       case _DateFilter.custom: return 'تاريخ محدد';
@@ -96,10 +96,9 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
         windowEnd   = windowStart.add(const Duration(days: 1));
         break;
       case _DateFilter.week:
-        // Start from Sunday of the current week
-        final daysSinceSunday = now.weekday % 7;
-        windowStart = DateTime(now.year, now.month, now.day - daysSinceSunday);
-        windowEnd   = windowStart.add(const Duration(days: 7));
+        // Last 7 days (today + 6 previous days)
+        windowStart = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 6));
+        windowEnd   = DateTime(now.year, now.month, now.day, 23, 59, 59);
         break;
       case _DateFilter.month:
         windowStart = DateTime(now.year, now.month, 1);

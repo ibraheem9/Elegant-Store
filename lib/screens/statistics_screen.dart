@@ -51,8 +51,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       case _FilterMode.day:
         return DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
       case _FilterMode.week:
+        // Last 7 days ending on _selectedDate
         final d = _selectedDate;
-        return d.subtract(Duration(days: d.weekday % 7));
+        return DateTime(d.year, d.month, d.day).subtract(const Duration(days: 6));
       case _FilterMode.month:
         return DateTime(_selectedDate.year, _selectedDate.month, 1);
       case _FilterMode.year:
@@ -68,7 +69,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       case _FilterMode.day:
         return DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, 23, 59, 59);
       case _FilterMode.week:
-        return _queryStart.add(const Duration(days: 6, hours: 23, minutes: 59, seconds: 59));
+        // End = end of _selectedDate
+        return DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, 23, 59, 59);
       case _FilterMode.month:
         return DateTime(_selectedDate.year, _selectedDate.month + 1, 0, 23, 59, 59);
       case _FilterMode.year:
