@@ -79,7 +79,7 @@ class _AccountantsScreenState extends State<AccountantsScreen> {
           children: const [
             Icon(Icons.warning_amber_rounded, color: Colors.orange),
             SizedBox(width: 8),
-            Text('تأكيد الحذف', fontWeight: FontWeight.bold),
+            Text('تأكيد الحذف', style: TextStyle(fontWeight: FontWeight.bold)),
           ],
         ),
         content: Column(
