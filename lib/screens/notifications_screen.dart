@@ -143,11 +143,20 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
-          _filterChip('all', 'الكل', _notifications.length, Colors.blueGrey, isDark),
-          const SizedBox(width: 8),
-          _filterChip('unpaid', 'فواتير غير مدفوعة', _unpaidCount, Colors.orange, isDark),
-          const SizedBox(width: 8),
-          _filterChip('ceiling', 'تحذير سقف الدين', _ceilingCount, Colors.red, isDark),
+          Flexible(
+            flex: 1,
+            child: _filterChip('all', 'الكل', _notifications.length, Colors.blueGrey, isDark),
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            flex: 2,
+            child: _filterChip('unpaid', 'فواتير غير مدفوعة', _unpaidCount, Colors.orange, isDark),
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            flex: 2,
+            child: _filterChip('ceiling', 'تحذير سقف الدين', _ceilingCount, Colors.red, isDark),
+          ),
         ],
       ),
     );
@@ -168,7 +177,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(label, style: TextStyle(fontSize: 12, color: selected ? color : (isDark ? Colors.white60 : Colors.grey[600]), fontWeight: selected ? FontWeight.bold : FontWeight.normal)),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(fontSize: 12, color: selected ? color : (isDark ? Colors.white60 : Colors.grey[600]), fontWeight: selected ? FontWeight.bold : FontWeight.normal),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
             if (count > 0) ...[
               const SizedBox(width: 4),
               Container(

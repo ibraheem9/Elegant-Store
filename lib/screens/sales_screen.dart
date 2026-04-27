@@ -732,8 +732,7 @@ class _SalesScreenState extends State<SalesScreen> {
                                     color: badgeColor,
                                   ),
                                   const SizedBox(width: 3),
-                                  ConstrainedBox(
-                                    constraints: const BoxConstraints(maxWidth: 160),
+                                  Flexible(
                                     child: Text(
                                       action == 'CREATE'
                                           ? 'أُنشئت بواسطة: $editorName'
@@ -746,6 +745,7 @@ class _SalesScreenState extends State<SalesScreen> {
                                         color: badgeColor,
                                       ),
                                       overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
                                     ),
                                   ),
                                 ],
@@ -755,7 +755,14 @@ class _SalesScreenState extends State<SalesScreen> {
                               children: [
                                 const Icon(Icons.access_time, size: 12),
                                 const SizedBox(width: 3),
-                                Text(dateStr, style: const TextStyle(fontSize: 11)),
+                                Flexible(
+                                  child: Text(
+                                    dateStr,
+                                    style: const TextStyle(fontSize: 11),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                  ),
+                                ),
                               ],
                             ),
                           ],
