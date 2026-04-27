@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
@@ -45,21 +46,23 @@ class _CustomerFormController {
   final TextEditingController balance;
 
   _CustomerFormController({User? customer})
-      : name = TextEditingController(text: customer?.name ?? ''),
-        nickname = TextEditingController(text: customer?.nickname ?? ''),
-        phone = TextEditingController(text: customer?.phone ?? ''),
-        transferNames =
-            TextEditingController(text: customer?.transferNames ?? ''),
-        notes = TextEditingController(text: customer?.notes ?? ''),
-        creditLimit = TextEditingController(
-          text: customer == null
-              ? '100'
-              : (customer.creditLimit == -1
+    : name = TextEditingController(text: customer?.name ?? ''),
+      nickname = TextEditingController(text: customer?.nickname ?? ''),
+      phone = TextEditingController(text: customer?.phone ?? ''),
+      transferNames = TextEditingController(
+        text: customer?.transferNames ?? '',
+      ),
+      notes = TextEditingController(text: customer?.notes ?? ''),
+      creditLimit = TextEditingController(
+        text: customer == null
+            ? '100'
+            : (customer.creditLimit == -1
                   ? ''
                   : customer.creditLimit?.toString() ?? '100'),
-        ),
-        balance = TextEditingController(
-            text: customer?.balance.toString() ?? '0');
+      ),
+      balance = TextEditingController(
+        text: customer?.balance.toString() ?? '0',
+      );
 
   void dispose() {
     name.dispose();
@@ -78,8 +81,12 @@ class _CustomerFormController {
 class _CustomerFormBody extends StatefulWidget {
   final User? customer;
   final VoidCallback onCancel;
-  final Future<void> Function(_CustomerFormController ctrl, bool isPermanent,
-      bool isUnlimited) onSave;
+  final Future<void> Function(
+    _CustomerFormController ctrl,
+    bool isPermanent,
+    bool isUnlimited,
+  )
+  onSave;
 
   const _CustomerFormBody({
     required this.customer,
@@ -107,8 +114,9 @@ class _CustomerFormBodyState extends State<_CustomerFormBody> {
   void initState() {
     super.initState();
     _ctrl = _CustomerFormController(customer: widget.customer);
-    _isPermanent =
-        widget.customer == null ? true : (widget.customer!.isPermanentCustomer == 1);
+    _isPermanent = widget.customer == null
+        ? true
+        : (widget.customer!.isPermanentCustomer == 1);
     _isUnlimited = widget.customer?.creditLimit == -1;
   }
 
@@ -154,8 +162,7 @@ class _CustomerFormBodyState extends State<_CustomerFormBody> {
     // Check for duplicate name on add
     if (widget.customer == null) {
       final db = context.read<DatabaseService>();
-      final duplicates =
-          await db.findCustomersByName(_ctrl.name.text.trim());
+      final duplicates = await db.findCustomersByName(_ctrl.name.text.trim());
       if (duplicates.isNotEmpty) {
         setState(() => _nameError = 'يوجد زبون بنفس الاسم بالفعل');
         return;
@@ -226,7 +233,9 @@ class _CustomerFormBodyState extends State<_CustomerFormBody> {
             ),
 
             const SizedBox(height: 8),
-            Divider(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+            Divider(
+              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+            ),
             const SizedBox(height: 8),
 
             // ── Permanent customer toggle ──────────────────────────────────
@@ -256,8 +265,9 @@ class _CustomerFormBodyState extends State<_CustomerFormBody> {
                   controller: _ctrl.creditLimit,
                   icon: Icons.speed,
                   isDark: isDark,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   errorText: _limitError,
                   onChanged: (_) => setState(() => _limitError = null),
                 ),
@@ -265,15 +275,26 @@ class _CustomerFormBodyState extends State<_CustomerFormBody> {
             ],
 
             // ── Balance correction (edit only) ────────────────────────────
+            // Allows positive (debtor) and negative (credit) values.
+            // Negative balance means the store owes the customer.
             if (widget.customer != null) ...[
               const SizedBox(height: 8),
               _buildField(
-                label: 'تصحيح الرصيد الحالي (₪)',
+                label: 'تصحيح الرصيد الحالي (₪)  [سالب = رصيد لديك]',
                 controller: _ctrl.balance,
                 icon: Icons.account_balance_wallet,
                 isDark: isDark,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                // Use a plain text keyboard so the minus sign is always
+                // accessible. The formatter below restricts input to a
+                // valid signed decimal number.
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                  signed: true,
+                ),
+                inputFormatters: [
+                  // Allow: optional leading minus, digits, one decimal point
+                  FilteringTextInputFormatter.allow(RegExp(r'^-?\d*\.?\d*')),
+                ],
                 errorText: _balanceError,
                 onChanged: (_) => setState(() => _balanceError = null),
               ),
@@ -290,16 +311,21 @@ class _CustomerFormBodyState extends State<_CustomerFormBody> {
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                       side: BorderSide(
-                          color: isDark
-                              ? const Color(0xFF334155)
-                              : const Color(0xFFCBD5E1)),
+                        color: isDark
+                            ? const Color(0xFF334155)
+                            : const Color(0xFFCBD5E1),
+                      ),
                     ),
-                    child: Text('إلغاء',
-                        style: TextStyle(
-                            color: isDark ? Colors.white60 : Colors.black54,
-                            fontWeight: FontWeight.bold)),
+                    child: Text(
+                      'إلغاء',
+                      style: TextStyle(
+                        color: isDark ? Colors.white60 : Colors.black54,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -312,20 +338,27 @@ class _CustomerFormBodyState extends State<_CustomerFormBody> {
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                     ),
                     child: _isSaving
                         ? const SizedBox(
                             width: 20,
                             height: 20,
                             child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white))
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
                         : Text(
                             widget.customer == null
                                 ? 'إضافة الزبون'
                                 : 'حفظ التعديلات',
                             style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 15)),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
+                          ),
                   ),
                 ),
               ],
@@ -348,6 +381,7 @@ class _CustomerFormBodyState extends State<_CustomerFormBody> {
     int maxLines = 1,
     TextInputType? keyboardType,
     ValueChanged<String>? onChanged,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
@@ -358,27 +392,32 @@ class _CustomerFormBodyState extends State<_CustomerFormBody> {
             controller: controller,
             maxLines: maxLines,
             keyboardType: keyboardType,
+            inputFormatters: inputFormatters,
             onChanged: onChanged,
             style: TextStyle(color: isDark ? Colors.white : Colors.black),
             decoration: InputDecoration(
               labelText: label,
               labelStyle: TextStyle(
-                  color: isDark ? Colors.white60 : Colors.black54,
-                  fontSize: 14),
+                color: isDark ? Colors.white60 : Colors.black54,
+                fontSize: 14,
+              ),
               prefixIcon: Icon(icon, size: 20, color: Colors.blue),
               filled: true,
-              fillColor: isDark ? const Color(0xFF071028) : const Color(0xFFF8FAFC),
+              fillColor: isDark
+                  ? const Color(0xFF071028)
+                  : const Color(0xFFF8FAFC),
               border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none),
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide(
                   color: errorText != null
                       ? Colors.redAccent
                       : (isDark
-                          ? const Color(0xFF1E293B)
-                          : const Color(0xFFE2E8F0)),
+                            ? const Color(0xFF1E293B)
+                            : const Color(0xFFE2E8F0)),
                   width: errorText != null ? 1.5 : 1,
                 ),
               ),
@@ -389,8 +428,10 @@ class _CustomerFormBodyState extends State<_CustomerFormBody> {
                   width: 1.5,
                 ),
               ),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
             ),
           ),
           if (errorText != null) ...[
@@ -399,16 +440,20 @@ class _CustomerFormBodyState extends State<_CustomerFormBody> {
               padding: const EdgeInsets.only(left: 12),
               child: Row(
                 children: [
-                  const Icon(Icons.error_outline,
-                      size: 14, color: Colors.redAccent),
+                  const Icon(
+                    Icons.error_outline,
+                    size: 14,
+                    color: Colors.redAccent,
+                  ),
                   const SizedBox(width: 4),
                   Flexible(
                     child: Text(
                       errorText,
                       style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.redAccent,
-                          fontWeight: FontWeight.w500),
+                        fontSize: 12,
+                        color: Colors.redAccent,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
                 ],
@@ -433,23 +478,29 @@ class _CustomerFormBodyState extends State<_CustomerFormBody> {
         color: isDark ? const Color(0xFF071028) : const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-            color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+        ),
       ),
       child: SwitchListTile.adaptive(
-        title: Text(title,
-            style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white : Colors.black)),
-        subtitle: Text(subtitle,
-            style: TextStyle(
-                fontSize: 12,
-                color: isDark ? Colors.white38 : Colors.black45)),
+        title: Text(
+          title,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: isDark ? Colors.white : Colors.black,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: TextStyle(
+            fontSize: 12,
+            color: isDark ? Colors.white38 : Colors.black45,
+          ),
+        ),
         value: value,
         activeColor: Colors.blue,
         onChanged: onChanged,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       ),
     );
   }
@@ -465,18 +516,21 @@ class _CustomerFormBodyState extends State<_CustomerFormBody> {
         color: isDark ? const Color(0xFF071028) : const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-            color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+        ),
       ),
       child: CheckboxListTile(
-        title: Text(title,
-            style: TextStyle(
-                fontSize: 14,
-                color: isDark ? Colors.white : Colors.black)),
+        title: Text(
+          title,
+          style: TextStyle(
+            fontSize: 14,
+            color: isDark ? Colors.white : Colors.black,
+          ),
+        ),
         value: value,
         activeColor: Colors.blue,
         onChanged: onChanged,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       ),
     );
   }
@@ -495,16 +549,16 @@ Future<void> _performSave(
   final db = context.read<DatabaseService>();
   final auth = context.read<AuthService>();
 
-  final double limit =
-      isUnlimited ? -1 : (double.tryParse(ctrl.creditLimit.text) ?? 100.0);
+  final double limit = isUnlimited
+      ? -1
+      : (double.tryParse(ctrl.creditLimit.text) ?? 100.0);
 
   final userData = User(
     id: customer?.id,
     uuid: customer?.uuid ?? '',
-    parentId: customer?.parentId ??
-        auth.currentUser?.getStoreManagerIdLocal(),
-    username: customer?.username ??
-        'cust_${DateTime.now().millisecondsSinceEpoch}',
+    parentId: customer?.parentId ?? auth.currentUser?.getStoreManagerIdLocal(),
+    username:
+        customer?.username ?? 'cust_${DateTime.now().millisecondsSinceEpoch}',
     name: ctrl.name.text.trim(),
     nickname: ctrl.nickname.text.trim(),
     phone: ctrl.phone.text.trim(),
@@ -516,34 +570,37 @@ Future<void> _performSave(
         : 0.0,
     transferNames: ctrl.transferNames.text.trim(),
     notes: ctrl.notes.text.trim(),
-    createdAt:
-        customer?.createdAt ?? DateTime.now().toIso8601String(),
+    createdAt: customer?.createdAt ?? DateTime.now().toIso8601String(),
   );
 
   if (customer == null) {
     final newCustId = await db.insertUser(userData, '123');
     final _actUser = context.read<AuthService>().currentUser;
-    db.logActivity(
-      targetId: newCustId,
-      targetType: 'CUSTOMER',
-      action: 'CREATE',
-      summary: 'إضافة زبون جديد: ${userData.name}',
-      performedById: _actUser?.id,
-      performedByName: _actUser?.name,
-      storeManagerId: _actUser?.parentId ?? _actUser?.id,
-    ).catchError((e) => debugPrint('logActivity failed: $e'));
+    db
+        .logActivity(
+          targetId: newCustId,
+          targetType: 'CUSTOMER',
+          action: 'CREATE',
+          summary: 'إضافة زبون جديد: ${userData.name}',
+          performedById: _actUser?.id,
+          performedByName: _actUser?.name,
+          storeManagerId: _actUser?.parentId ?? _actUser?.id,
+        )
+        .catchError((e) => debugPrint('logActivity failed: $e'));
   } else {
     await db.updateUser(userData, customer);
     final _actUserUpd = context.read<AuthService>().currentUser;
-    db.logActivity(
-      targetId: customer.id!,
-      targetType: 'CUSTOMER',
-      action: 'UPDATE',
-      summary: 'تعديل بيانات الزبون: ${userData.name}',
-      performedById: _actUserUpd?.id,
-      performedByName: _actUserUpd?.name,
-      storeManagerId: _actUserUpd?.parentId ?? _actUserUpd?.id,
-    ).catchError((e) => debugPrint('logActivity failed: $e'));
+    db
+        .logActivity(
+          targetId: customer.id!,
+          targetType: 'CUSTOMER',
+          action: 'UPDATE',
+          summary: 'تعديل بيانات الزبون: ${userData.name}',
+          performedById: _actUserUpd?.id,
+          performedByName: _actUserUpd?.name,
+          storeManagerId: _actUserUpd?.parentId ?? _actUserUpd?.id,
+        )
+        .catchError((e) => debugPrint('logActivity failed: $e'));
   }
 }
 
@@ -560,33 +617,35 @@ class _AddEditCustomerPage extends StatelessWidget {
     final isAdding = customer == null;
 
     return Scaffold(
-      backgroundColor:
-          isDark ? const Color(0xFF020817) : const Color(0xFFF1F5F9),
+      backgroundColor: isDark
+          ? const Color(0xFF020817)
+          : const Color(0xFFF1F5F9),
       appBar: AppBar(
-        backgroundColor:
-            isDark ? const Color(0xFF0F172A) : Colors.white,
+        backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded,
-              color: isDark ? Colors.white : const Color(0xFF0F172A)),
+          icon: Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: isDark ? Colors.white : const Color(0xFF0F172A),
+          ),
           onPressed: () => Navigator.of(context).pop(false),
           tooltip: 'رجوع',
         ),
         title: Text(
           isAdding ? 'إضافة زبون جديد' : 'تعديل بيانات الزبون',
           style: TextStyle(
-              fontWeight: FontWeight.w900,
-              fontSize: 20,
-              color: isDark ? Colors.white : const Color(0xFF0F172A)),
+            fontWeight: FontWeight.w900,
+            fontSize: 20,
+            color: isDark ? Colors.white : const Color(0xFF0F172A),
+          ),
         ),
         centerTitle: false,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Divider(
-              height: 1,
-              color: isDark
-                  ? const Color(0xFF1E293B)
-                  : const Color(0xFFE2E8F0)),
+            height: 1,
+            color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+          ),
         ),
       ),
       body: _CustomerFormBody(
@@ -621,8 +680,7 @@ class _AddEditCustomerDialog extends StatelessWidget {
 
     return Dialog(
       backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520, maxHeight: 700),
         child: Column(
@@ -630,8 +688,7 @@ class _AddEditCustomerDialog extends StatelessWidget {
           children: [
             // ── Dialog header ──────────────────────────────────────────
             Padding(
-              padding:
-                  const EdgeInsets.fromLTRB(24, 20, 16, 0),
+              padding: const EdgeInsets.fromLTRB(24, 20, 16, 0),
               child: Row(
                 children: [
                   Container(
@@ -640,22 +697,28 @@ class _AddEditCustomerDialog extends StatelessWidget {
                       color: Colors.blue.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.person_add_alt_1_rounded,
-                        color: Colors.blue, size: 22),
+                    child: const Icon(
+                      Icons.person_add_alt_1_rounded,
+                      color: Colors.blue,
+                      size: 22,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       isAdding ? 'إضافة زبون جديد' : 'تعديل بيانات الزبون',
                       style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          color: isDark ? Colors.white : const Color(0xFF0F172A)),
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                      ),
                     ),
                   ),
                   IconButton(
-                    icon: Icon(Icons.close_rounded,
-                        color: isDark ? Colors.white38 : Colors.black38),
+                    icon: Icon(
+                      Icons.close_rounded,
+                      color: isDark ? Colors.white38 : Colors.black38,
+                    ),
                     onPressed: () => Navigator.of(context).pop(false),
                     tooltip: 'إغلاق',
                   ),
@@ -663,9 +726,8 @@ class _AddEditCustomerDialog extends StatelessWidget {
               ),
             ),
             Divider(
-                color: isDark
-                    ? const Color(0xFF1E293B)
-                    : const Color(0xFFE2E8F0)),
+              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+            ),
 
             // ── Form body ──────────────────────────────────────────────
             Flexible(
