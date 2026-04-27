@@ -372,7 +372,7 @@ class _EditAccountantSheetState extends State<_EditAccountantSheet> {
     final password = _passwordController.text;
 
     if (name.isEmpty || username.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
         const SnackBar(
           content: Text('يرجى ملء الاسم واسم المستخدم'),
           backgroundColor: Colors.orange,
@@ -422,7 +422,7 @@ class _EditAccountantSheetState extends State<_EditAccountantSheet> {
 
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
           const SnackBar(
             content: Text('تم تحديث بيانات الموظف بنجاح'),
             backgroundColor: Colors.green,
@@ -432,7 +432,7 @@ class _EditAccountantSheetState extends State<_EditAccountantSheet> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
           SnackBar(content: Text('حدث خطأ: $e'), backgroundColor: Colors.red),
         );
       }

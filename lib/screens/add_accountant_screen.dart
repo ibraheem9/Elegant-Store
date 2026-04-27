@@ -19,7 +19,7 @@ class _AddAccountantScreenState extends State<AddAccountantScreen> {
 
   Future<void> _saveAccountant() async {
     if (_nameController.text.isEmpty || _usernameController.text.isEmpty || _passwordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
         const SnackBar(content: Text('يرجى ملء جميع الحقول'), backgroundColor: Colors.orange),
       );
       return;
@@ -53,14 +53,14 @@ class _AddAccountantScreenState extends State<AddAccountantScreen> {
       ).catchError((e) => debugPrint('logActivity failed: \$e'));
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
           const SnackBar(content: Text('تمت إضافة الموظف بنجاح'), backgroundColor: Colors.green),
         );
         Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
           SnackBar(content: Text('حدث خطأ: $e'), backgroundColor: Colors.red),
         );
       }

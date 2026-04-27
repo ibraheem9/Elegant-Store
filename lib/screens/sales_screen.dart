@@ -508,7 +508,7 @@ class _SalesScreenState extends State<SalesScreen> {
       _selectedPaymentMethod = _paymentMethods.first;
     }
   }
-  void _showSnackBar(String msg, Color color) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: color)); }
+  void _showSnackBar(String msg, Color color) { ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(SnackBar(content: Text(msg), backgroundColor: color)); }
 
   void _navigateToCustomerDetails(int customerId) async {
     final db = context.read<DatabaseService>();

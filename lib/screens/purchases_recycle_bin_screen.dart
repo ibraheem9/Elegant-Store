@@ -161,7 +161,7 @@ class _PurchasesRecycleBinScreenState
 
   void _snack(String msg, Color color) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
       SnackBar(
         content: Text(msg),
         backgroundColor: color,

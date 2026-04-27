@@ -200,7 +200,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
 
     _loadData();
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
         const SnackBar(content: Text('تم تسوية الفاتورة بنجاح'), backgroundColor: Colors.green),
       );
     }
@@ -754,7 +754,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                             Navigator.pop(ctx);
                             _confirmPayment(inv, localMethod!);
                           } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
                               const SnackBar(content: Text('يرجى اختيار وسيلة الدفع')),
                             );
                           }

@@ -261,7 +261,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _showSnackBar(String msg, Color color) {
     ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg), backgroundColor: color));
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(msg), backgroundColor: color));
   }
 
   // ─────────────────────────────────────────────────────────────────────────

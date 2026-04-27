@@ -893,7 +893,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                 Navigator.pop(ctx);
                 _loadData();
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(const SnackBar(
                       content: Text('تم تسجيل دفعة السداد بنجاح'),
                       backgroundColor: Colors.green));
                 }
@@ -976,7 +976,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     ).catchError((e) => debugPrint('logActivity failed: $e'));
     _loadData();
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(const SnackBar(
           content: Text('تم حذف الفاتورة بنجاح'), backgroundColor: Colors.red));
     }
   }
@@ -1079,7 +1079,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     await db.recalculateUserBalance(inv.userId);
     _loadData();
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(const SnackBar(
           content: Text('تم تعديل الفاتورة بنجاح'), backgroundColor: Colors.blue));
     }
   }

@@ -59,7 +59,7 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
       await syncService.performFullSync();
       await _loadStats();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
           const SnackBar(
             content: Text('تمت المزامنة بنجاح ✓'),
             backgroundColor: Colors.green,
@@ -68,7 +68,7 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
           SnackBar(
             content: Text('فشلت المزامنة: $e'),
             backgroundColor: Colors.red,
@@ -134,7 +134,7 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
       await syncService.performFullRestore();
       await _loadStats();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
           const SnackBar(
             content: Text('تمت الاستعادة الكاملة من السيرفر بنجاح ✓'),
             backgroundColor: Colors.teal,
@@ -144,7 +144,7 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
           SnackBar(
             content: Text('فشلت الاستعادة: $e'),
             backgroundColor: Colors.red,
@@ -173,7 +173,7 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
       await prefs.remove('last_sync_time');
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
           const SnackBar(
             content: Text('تم مسح جميع البيانات المحلية. سيتم تحميل البيانات عند المزامنة التالية.'),
             backgroundColor: Colors.orange,
@@ -184,7 +184,7 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
           SnackBar(
             content: Text('فشل إعادة التهيئة: $e'),
             backgroundColor: Colors.red,

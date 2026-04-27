@@ -27,6 +27,7 @@ class PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
 
   List<PaymentMethod> _methods = [];
   bool _isLoading = true;
+  String? _duplicateError; // inline error shown under name field in dialog
 
   final List<Map<String, String>> _types = [
     {'value': 'cash',           'label': 'نقدي'},
@@ -65,7 +66,7 @@ class PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
   }
 
   void _showError(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
       SnackBar(content: Text(msg), backgroundColor: Colors.redAccent),
     );
   }
@@ -88,7 +89,7 @@ class PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
     );
     await db.updatePaymentMethod(updated);
     _refreshMethods();
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
       SnackBar(
         content: Text(updated.isActive == 1
             ? 'تم تفعيل "${method.name}" — ستظهر في شاشة البيع'
@@ -277,7 +278,7 @@ class PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                     await context
                         .read<DatabaseService>()
                         .updatePaymentMethodsOrder(_methods);
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
                       const SnackBar(
                           content: Text('تم حفظ الترتيب الجديد'),
                           backgroundColor: Colors.green),
@@ -585,6 +586,7 @@ class PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
       context: context,
       builder: (context) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
+        String? dialogDuplicateError;
         return StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
             backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
@@ -618,7 +620,29 @@ class PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                             'مثلاً: نقدي، بنك فلسطين، حمودة...', isDark),
                         validator: (v) =>
                             v == null || v.isEmpty ? 'يرجى إدخال الاسم' : null,
+                        onChanged: (_) {
+                          if (dialogDuplicateError != null) {
+                            setDialogState(() => dialogDuplicateError = null);
+                          }
+                        },
                       ),
+                      if (dialogDuplicateError != null) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Icon(Icons.error_outline,
+                                color: Colors.red, size: 14),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                dialogDuplicateError!,
+                                style: const TextStyle(
+                                    color: Colors.red, fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 16),
                       _label('نوع العملية', isDark),
                       DropdownButtonFormField<String>(
@@ -672,7 +696,8 @@ class PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                         excludeId: method?.id,
                       );
                       if (isDuplicate) {
-                        _showError('يوجد وسيلة دفع بنفس الاسم في المبيعات، يرجى اختيار اسم مختلف');
+                        setDialogState(() => dialogDuplicateError =
+                            'يوجد وسيلة دفع بنفس الاسم في المبيعات');
                         return;
                       }
                       final newMethod = PaymentMethod(
@@ -711,7 +736,7 @@ class PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                       if (mounted) {
                         Navigator.pop(context);
                         _refreshMethods();
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
                           SnackBar(
                               content: Text(method == null
                                   ? 'تمت الإضافة بنجاح'
@@ -862,7 +887,7 @@ class PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                   if (mounted) {
                     Navigator.pop(context);
                     _refreshMethods();
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
                       const SnackBar(
                           content: Text('تم الحذف بنجاح'),
                           backgroundColor: Colors.green),

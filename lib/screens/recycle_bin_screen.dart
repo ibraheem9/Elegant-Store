@@ -292,7 +292,7 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
     final db = context.read<DatabaseService>();
     await db.restoreInvoice(inv);
     _loadDeletedInvoices();
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
       const SnackBar(content: Text('تم استعادة الفاتورة بنجاح'), backgroundColor: Colors.green),
     );
   }
@@ -330,7 +330,7 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
       await db.permanentDeleteInvoice(inv.id!);
       _loadDeletedInvoices();
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
           const SnackBar(content: Text('تم حذف الفاتورة نهائياً'), backgroundColor: Colors.red),
         );
       }

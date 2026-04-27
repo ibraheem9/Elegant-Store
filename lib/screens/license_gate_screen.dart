@@ -85,7 +85,7 @@ class _LicenseGateScreenState extends State<LicenseGateScreen> {
 
   void _copyDeviceId() {
     Clipboard.setData(ClipboardData(text: _deviceId));
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
       const SnackBar(
         content: Text('تم نسخ معرّف الجهاز'),
         duration: Duration(seconds: 2),

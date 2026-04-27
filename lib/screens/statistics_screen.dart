@@ -248,7 +248,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       _isLoading  = false;
     });
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
         const SnackBar(
           content: Text('تم حفظ إحصائيات اليوم بنجاح'),
           backgroundColor: Colors.green,
