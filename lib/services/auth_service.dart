@@ -142,11 +142,37 @@ class AuthService extends ChangeNotifier {
 
         final prefs = await SharedPreferences.getInstance();
 
-        final lastUser = prefs.getString('last_logged_username');
-        if (lastUser != null && lastUser != username) {
-          dev.log('User switched! Clearing all local data for security.', name: 'AuthService');
+        // Determine the incoming store_manager_id from the server response.
+        // For STORE_MANAGER / SUPER_ADMIN this is their own UUID/id;
+        // for ACCOUNTANT it is their parent's id.
+        final incomingStoreManagerId =
+            userData['store_manager_id']?.toString() ??
+            userData['id']?.toString();
+
+        final lastUser           = prefs.getString('last_logged_username');
+        final lastStoreManagerId = prefs.getString('last_store_manager_id');
+
+        final bool userSwitched  = lastUser != null && lastUser != username;
+        final bool storeSwitched = lastStoreManagerId != null &&
+            incomingStoreManagerId != null &&
+            lastStoreManagerId != incomingStoreManagerId;
+        // Also force a full sync when a brand-new user logs in on this device
+        // for the first time (lastUser == null means no prior session).
+        final bool freshDevice   = lastUser == null && lastStoreManagerId == null;
+
+        if (userSwitched || storeSwitched) {
+          dev.log(
+            'Account/store switched ($lastUser → $username | '
+            'store $lastStoreManagerId → $incomingStoreManagerId). '
+            'Clearing all local data.',
+            name: 'AuthService',
+          );
           await _dbService.clearAllData();
           await prefs.remove('last_sync_time');
+        } else if (freshDevice) {
+          // First-ever login on this device — ensure a full sync runs.
+          await prefs.remove('last_sync_time');
+          dev.log('Fresh device — cleared last_sync_time to force full sync.', name: 'AuthService');
         }
 
         final now = DateTime.now().toIso8601String();
@@ -177,6 +203,9 @@ class AuthService extends ChangeNotifier {
         await prefs.setString('auth_token', _token!);
         await prefs.setString('saved_username', username);
         await prefs.setString('last_logged_username', username);
+        if (incomingStoreManagerId != null) {
+          await prefs.setString('last_store_manager_id', incomingStoreManagerId);
+        }
         await prefs.setString('last_logged_password', password);
 
         if (saveSession) {
