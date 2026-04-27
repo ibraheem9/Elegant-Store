@@ -785,27 +785,31 @@ class DatabaseService {
   /// This is O(1) per customer instead of O(N) for all customers.
   Future<void> recalculateUserBalance(int userId) async {
     final db = await database;
+    final now = DateTime.now().toUtc().toIso8601String();
     await db.rawUpdate('''
-      UPDATE users SET balance = (
-        SELECT COALESCE(SUM(
-          CASE
-            WHEN i.type IN ('SALE', 'WITHDRAWAL') THEN (i.amount - i.paid_amount)
-            WHEN i.type = 'DEPOSIT' THEN
-              -(
-                i.amount - COALESCE((
-                  SELECT SUM(t.used_amount)
-                  FROM transactions t
-                  WHERE t.invoice_id = i.id AND t.deleted_at IS NULL
-                ), 0)
-              )
-            ELSE 0
-          END
-        ), 0)
-        FROM invoices i
-        WHERE i.user_id = ? AND i.deleted_at IS NULL
-      )
+      UPDATE users SET
+        balance = (
+          SELECT COALESCE(SUM(
+            CASE
+              WHEN i.type IN ('SALE', 'WITHDRAWAL') THEN (i.amount - i.paid_amount)
+              WHEN i.type = 'DEPOSIT' THEN
+                -(
+                  i.amount - COALESCE((
+                    SELECT SUM(t.used_amount)
+                    FROM transactions t
+                    WHERE t.invoice_id = i.id AND t.deleted_at IS NULL
+                  ), 0)
+                )
+              ELSE 0
+            END
+          ), 0)
+          FROM invoices i
+          WHERE i.user_id = ? AND i.deleted_at IS NULL
+        ),
+        updated_at = ?,
+        is_synced = 0
       WHERE id = ?
-    ''', [userId, userId]);
+    ''', [userId, now, userId]);
   }
 
   /// Recalculates balances for ALL customers.

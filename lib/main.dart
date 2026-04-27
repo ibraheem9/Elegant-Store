@@ -197,10 +197,38 @@ class _AppHome extends StatefulWidget {
   State<_AppHome> createState() => _AppHomeState();
 }
 
-class _AppHomeState extends State<_AppHome> {
+class _AppHomeState extends State<_AppHome> with WidgetsBindingObserver {
   /// Tracks whether we have already fired the post-login side effects for the
   /// current session so we don't repeat them on every notifyListeners() call.
   bool _postLoginDone = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Trigger a background sync whenever the app comes back to the foreground.
+  /// This ensures that data added by other users on other devices is pulled
+  /// immediately when the current user opens the app — without waiting for
+  /// the periodic auto-sync timer.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    final authService = context.read<AuthService>();
+    if (!authService.isLoggedIn) return;
+    final syncService = context.read<SyncService>();
+    if (syncService.isSyncing) return;
+    syncService.performFullSync().catchError((e) {
+      debugPrint('Resume sync failed: \$e');
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

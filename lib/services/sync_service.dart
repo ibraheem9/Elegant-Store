@@ -60,7 +60,9 @@ class SyncService extends ChangeNotifier {
 
   // ── Auto-sync timer ──────────────────────────────────────────────────────
   Timer? _autoSyncTimer;
-  static const Duration _autoSyncInterval = Duration(minutes: 10);
+  // 3-minute interval ensures that data added by other users on other devices
+  // is pulled quickly without hammering the server.
+  static const Duration _autoSyncInterval = Duration(minutes: 3);
 
   /// Tables must be processed in dependency order (parents before children).
   static const List<String> _tableOrder = [
