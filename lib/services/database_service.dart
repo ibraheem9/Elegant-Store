@@ -968,7 +968,7 @@ class DatabaseService {
         invoice:          inv,
         customerName:     (m['customer_name']     as String?) ?? '',
         customerNickname: m['customer_nickname']  as String?,
-        balance:          _toDouble(m['customer_balance']),
+        balance:          (m['customer_balance'] as num?)?.toDouble() ?? 0.0,
       );
     }).toList();
   }
