@@ -994,8 +994,8 @@ class DatabaseService {
     return r.map((m) => Invoice.fromMap(m)).toList();
   }
 
-  /// Returns all non-deleted SALE/WITHDRAWAL invoices whose payment_status is
-  /// UNPAID or DEFERRED, joined with the owning customer's current balance.
+  /// Returns all non-deleted SALE invoices whose payment_status is UNPAID,
+  /// joined with the owning customer's current balance.
   /// Results include customer_name, customer_nickname, and the user's balance.
   Future<List<UnpaidRow>> getUnpaidInvoicesWithBalance() async {
     final db = await database;
@@ -1011,8 +1011,8 @@ class DatabaseService {
       JOIN  users          u  ON i.user_id          = u.id
       LEFT JOIN payment_methods pm ON i.payment_method_id = pm.id
       WHERE i.deleted_at IS NULL
-        AND i.type IN ('SALE', 'WITHDRAWAL')
-        AND i.payment_status IN ('UNPAID', 'DEFERRED', 'unpaid', 'deferred')
+        AND i.type = 'SALE'
+        AND i.payment_status IN ('UNPAID', 'unpaid')
       ORDER BY i.created_at DESC
     ''');
     return rows.map((m) {
