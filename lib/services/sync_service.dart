@@ -541,9 +541,24 @@ class SyncService extends ChangeNotifier {
             item.remove('payment_method_id');
             break;
           case 'users':
-            item['parent_uuid'] = uuidCache['users']?[item['parent_id'] as int?];
-            item.remove('parent_id');
-            item.remove('password'); // Never send plain-text password to server
+            {
+              item['parent_uuid'] = uuidCache['users']?[item['parent_id'] as int?];
+              item.remove('parent_id');
+              // For ACCOUNTANT users that have never been synced before (is_synced == 0
+              // and no server-side hash yet), we MUST send the plain-text password so
+              // the server can hash it via Hash::make(). Without this, the server
+              // generates a random password and the employee can never log in.
+              // For all other cases (already synced, STORE_MANAGER, CUSTOMER) we
+              // strip the password to avoid leaking the locally-stored plain text.
+              final role = item['role'] as String? ?? '';
+              final isSynced = (item['is_synced'] as int? ?? 1) == 1;
+              final hasPass = (item['password'] as String?)?.isNotEmpty == true;
+              if (role == 'ACCOUNTANT' && !isSynced && hasPass) {
+                // Keep password — server will hash it on upsert
+              } else {
+                item.remove('password');
+              }
+            }
             break;
           case 'edit_history':
             item['edited_by_uuid'] = uuidCache['users']?[item['edited_by_id'] as int?];

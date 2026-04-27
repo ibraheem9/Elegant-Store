@@ -556,6 +556,20 @@ class DatabaseService {
     }, where: 'id = ?', whereArgs: [newUser.id]);
   }
   
+  /// Updates the plain-text password for a local user (ACCOUNTANT).
+  /// The next sync will send this new password to the server for hashing.
+  Future<void> updateUserPassword(int userId, String newPassword) async {
+    final db = await database;
+    final existing = await db.query('users', where: 'id = ?', whereArgs: [userId], limit: 1);
+    final currentVersion = existing.isNotEmpty ? (existing.first['version'] as int? ?? 0) : 0;
+    await db.update('users', {
+      'password': newPassword,
+      'version': currentVersion + 1,
+      'is_synced': 0,
+      'updated_at': DateTime.now().toIso8601String(),
+    }, where: 'id = ?', whereArgs: [userId]);
+  }
+
   Future<void> softDeleteUser(int id) async {
     final db = await database;
     final now = DateTime.now().toIso8601String();
@@ -2005,26 +2019,24 @@ class DatabaseService {
   /// Returns true if the accountant (employee) has any linked invoices or payments
   Future<bool> accountantHasOperations(int accountantId) async {
     final db = await database;
-    // Check invoices linked to this accountant via payment method
-    final invoiceResult = await db.rawQuery('''
-      SELECT COUNT(*) as cnt
-      FROM invoices
-      WHERE payment_method_id IN (
-        SELECT id FROM payment_methods WHERE accountant_id = ?
-      )
-      AND deleted_at IS NULL
-    ''', [accountantId]);
-    final invoiceCount = (invoiceResult.first['cnt'] as int?) ?? 0;
-    if (invoiceCount > 0) return true;
 
-    // Check if accountant is directly referenced in any transaction
-    final txResult = await db.rawQuery('''
+    // Check if this employee has any entries in edit_history
+    // (i.e. they created, edited or deleted any record in the system)
+    final historyResult = await db.rawQuery('''
       SELECT COUNT(*) as cnt
-      FROM transactions
-      WHERE accountant_id = ?
-      AND deleted_at IS NULL
+      FROM edit_history
+      WHERE edited_by_id = ?
     ''', [accountantId]);
-    final txCount = (txResult.first['cnt'] as int?) ?? 0;
-    return txCount > 0;
+    final historyCount = (historyResult.first['cnt'] as int?) ?? 0;
+    if (historyCount > 0) return true;
+
+    // Check daily_statistics created by this employee
+    final statsResult = await db.rawQuery('''
+      SELECT COUNT(*) as cnt
+      FROM daily_statistics
+      WHERE store_manager_id = ?
+    ''', [accountantId]);
+    final statsCount = (statsResult.first['cnt'] as int?) ?? 0;
+    return statsCount > 0;
   }
 }
