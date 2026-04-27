@@ -550,3 +550,21 @@ class DailyStatistics {
     );
   }
 }
+
+// ── UnpaidRow ─────────────────────────────────────────────────────────────────
+/// Lightweight projection used by the Unpaid Invoices screen.
+/// Combines an [Invoice] with the owning customer's current [balance],
+/// [customerName], and optional [customerNickname].
+class UnpaidRow {
+  final Invoice invoice;
+  final String  customerName;
+  final String? customerNickname;
+  final double  balance;
+
+  const UnpaidRow({
+    required this.invoice,
+    required this.customerName,
+    this.customerNickname,
+    required this.balance,
+  });
+}

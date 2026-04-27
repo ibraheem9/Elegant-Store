@@ -18,6 +18,7 @@ import 'notifications_screen.dart';
 import 'accountants_screen.dart';
 import 'sync_details_screen.dart';
 import 'customer_balances_screen.dart';
+import 'unpaid_invoices_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -43,6 +44,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 5: return const AccountantsScreen();
       case 6: return const PaymentsScreen();
       case 7: return const CustomerBalancesScreen();
+      case 8: return const UnpaidInvoicesScreen();
       case 9: return PaymentMethodsScreen(key: _paymentMethodsKey);
       case 10: return PurchasesMethodsScreen(key: _purchasesMethodsKey);
       case 11: return const RecycleBinScreen();
@@ -61,6 +63,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 5: return 'إدارة الموظفين';
       case 6: return 'مراجعة المدفوعات';
       case 7: return 'أرصدة الزبائن';
+      case 8: return 'الفواتير غير المدفوعة';
       case 9: return 'طرق دفع المبيعات';
       case 10: return 'طرق دفع المشتريات';
       case 11: return 'سلة المحذوفات';
@@ -123,6 +126,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 _buildSidebarItem(0, 'لوحة التحكم', Icons.dashboard_rounded),
                 _buildSidebarItem(1, 'شاشة البيع', Icons.receipt_long_rounded),
+                _buildSidebarItem(8, 'الفواتير غير المدفوعة', Icons.unpublished_rounded),
                 _buildSidebarItem(2, 'إحصائيات اليوم', Icons.bar_chart_rounded),
                 _buildSidebarItem(3, 'المشتريات', Icons.shopping_cart_rounded),
                 _buildSidebarItem(4, 'إدارة الزبائن', Icons.people_alt_rounded),
@@ -162,6 +166,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 _buildSidebarItem(0, 'لوحة التحكم', Icons.dashboard_rounded),
                 _buildSidebarItem(1, 'شاشة البيع', Icons.receipt_long_rounded),
+                _buildSidebarItem(8, 'الفواتير غير المدفوعة', Icons.unpublished_rounded),
                 _buildSidebarItem(2, 'إحصائيات اليوم', Icons.bar_chart_rounded),
                 _buildSidebarItem(3, 'المشتريات', Icons.shopping_cart_rounded),
                 _buildSidebarItem(4, 'إدارة الزبائن', Icons.people_alt_rounded),

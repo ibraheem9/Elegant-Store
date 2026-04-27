@@ -941,6 +941,38 @@ class DatabaseService {
     return r.map((m) => Invoice.fromMap(m)).toList();
   }
 
+  /// Returns all non-deleted SALE/WITHDRAWAL invoices whose payment_status is
+  /// UNPAID or DEFERRED, joined with the owning customer's current balance.
+  /// Results include customer_name, customer_nickname, and the user's balance.
+  Future<List<UnpaidRow>> getUnpaidInvoicesWithBalance() async {
+    final db = await database;
+    final rows = await db.rawQuery('''
+      SELECT
+        i.*,
+        u.name          AS customer_name,
+        u.nickname      AS customer_nickname,
+        u.balance       AS customer_balance,
+        u.is_permanent_customer AS customer_is_permanent,
+        pm.name         AS method_name
+      FROM invoices i
+      JOIN  users          u  ON i.user_id          = u.id
+      LEFT JOIN payment_methods pm ON i.payment_method_id = pm.id
+      WHERE i.deleted_at IS NULL
+        AND i.type IN ('SALE', 'WITHDRAWAL')
+        AND i.payment_status IN ('UNPAID', 'DEFERRED', 'unpaid', 'deferred')
+      ORDER BY i.created_at DESC
+    ''');
+    return rows.map((m) {
+      final inv = Invoice.fromMap(m);
+      return UnpaidRow(
+        invoice:          inv,
+        customerName:     (m['customer_name']     as String?) ?? '',
+        customerNickname: m['customer_nickname']  as String?,
+        balance:          _toDouble(m['customer_balance']),
+      );
+    }).toList();
+  }
+
   /// Recalculates the balance for a **single** customer.
   /// Balance = sum of all active invoices:
   ///   SALE / WITHDRAWAL  → +amount  (customer owes us)
