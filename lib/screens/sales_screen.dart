@@ -277,16 +277,26 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   void _filterCustomers(String query) {
+    // If the typed text no longer exactly matches the selected customer's name,
+    // clear the selection so the balance preview resets to zero.
+    if (_selectedCustomer != null &&
+        query.trim() != _selectedCustomer!.name) {
+      _selectedCustomer = null;
+      _selectedCustomerBalance = null;
+    }
+
     if (query.trim().isEmpty) {
       _filteredCustomers = [];
       _hideOverlay();
+      setState(() {});
       return;
     }
     final searchNormalized = _normalizeArabic(query);
     _filteredCustomers = _allCustomers.where((c) {
       final nameNormalized = _normalizeArabic(c.name);
-      final nicknameNormalized = _normalizeArabic(c.nickname ?? "");
-      return nameNormalized.contains(searchNormalized) || nicknameNormalized.contains(searchNormalized);
+      final nicknameNormalized = _normalizeArabic(c.nickname ?? '');
+      return nameNormalized.contains(searchNormalized) ||
+          nicknameNormalized.contains(searchNormalized);
     }).toList();
 
     if (_filteredCustomers.isNotEmpty) _showOverlay();
