@@ -73,15 +73,16 @@ class _LoginScreenState extends State<LoginScreen> {
       final authService = Provider.of<AuthService>(context, listen: false);
       final syncService = Provider.of<SyncService>(context, listen: false);
 
-      final bool firstLogin = await _isFirstLogin();
-
-      // Step 1: Online API authentication (always online on first login)
+      // Step 1: Online API authentication
+      // NOTE: _isFirstLogin() is intentionally checked AFTER authService.login()
+      // because login() may clear last_sync_time (e.g. when a different user or
+      // store logs in). Reading it before login would cause a race condition where
+      // firstLogin = false even though login() just cleared last_sync_time.
       final LoginResult result = await authService.login(
         _usernameController.text.trim(),
         _passwordController.text,
         saveSession: _keepMeLoggedIn,
       );
-
       switch (result) {
         case LoginResult.success:
           break; // continue to sync step below
@@ -102,7 +103,11 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
       }
 
-      // Step 2: On first login, await the initial sync so the dashboard has data
+      // Step 2: Check AFTER login() — login() may have cleared last_sync_time
+      // for a new user/store, so we must re-read it here, not before login().
+      final bool firstLogin = await _isFirstLogin();
+
+      // Step 3: On first login (or after user/store switch), run full sync
       if (firstLogin && mounted) {
         setState(() => _syncStatusMessage = 'جاري تحميل بيانات المتجر...');
         try {
