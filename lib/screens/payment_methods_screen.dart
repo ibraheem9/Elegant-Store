@@ -665,6 +665,16 @@ class PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                   if (_formKey.currentState!.validate()) {
                     try {
                       final db = context.read<DatabaseService>();
+                      // Check for duplicate name (case-insensitive) within SALE category
+                      final isDuplicate = await db.isPaymentMethodNameDuplicate(
+                        _nameController.text.trim(),
+                        category: 'SALE',
+                        excludeId: method?.id,
+                      );
+                      if (isDuplicate) {
+                        _showError('يوجد وسيلة دفع بنفس الاسم في المبيعات، يرجى اختيار اسم مختلف');
+                        return;
+                      }
                       final newMethod = PaymentMethod(
                         id: method?.id,
                         name: _nameController.text.trim(),

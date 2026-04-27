@@ -643,6 +643,16 @@ class PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
                   if (_formKey.currentState!.validate()) {
                     try {
                       final db = context.read<DatabaseService>();
+                      // Check for duplicate name (case-insensitive) within PURCHASE category
+                      final isDuplicate = await db.isPaymentMethodNameDuplicate(
+                        _nameController.text.trim(),
+                        category: 'PURCHASE',
+                        excludeId: method?.id,
+                      );
+                      if (isDuplicate) {
+                        _showError('يوجد وسيلة دفع بنفس الاسم في المشتريات، يرجى اختيار اسم مختلف');
+                        return;
+                      }
                       final newMethod = PaymentMethod(
                         id: method?.id,
                         name: _nameController.text.trim(),

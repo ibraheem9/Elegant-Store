@@ -1264,6 +1264,30 @@ class DatabaseService {
     return r.map((m) => PaymentMethod.fromMap(m)).toList();
   }
 
+  /// Returns true if a payment method with the same [name] (case-insensitive)
+  /// already exists in the same [category] (SALE or PURCHASE), excluding the
+  /// record with [excludeId] (used when editing an existing method).
+  Future<bool> isPaymentMethodNameDuplicate(
+    String name, {
+    required String category,
+    int? excludeId,
+  }) async {
+    final db = await database;
+    final trimmed = name.trim().toLowerCase();
+    final rows = await db.rawQuery(
+      '''
+      SELECT id FROM payment_methods
+      WHERE LOWER(TRIM(name)) = ?
+        AND category = ?
+        AND deleted_at IS NULL
+        ${excludeId != null ? 'AND id != ?' : ''}
+      LIMIT 1
+      ''',
+      [trimmed, category, if (excludeId != null) excludeId],
+    );
+    return rows.isNotEmpty;
+  }
+
   Future<int> insertPaymentMethod(PaymentMethod m) async {
     final db = await database;
     final now = DateTime.now().toIso8601String();
