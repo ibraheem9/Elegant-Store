@@ -60,11 +60,25 @@ class SyncService extends ChangeNotifier {
 
   // ── Auto-sync timer ──────────────────────────────────────────────────────
   Timer? _autoSyncTimer;
-  // 3-minute interval ensures that data added by other users on other devices
-  // is pulled quickly without hammering the server.
   static const Duration _autoSyncInterval = Duration(minutes: 3);
 
-  /// Tables must be processed in dependency order (parents before children).
+  /// Tables that contain parent records (no FK dependencies on other tables).
+  /// These must be written FIRST so child tables can resolve their FKs.
+  static const List<String> _parentTables = [
+    'payment_methods',
+    'users',
+  ];
+
+  /// Tables that depend on parent tables via FK.
+  static const List<String> _childTables = [
+    'invoices',
+    'transactions',
+    'purchases',
+    'daily_statistics',
+    'edit_history',
+  ];
+
+  /// Full ordered list for push payload preparation.
   static const List<String> _tableOrder = [
     'payment_methods',
     'users',
@@ -105,55 +119,35 @@ class SyncService extends ChangeNotifier {
   // AUTO-SYNC TIMER
   // ─────────────────────────────────────────────────────────────────────────
 
-  /// Starts the background auto-sync timer.
-  /// Should be called after a successful login.
   void startAutoSync() {
     _autoSyncTimer?.cancel();
     _autoSyncTimer = Timer.periodic(_autoSyncInterval, (_) async {
       final hasInternet = await checkConnectivity();
-      if (!hasInternet) {
-        dev.log('Auto-sync skipped: no internet.', name: 'SyncService');
-        return;
-      }
-      if (_isSyncing) {
-        dev.log('Auto-sync skipped: sync already in progress.', name: 'SyncService');
-        return;
-      }
-      dev.log('Auto-sync triggered (every 10 min).', name: 'SyncService');
+      if (!hasInternet || _isSyncing) return;
+      dev.log('Auto-sync triggered.', name: 'SyncService');
       try {
         await performFullSync();
-        dev.log('Auto-sync completed successfully.', name: 'SyncService');
       } catch (e) {
         dev.log('Auto-sync failed silently: $e', name: 'SyncService');
-        // Silent failure — do not interrupt the user.
       }
     });
-    dev.log('Auto-sync timer started (interval: 10 min).', name: 'SyncService');
+    dev.log('Auto-sync timer started (interval: ${_autoSyncInterval.inMinutes} min).', name: 'SyncService');
   }
 
-  /// Stops the background auto-sync timer.
-  /// Should be called before logout.
   void stopAutoSync() {
     _autoSyncTimer?.cancel();
     _autoSyncTimer = null;
     dev.log('Auto-sync timer stopped.', name: 'SyncService');
   }
 
-  /// Performs a sync and then stops the timer.
-  /// Used by the logout flow to ensure data is pushed before signing out.
   Future<void> syncBeforeLogout() async {
     stopAutoSync();
     final hasInternet = await checkConnectivity();
-    if (!hasInternet) {
-      dev.log('Logout sync skipped: no internet.', name: 'SyncService');
-      return; // Proceed with logout even if offline
-    }
+    if (!hasInternet) return;
     try {
       await performFullSync();
-      dev.log('Pre-logout sync completed.', name: 'SyncService');
     } catch (e) {
       dev.log('Pre-logout sync failed (non-blocking): $e', name: 'SyncService');
-      // Non-blocking — logout proceeds regardless
     }
   }
 
@@ -190,31 +184,25 @@ class SyncService extends ChangeNotifier {
   // SAFE TYPE HELPERS
   // ─────────────────────────────────────────────────────────────────────────
 
-  /// Safely extract a Map<String, dynamic> from a dynamic value.
-  /// Handles the case where PHP sends `[]` (empty array) instead of `{}`
-  /// (empty object) for associative arrays that happen to be empty.
   Map<String, dynamic>? _safeMap(dynamic value) {
     if (value == null) return null;
     if (value is Map) return Map<String, dynamic>.from(value);
-    // PHP sends empty arrays `[]` for empty associative arrays
     if (value is List && value.isEmpty) return {};
     return null;
   }
 
-  /// Safely extract a String from a dynamic value.
   String? _safeString(dynamic value) {
     if (value == null) return null;
     return value.toString();
   }
 
+  bool _isSuccessResponse(dynamic success) =>
+      success == true || success == 'true' || success == 1;
+
   // ─────────────────────────────────────────────────────────────────────────
   // MAIN SYNC ENTRY POINT
   // ─────────────────────────────────────────────────────────────────────────
 
-  /// Performs a full bidirectional sync with the server.
-  ///
-  /// [isInitialSync] = true → sends last_sync_time = null so the server
-  /// returns ALL store data (used on first login or after a user switch).
   Future<void> performFullSync({bool isInitialSync = false}) async {
     if (_isSyncing) return;
 
@@ -231,12 +219,10 @@ class SyncService extends ChangeNotifier {
     try {
       dev.log('Starting sync. Initial: $isInitialSync', name: 'SyncService');
 
-      // On initial sync, send null so server returns all data
       final String? lastSyncTime =
           isInitialSync ? null : _prefs.getString('last_sync_time');
 
       final payload = await _prepareSyncPayload();
-
       final int custUp = payload['users']?.length ?? 0;
       final int invUp  = payload['invoices']?.length ?? 0;
 
@@ -249,27 +235,16 @@ class SyncService extends ChangeNotifier {
           ? jsonDecode(response.data)
           : response.data;
 
-      final dynamic success = responseData['success'];
-      final bool isSuccess =
-          success == true || success == 'true' || success == 1;
+      final bool isSuccess = _isSuccessResponse(responseData['success']);
 
       if (response.statusCode == 200 && isSuccess) {
-        // ── Safe type extraction ──────────────────────────────────────────
         final pullData = _safeMap(responseData['pull_data']);
-
-        // Server may send 'timestamp' or 'server_time' — accept both
         final String? serverTimestamp =
             _safeString(responseData['timestamp']) ??
             _safeString(responseData['server_time']);
-
-        // remapped_uuids: PHP sends [] when empty, {} when populated
         final remappedUuids = _safeMap(responseData['remapped_uuids']);
 
         if (pullData == null || serverTimestamp == null) {
-          dev.log(
-            'Invalid response keys: ${responseData.keys.toList()}',
-            name: 'SyncService',
-          );
           throw Exception('استجابة غير صالحة من السيرفر: بيانات المزامنة ناقصة');
         }
 
@@ -277,63 +252,39 @@ class SyncService extends ChangeNotifier {
         final int invDown  = (pullData['invoices'] as List?)?.length ?? 0;
         final List<String> mergedNames = [];
 
+        // Apply UUID remappings first (outside transaction for safety)
         final db = await _dbService.database;
-        await db.transaction((txn) async {
-          // ── Step 1: Apply UUID remappings from server (e.g., merged customers) ──
-          if (remappedUuids != null && remappedUuids.isNotEmpty) {
+        if (remappedUuids != null && remappedUuids.isNotEmpty) {
+          await db.transaction((txn) async {
             for (final entry in remappedUuids.entries) {
               final newUuid = entry.value?.toString();
               if (newUuid != null && newUuid.isNotEmpty) {
                 await _applyUuidRemap(entry.key, newUuid, txn);
               }
             }
-          }
+          });
+        }
 
-          // ── Step 2: Process pull data in dependency order ─────────────────────
-          for (final table in _tableOrder) {
-            final items = pullData[table];
-            if (items is! List || items.isEmpty) continue;
+        // ── Two-pass pull: parents first, then children ────────────────────
+        // Pass 1: write payment_methods and users so FK resolution works
+        await _writePullPass(
+          db: db,
+          pullData: pullData,
+          tables: _parentTables,
+          mergedNames: mergedNames,
+        );
 
-            for (final rawItem in items) {
-              try {
-                // Safely convert each item to Map<String, dynamic>
-                if (rawItem is! Map) {
-                  dev.log(
-                    'Skipping non-map item in $table: ${rawItem.runtimeType}',
-                    name: 'SyncService',
-                  );
-                  continue;
-                }
-                final item = Map<String, dynamic>.from(rawItem);
+        // Pass 2: write child tables (invoices, transactions, etc.)
+        // At this point all users and payment_methods are in local DB.
+        await _writePullPass(
+          db: db,
+          pullData: pullData,
+          tables: _childTables,
+          mergedNames: mergedNames,
+        );
 
-                // Detect client-side duplicate customer names for UI feedback
-                if (table == 'users') {
-                  final name = item['name'];
-                  final uuid = item['uuid'];
-                  if (name != null && uuid != null) {
-                    final dup = await txn.query('users',
-                        where: 'name = ? AND uuid != ?',
-                        whereArgs: [name, uuid]);
-                    if (dup.isNotEmpty) mergedNames.add(name.toString());
-                  }
-                }
-
-                // Resolve UUID-based foreign keys to local integer IDs
-                final resolved = await _resolveRelationsInTxn(table, item, txn);
-
-                await _dbService.upsertFromSyncInTxn(table, resolved, txn);
-              } catch (itemError) {
-                dev.log(
-                  'Error processing $table item: $itemError',
-                  name: 'SyncService',
-                  error: itemError,
-                );
-                rethrow;
-              }
-            }
-          }
-
-          // ── Step 3: Mark pushed items as synced ───────────────────────────────
+        // Mark pushed items as synced
+        await db.transaction((txn) async {
           for (final table in payload.keys) {
             final uuids = payload[table]!
                 .where((e) => e['uuid'] != null)
@@ -366,7 +317,6 @@ class SyncService extends ChangeNotifier {
       } else {
         final String errorMsg =
             responseData['message'] as String? ?? 'Unknown server error';
-        dev.log('Sync failed on server: $errorMsg', name: 'SyncService');
         throw Exception(errorMsg);
       }
     } on DioException catch (e) {
@@ -393,17 +343,129 @@ class SyncService extends ChangeNotifier {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // TWO-PASS PULL WRITER
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Writes a set of tables from [pullData] into the local DB.
+  ///
+  /// Each table is written in its own transaction so a failure in one table
+  /// does not roll back the others. Within each table, failures on individual
+  /// records are logged and skipped rather than aborting the whole table.
+  ///
+  /// Child tables that fail FK resolution (user_id = null) are deferred and
+  /// retried once after all tables in this pass have been written.
+  Future<void> _writePullPass({
+    required dynamic db,
+    required Map<String, dynamic> pullData,
+    required List<String> tables,
+    required List<String> mergedNames,
+  }) async {
+    // Collect deferred items: {table -> [item]} for FK-retry pass
+    final Map<String, List<Map<String, dynamic>>> deferred = {};
+
+    for (final table in tables) {
+      final rawItems = pullData[table];
+      if (rawItems == null || rawItems is! List || rawItems.isEmpty) continue;
+
+      final List<Map<String, dynamic>> failedItems = [];
+
+      await db.transaction((txn) async {
+        for (final rawItem in rawItems) {
+          if (rawItem is! Map) continue;
+          final item = Map<String, dynamic>.from(rawItem);
+
+          try {
+            if (table == 'users') {
+              final name = item['name'];
+              final uuid = item['uuid'];
+              if (name != null && uuid != null) {
+                final dup = await txn.query('users',
+                    where: 'name = ? AND uuid != ?',
+                    whereArgs: [name, uuid]);
+                if (dup.isNotEmpty) mergedNames.add(name.toString());
+              }
+            }
+
+            final resolved = await _resolveRelationsInTxn(table, item, txn);
+
+            // Detect unresolved critical FK (user_id for invoices/transactions)
+            if (_hasCriticalNullFk(table, resolved)) {
+              dev.log(
+                'Deferred $table item (unresolved FK): ${item['uuid']}',
+                name: 'SyncService',
+              );
+              failedItems.add(item);
+              return; // skip this item in this pass
+            }
+
+            await _dbService.upsertFromSyncInTxn(table, resolved, txn);
+          } catch (itemError) {
+            dev.log(
+              'Error on $table item ${item['uuid']}: $itemError — skipping',
+              name: 'SyncService',
+            );
+            failedItems.add(item);
+          }
+        }
+      });
+
+      if (failedItems.isNotEmpty) {
+        deferred[table] = failedItems;
+      }
+    }
+
+    // ── Deferred retry pass ────────────────────────────────────────────────
+    // At this point all parent records should be in the DB.
+    if (deferred.isNotEmpty) {
+      dev.log(
+        'Retrying ${deferred.values.fold(0, (s, l) => s + l.length)} deferred items…',
+        name: 'SyncService',
+      );
+
+      for (final entry in deferred.entries) {
+        final table = entry.key;
+        final items = entry.value;
+
+        await db.transaction((txn) async {
+          for (final item in items) {
+            try {
+              final resolved = await _resolveRelationsInTxn(table, item, txn);
+              await _dbService.upsertFromSyncInTxn(table, resolved, txn);
+              dev.log('Retry succeeded for $table item ${item['uuid']}', name: 'SyncService');
+            } catch (retryError) {
+              dev.log(
+                'Retry failed for $table item ${item['uuid']}: $retryError — permanently skipped',
+                name: 'SyncService',
+              );
+            }
+          }
+        });
+      }
+    }
+  }
+
+  /// Returns true if [table] has a critical NOT NULL FK that resolved to null.
+  bool _hasCriticalNullFk(String table, Map<String, dynamic> data) {
+    switch (table) {
+      case 'invoices':
+        return data['user_id'] == null;
+      case 'transactions':
+        return data['buyer_id'] == null;
+      case 'edit_history':
+        return data['edited_by_id'] == null;
+      default:
+        return false;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // UUID REMAPPING
   // ─────────────────────────────────────────────────────────────────────────
 
-  /// When the server merges two customers, it sends a remapping of the old
-  /// UUID to the canonical new UUID. We apply this locally so all FK references
-  /// point to the surviving record.
   Future<void> _applyUuidRemap(
       String oldUuid, String newUuid, dynamic txn) async {
     dev.log('Remapping UUID: $oldUuid → $newUuid', name: 'SyncService');
 
-    // ── Resolve IDs before any structural changes ─────────────────────────────
     final oldRows = await txn.rawQuery(
       'SELECT id FROM users WHERE uuid = ? LIMIT 1',
       [oldUuid],
@@ -417,57 +479,41 @@ class SyncService extends ChangeNotifier {
     final bool newExists = newRows.isNotEmpty;
 
     if (oldExists && newExists) {
-      // Both records exist locally — the server merged them.
-      // Re-point all FK references from the old record to the new one,
-      // then delete the old duplicate so no UNIQUE violation occurs.
       final int oldId = oldRows.first['id'] as int;
       final int newId = newRows.first['id'] as int;
 
       if (oldId != newId) {
-        dev.log('Both UUIDs exist locally — re-pointing FKs and removing old record ($oldId → $newId)', name: 'SyncService');
-
-        // Re-point FK references
+        dev.log(
+          'Both UUIDs exist locally — re-pointing FKs ($oldId → $newId)',
+          name: 'SyncService',
+        );
         await txn.rawUpdate(
             'UPDATE invoices SET user_id = ? WHERE user_id = ?',
             [newId, oldId]);
         await txn.rawUpdate(
             'UPDATE transactions SET buyer_id = ? WHERE buyer_id = ?',
             [newId, oldId]);
-
-        // Remove the old (now orphaned) user row to avoid UNIQUE conflict
-        await txn.rawDelete(
-            'DELETE FROM users WHERE id = ?', [oldId]);
+        await txn.rawDelete('DELETE FROM users WHERE id = ?', [oldId]);
       }
     } else if (oldExists && !newExists) {
-      // Only the old UUID exists locally — safe to rename it to the new UUID.
-      // Do this only for the users table; other tables use uuid as a plain field.
       await txn.rawUpdate(
         'UPDATE users SET uuid = ?, is_synced = 1 WHERE uuid = ?',
         [newUuid, oldUuid],
       );
-
-      // Also update uuid on any other table that stores it
       for (final table in _tableOrder) {
-        if (table == 'users') continue; // already handled above
+        if (table == 'users') continue;
         await txn.rawUpdate(
           'UPDATE $table SET uuid = ?, is_synced = 1 WHERE uuid = ?',
           [newUuid, oldUuid],
         );
       }
     }
-    // If neither or only newExists — nothing to remap.
   }
 
   // ─────────────────────────────────────────────────────────────────────────
   // PUSH PAYLOAD PREPARATION
   // ─────────────────────────────────────────────────────────────────────────
-  // PUSH PAYLOAD PREPARATION
-  // ─────────────────────────────────────────────────────────────────────────
-  /// Collect all unsynced local records and replace integer IDs with UUIDs
-  /// so the server can resolve relationships independently.
-  ///
-  /// Optimized: builds a UUID lookup map per referenced table using a single
-  /// IN-query instead of one query per row (eliminates N+1 pattern).
+
   Future<Map<String, List<Map<String, dynamic>>>> _prepareSyncPayload() async {
     final Map<String, List<Map<String, dynamic>>> payload = {};
     final db = await _dbService.database;
@@ -476,7 +522,6 @@ class SyncService extends ChangeNotifier {
       final unsynced = await _dbService.getUnsynced(table);
       if (unsynced.isEmpty) continue;
 
-      // Build UUID lookup maps with a single IN-query per referenced table
       final Map<String, Map<int, String>> uuidCache = {};
 
       Future<Map<int, String>> buildCache(String fromTable, List<int> ids) async {
@@ -489,7 +534,6 @@ class SyncService extends ChangeNotifier {
         return {for (final r in rows) r['id'] as int: r['uuid'] as String};
       }
 
-      // Collect all FK ids for this table in one pass, then build caches
       switch (table) {
         case 'invoices':
           final userIds = unsynced.map((r) => r['user_id'] as int?).whereType<int>().toSet().toList();
@@ -519,10 +563,9 @@ class SyncService extends ChangeNotifier {
           break;
       }
 
-      // Map each row using the pre-built cache (zero DB calls inside the loop)
       payload[table] = unsynced.map((rawItem) {
         final item = Map<String, dynamic>.from(rawItem);
-        item.remove('id'); // Never send local auto-increment IDs to server
+        item.remove('id');
         switch (table) {
           case 'invoices':
             item['user_uuid']           = uuidCache['users']?[item['user_id'] as int?];
@@ -546,17 +589,11 @@ class SyncService extends ChangeNotifier {
             {
               item['parent_uuid'] = uuidCache['users']?[item['parent_id'] as int?];
               item.remove('parent_id');
-              // For ACCOUNTANT users that have never been synced before (is_synced == 0
-              // and no server-side hash yet), we MUST send the plain-text password so
-              // the server can hash it via Hash::make(). Without this, the server
-              // generates a random password and the employee can never log in.
-              // For all other cases (already synced, STORE_MANAGER, CUSTOMER) we
-              // strip the password to avoid leaking the locally-stored plain text.
-              final role = item['role'] as String? ?? '';
+              final role     = item['role'] as String? ?? '';
               final isSynced = (item['is_synced'] as int? ?? 1) == 1;
-              final hasPass = (item['password'] as String?)?.isNotEmpty == true;
+              final hasPass  = (item['password'] as String?)?.isNotEmpty == true;
               if (role == 'ACCOUNTANT' && !isSynced && hasPass) {
-                // Keep password — server will hash it on upsert
+                // Keep plain-text password so server can hash it
               } else {
                 item.remove('password');
               }
@@ -573,12 +610,10 @@ class SyncService extends ChangeNotifier {
     return payload;
   }
 
-  // PULL: FOREIGN KEY RESOLUTION
+  // ─────────────────────────────────────────────────────────────────────────
+  // FK RESOLUTION (PULL)
   // ─────────────────────────────────────────────────────────────────────────
 
-  /// Convert UUID-based FK fields from the server response into local integer IDs.
-  /// If the related record is not yet in the local DB, the FK is set to null
-  /// (it will be resolved on the next sync once the parent arrives).
   Future<Map<String, dynamic>> _resolveRelationsInTxn(
       String table, Map<String, dynamic> data, dynamic txn) async {
     final map = Map<String, dynamic>.from(data);
@@ -596,9 +631,9 @@ class SyncService extends ChangeNotifier {
       final uuidKey = entry.key;
       if (!map.containsKey(uuidKey)) continue;
 
-      final targetUuid = map[uuidKey];
+      final targetUuid  = map[uuidKey];
       final targetTable = entry.value[0];
-      final idKey = entry.value[1];
+      final idKey       = entry.value[1];
 
       if (targetUuid != null) {
         final rows = await txn.rawQuery(
@@ -609,7 +644,7 @@ class SyncService extends ChangeNotifier {
 
         if (rows.isEmpty) {
           dev.log(
-            'Warning: Cannot resolve $uuidKey ($targetUuid) in $table — parent not yet in local DB.',
+            'Cannot resolve $uuidKey ($targetUuid) in $table — parent not yet in local DB.',
             name: 'SyncService',
           );
         }
@@ -624,19 +659,12 @@ class SyncService extends ChangeNotifier {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // SAFE-HOUSE FULL RESTORE
+  // FULL RESTORE  (POST sync/restore)
   // ─────────────────────────────────────────────────────────────────────────
 
-  /// Calls POST /sync/restore to download ALL store data from the server,
-  /// including soft-deleted records.
-  ///
-  /// Use this when:
-  ///   • The app is freshly installed / database was lost.
-  ///   • The user wants to recover data after a crash.
-  ///   • A new device needs to be seeded with the full history.
-  ///
-  /// Soft-deleted records are written to the local DB with their deleted_at
-  /// value intact, so they appear in the Recycle Bin but not in normal views.
+  /// Downloads ALL store data from the server (including soft-deleted records)
+  /// and writes it to the local DB using the same two-pass strategy as
+  /// [performFullSync] to guarantee FK integrity.
   Future<void> performFullRestore() async {
     if (_isSyncing) return;
     _isSyncing = true;
@@ -645,43 +673,54 @@ class SyncService extends ChangeNotifier {
     try {
       dev.log('Starting full restore from server…', name: 'SyncService');
 
-      final response = await _dio.post('/sync/restore');
+      // Note: baseUrl already ends with '/api/' — use relative path (no leading slash)
+      final response = await _dio.post('sync/restore');
       final responseData = response.data is String
           ? jsonDecode(response.data)
           : response.data as Map<String, dynamic>;
 
-      if (responseData['success'] == true) {
+      final bool isSuccess = _isSuccessResponse(responseData['success']);
+
+      if (isSuccess) {
         final pullData = _safeMap(responseData['pull_data']) ?? {};
         final serverTimestamp =
             _safeString(responseData['timestamp']) ??
+            _safeString(responseData['server_time']) ??
             DateTime.now().toIso8601String();
 
         final db = await _dbService.database;
-        await db.transaction((txn) async {
-          for (final table in _tableOrder) {
-            final items = pullData[table];
-            if (items == null || items is! List) continue;
+        final List<String> mergedNames = [];
 
-            for (final rawItem in items) {
-              if (rawItem is! Map) continue;
-              final item = Map<String, dynamic>.from(rawItem as Map);
-              try {
-                final resolved = await _resolveRelationsInTxn(table, item, txn);
-                await _dbService.upsertFromSyncInTxn(table, resolved, txn);
-              } catch (e) {
-                dev.log(
-                  'Restore: error on $table item: $e',
-                  name: 'SyncService',
-                  error: e,
-                );
-              }
-            }
-          }
-        });
+        // Pass 1: parents (payment_methods, users)
+        await _writePullPass(
+          db: db,
+          pullData: pullData,
+          tables: _parentTables,
+          mergedNames: mergedNames,
+        );
+
+        // Pass 2: children (invoices, transactions, …)
+        await _writePullPass(
+          db: db,
+          pullData: pullData,
+          tables: _childTables,
+          mergedNames: mergedNames,
+        );
 
         await _dbService.recalculateAllBalances();
-        // Reset last_sync_time so the next regular sync fetches everything fresh.
         await _prefs.setString('last_sync_time', serverTimestamp);
+
+        final int custDown = (pullData['users'] as List?)?.length ?? 0;
+        final int invDown  = (pullData['invoices'] as List?)?.length ?? 0;
+
+        await _saveSyncDetails(SyncDetails(
+          lastSyncTime: serverTimestamp,
+          customersUploaded: 0,
+          invoicesUploaded: 0,
+          customersDownloaded: custDown,
+          invoicesDownloaded: invDown,
+          mergedCustomers: mergedNames,
+        ));
 
         dev.log('Full restore completed at $serverTimestamp.', name: 'SyncService');
       } else {
@@ -693,6 +732,11 @@ class SyncService extends ChangeNotifier {
       String message = 'فشل استعادة البيانات بسبب مشكلة في الشبكة';
       if (e.response?.statusCode == 401) {
         message = 'انتهت صلاحية الجلسة، يرجى إعادة تسجيل الدخول';
+      } else if (e.response?.statusCode == 500) {
+        final serverMsg = e.response?.data is Map
+            ? (e.response!.data['message'] ?? 'خطأ داخلي في السيرفر (500)')
+            : 'خطأ داخلي في السيرفر (500)';
+        message = serverMsg.toString();
       }
       dev.log('Restore failed (Network): ${e.message}', name: 'SyncService');
       throw Exception(message);
