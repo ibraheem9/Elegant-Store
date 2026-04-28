@@ -1239,10 +1239,31 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF071028) : const Color(0xFFF8FAFC),
+        actions: [
       appBar: AppBar(
-        // Tapping the customer name shows a dropdown: Edit / Delete
-        title: isManager
-            ? PopupMenuButton<String>(
+        // Title with customer name
+        title: Row(mainAxisSize: MainAxisSize.min, children: [
+          Flexible(
+            child: Text(
+              _currentCustomer.name,
+              style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black,
+                  fontSize: isMobile ? 16 : 20),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (_currentCustomer.creditLimit == -1) ...[
+            const SizedBox(width: 6),
+            const Icon(Icons.verified, color: Colors.blue, size: 20),
+          ],
+        ]),
+        actions: [
+          // Edit button (always visible for managers)
+          if (isManager)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+              child: PopupMenuButton<String>(
                 offset: const Offset(0, 44),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 onSelected: (value) async {
@@ -1271,43 +1292,26 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                     ]),
                   ),
                 ],
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Flexible(
-                    child: Text(
-                      _currentCustomer.name,
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : Colors.black,
-                          fontSize: isMobile ? 16 : 20),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (_currentCustomer.creditLimit == -1) ...[
-                    const SizedBox(width: 6),
-                    const Icon(Icons.verified, color: Colors.blue, size: 20),
-                  ],
-                  const SizedBox(width: 4),
-                  Icon(Icons.arrow_drop_down_rounded,
-                      color: isDark ? Colors.white54 : Colors.black38, size: 20),
-                ]),
-              )
-            : Row(mainAxisSize: MainAxisSize.min, children: [
-                Flexible(
-                  child: Text(
-                    _currentCustomer.name,
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : Colors.black,
-                        fontSize: isMobile ? 16 : 20),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (_currentCustomer.creditLimit == -1) ...[
-                  const SizedBox(width: 6),
-                  const Icon(Icons.verified, color: Colors.blue, size: 20),
-                ],
-              ]),
-        actions: [
+                child: const Icon(Icons.more_vert_rounded),
+              ),
+            ),
+          // Payment button
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: ElevatedButton.icon(
+              onPressed: _showRepaymentDialog,
+              icon: const Icon(Icons.add_card_rounded, color: Colors.white, size: 18),
+              label: Text(isMobile ? 'سداد' : 'تسديد الديون',
+                  style: const TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green[600],
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  elevation: 0),
+            ),
+          ),
+        ],
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             child: ElevatedButton.icon(
