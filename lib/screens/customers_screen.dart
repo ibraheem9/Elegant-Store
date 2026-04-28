@@ -1259,7 +1259,11 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
           ],
         ]),
         actions: [
+<<<<<<< HEAD
           // Edit button (always visible for managers)
+=======
+          // Edit/Delete menu for managers
+>>>>>>> 0b29bdb16f7a6dff5417ab8efc337f5f6be40eeb
           if (isManager)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
@@ -1296,6 +1300,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
               ),
             ),
           // Payment button
+<<<<<<< HEAD
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             child: ElevatedButton.icon(
@@ -1312,6 +1317,8 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
             ),
           ),
         ],
+=======
+>>>>>>> 0b29bdb16f7a6dff5417ab8efc337f5f6be40eeb
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             child: ElevatedButton.icon(
