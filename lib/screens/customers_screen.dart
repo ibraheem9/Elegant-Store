@@ -374,7 +374,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
   /// Slim card: name + badge, nickname, credit — no avatar, no phone, no delete.
   Widget _buildCustomerCard(User customer, bool isDark) {
     final isVerified = customer.creditLimit == -1;
-    final isManager = context.read<AuthService>().isManager();
+    final canEdit = context.read<AuthService>().isManager() || context.read<AuthService>().isAccountant();
     final balance = customer.balance;
     // Unified color system:
     //   balance > 0 → debtor (red tint)
@@ -495,7 +495,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                       : (customer.balance < 0 ? 'رصيد' : 'متعادل'),
                   style: const TextStyle(fontSize: 10, color: Colors.grey),
                 ),
-                if (isManager)
+                if (canEdit)
                   GestureDetector(
                     onTap: () async {
                       final saved = await showAddEditCustomerForm(context, customer: customer);
@@ -526,7 +526,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
   Widget _buildCustomerTable(Size size, bool isDark) {
     final displayed = _filteredCustomers.take(_displayCount).toList();
     final hasMore = _filteredCustomers.length > _displayCount;
-    final isManager = context.read<AuthService>().isManager();
+    final canEdit = context.read<AuthService>().isManager() || context.read<AuthService>().isAccountant();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 100),
@@ -563,7 +563,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     onSort: (_, __) => _onSort('balance'),
                   ),
-                  if (isManager)
+                  if (canEdit)
                     const DataColumn(
                         label: Text('إجراء',
                             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
@@ -617,7 +617,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                             fontSize: 13),
                       )),
                       // Actions cell
-                      if (isManager)
+                      if (canEdit)
                         DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
                           IconButton(
                             icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 18),
@@ -1235,13 +1235,13 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     final isDark = theme.brightness == Brightness.dark;
     final size = MediaQuery.of(context).size;
     final bool isMobile = size.width < 700;
-    final isManager = context.read<AuthService>().isManager();
+    final canEdit = context.read<AuthService>().isManager() || context.read<AuthService>().isAccountant();
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF071028) : const Color(0xFFF8FAFC),
       appBar: AppBar(
         // Tapping the customer name shows a dropdown: Edit / Delete
-        title: isManager
+        title: canEdit
             ? PopupMenuButton<String>(
                 offset: const Offset(0, 44),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
