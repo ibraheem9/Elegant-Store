@@ -3,6 +3,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 import 'auth_service.dart';
 import 'database_service.dart';
 
@@ -10,13 +12,7 @@ import 'database_service.dart';
 ///
 /// Handles timestamp-based device sync with the server.
 /// Each device tracks its own last sync time and time offset.
-///
-/// Protocol:
-///   1. initSync     – Initialize sync, calculate time offset
-///   2. startSync    – Mark sync as started
-///   3. getChangedRecords – Get records changed since last sync
-///   4. completeSync – Mark sync as completed
-///   5. failSync     – Mark sync as failed (retry from same point)
+/// Device ID is generated once and stored locally.
 class DeviceSyncService {
   final Dio _dio;
   final AuthService _authService;
@@ -37,15 +33,28 @@ class DeviceSyncService {
     required Dio dio,
     required AuthService authService,
     required DatabaseService databaseService,
-  })  : _dio = dio,
+  })
+      : _dio = dio,
         _authService = authService,
         _databaseService = databaseService;
 
-  /// Get device ID (generated once and stored)
+  /// Get or generate device ID (persisted locally)
   Future<String> getDeviceId() async {
     if (_deviceId != null) return _deviceId!;
 
     try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // Check if device ID already exists
+      String? savedDeviceId = prefs.getString('device_id');
+
+      if (savedDeviceId != null && savedDeviceId.isNotEmpty) {
+        _deviceId = savedDeviceId;
+        debugPrint('[DeviceSync] Using existing device ID: $_deviceId');
+        return _deviceId!;
+      }
+
+      // Generate new device ID
       final deviceInfo = DeviceInfoPlugin();
       String deviceId;
 
@@ -54,15 +63,20 @@ class DeviceSyncService {
         deviceId = androidInfo.id;
       } else if (defaultTargetPlatform == TargetPlatform.iOS) {
         final iosInfo = await deviceInfo.iosInfo;
-        deviceId = iosInfo.identifierForVendor ?? 'unknown';
+        deviceId = iosInfo.identifierForVendor ?? const Uuid().v4();
       } else {
-        deviceId = 'web_${DateTime.now().millisecondsSinceEpoch}';
+        deviceId = const Uuid().v4();
       }
 
+      // Save device ID locally
+      await prefs.setString('device_id', deviceId);
       _deviceId = deviceId;
+      debugPrint('[DeviceSync] Generated and saved new device ID: $_deviceId');
       return deviceId;
     } catch (e) {
-      _deviceId = 'device_${DateTime.now().millisecondsSinceEpoch}';
+      debugPrint('[DeviceSync] Error getting device ID: $e');
+      final deviceId = const Uuid().v4();
+      _deviceId = deviceId;
       return _deviceId!;
     }
   }
@@ -96,41 +110,55 @@ class DeviceSyncService {
   /// Initialize sync: calculate time offset
   Future<bool> initSync() async {
     try {
+      _isSyncing = true;
       final deviceId = await getDeviceId();
       final deviceName = await getDeviceName();
-      final deviceLocalTimeMs = DateTime.now().millisecondsSinceEpoch;
+      final localTimeMs = DateTime.now().millisecondsSinceEpoch;
+
+      debugPrint(
+          '[DeviceSync] Initializing sync for device: $deviceId ($deviceName)');
 
       final response = await _dio.post(
         '/api/sync/device/init',
         data: {
           'device_id': deviceId,
           'device_name': deviceName,
-          'device_local_time_ms': deviceLocalTimeMs,
+          'device_local_time_ms': localTimeMs,
         },
+        options: Options(
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+        ),
       );
 
+      debugPrint('[DeviceSync] Init sync response: ${response.statusCode}');
+
       if (response.statusCode == 200 && response.data['success'] == true) {
-        _timeOffsetMs = response.data['time_offset_ms'] as int?;
-        return true;
+        final serverTimeMs = response.data['server_time_ms'] as int?;
+        final timeOffsetMs = response.data['time_offset_ms'] as int?;
+
+        if (serverTimeMs != null && timeOffsetMs != null) {
+          _timeOffsetMs = timeOffsetMs;
+          debugPrint(
+              '[DeviceSync] Time offset calculated: $_timeOffsetMs ms (server: $serverTimeMs, local: $localTimeMs)');
+          return true;
+        }
       }
+
+      onSyncError?.call('Failed to initialize sync');
       return false;
     } catch (e) {
-      onSyncError?.call('Failed to initialize sync: $e');
+      debugPrint('[DeviceSync] Init sync error: $e');
+      onSyncError?.call('Init sync failed: $e');
       return false;
     }
   }
 
-  /// Start sync process
+  /// Start sync
   Future<bool> startSync() async {
-    if (_isSyncing) {
-      onSyncError?.call('Sync already in progress');
-      return false;
-    }
-
     try {
-      _isSyncing = true;
-      onSyncStart?.call();
-
       final deviceId = await getDeviceId();
 
       final response = await _dio.post(
@@ -139,15 +167,16 @@ class DeviceSyncService {
       );
 
       if (response.statusCode == 200 && response.data['success'] == true) {
+        debugPrint('[DeviceSync] Sync started for device: $deviceId');
+        onSyncStart?.call();
         return true;
       }
 
-      _isSyncing = false;
       onSyncError?.call('Failed to start sync');
       return false;
     } catch (e) {
-      _isSyncing = false;
-      onSyncError?.call('Failed to start sync: $e');
+      debugPrint('[DeviceSync] Start sync error: $e');
+      onSyncError?.call('Start sync failed: $e');
       return false;
     }
   }
@@ -166,24 +195,25 @@ class DeviceSyncService {
       );
 
       if (response.statusCode == 200 && response.data['success'] == true) {
-        final changedRecords = response.data['changed_records'] as Map<String, dynamic>? ?? {};
-        final recordCount = changedRecords.values.fold<int>(0, (sum, table) {
-          if (table is List) return sum + table.length;
-          return sum;
-        });
+        final changedRecords = response.data['changed_records'] as Map?;
+        final recordCount = response.data['record_count'] as int? ?? 0;
 
+        debugPrint(
+            '[DeviceSync] Got $recordCount changed records from ${tables.length} tables');
         onRecordsReceived?.call(recordCount);
-        return changedRecords;
+
+        return changedRecords?.cast<String, dynamic>() ?? {};
       }
 
       return {};
     } catch (e) {
+      debugPrint('[DeviceSync] Get changed records error: $e');
       onSyncError?.call('Failed to get changed records: $e');
       return {};
     }
   }
 
-  /// Complete sync successfully
+  /// Complete sync
   Future<bool> completeSync() async {
     try {
       final deviceId = await getDeviceId();
@@ -194,22 +224,22 @@ class DeviceSyncService {
       );
 
       if (response.statusCode == 200 && response.data['success'] == true) {
+        debugPrint('[DeviceSync] Sync completed for device: $deviceId');
         _isSyncing = false;
         onSyncComplete?.call();
         return true;
       }
 
-      _isSyncing = false;
       onSyncError?.call('Failed to complete sync');
       return false;
     } catch (e) {
-      _isSyncing = false;
-      onSyncError?.call('Failed to complete sync: $e');
+      debugPrint('[DeviceSync] Complete sync error: $e');
+      onSyncError?.call('Complete sync failed: $e');
       return false;
     }
   }
 
-  /// Mark sync as failed (will retry from same point)
+  /// Mark sync as failed
   Future<bool> failSync() async {
     try {
       final deviceId = await getDeviceId();
@@ -220,15 +250,14 @@ class DeviceSyncService {
       );
 
       if (response.statusCode == 200 && response.data['success'] == true) {
+        debugPrint('[DeviceSync] Sync marked as failed for device: $deviceId');
         _isSyncing = false;
         return true;
       }
 
-      _isSyncing = false;
       return false;
     } catch (e) {
-      _isSyncing = false;
-      onSyncError?.call('Failed to mark sync as failed: $e');
+      debugPrint('[DeviceSync] Fail sync error: $e');
       return false;
     }
   }
@@ -248,7 +277,7 @@ class DeviceSyncService {
 
       return null;
     } catch (e) {
-      onSyncError?.call('Failed to get sync status: $e');
+      debugPrint('[DeviceSync] Get sync status error: $e');
       return null;
     }
   }
@@ -265,7 +294,7 @@ class DeviceSyncService {
 
       return [];
     } catch (e) {
-      onSyncError?.call('Failed to get devices: $e');
+      debugPrint('[DeviceSync] Failed to get devices: $e');
       return [];
     }
   }
@@ -309,7 +338,7 @@ class DeviceSyncService {
   Future<void> _saveChangedRecords(Map<String, dynamic> changedRecords) async {
     try {
       final db = await _databaseService.database;
-      
+
       for (final entry in changedRecords.entries) {
         final tableName = entry.key;
         final records = entry.value as List?;
@@ -326,7 +355,7 @@ class DeviceSyncService {
                 recordMap[entry.key.toString()] = entry.value;
               }
             }
-            
+
             // Use raw insert or replace to save records
             if (recordMap.isNotEmpty) {
               await db.insert(
@@ -336,36 +365,37 @@ class DeviceSyncService {
               );
             }
           } catch (e) {
-            debugPrint('Failed to save record from $tableName: $e');
+            debugPrint('[DeviceSync] Failed to save record from $tableName: $e');
           }
         }
 
-        debugPrint('Saved ${records.length} records from table: $tableName');
+        debugPrint('[DeviceSync] Saved ${records.length} records from table: $tableName');
       }
     } catch (e) {
-      debugPrint('Error saving changed records: $e');
+      debugPrint('[DeviceSync] Error saving changed records: $e');
     }
   }
 
   /// Get localized timestamp with device timezone
   DateTime getLocalizedTimestamp(int timestampMs) {
     // Convert milliseconds to DateTime in UTC
-    final utcDateTime = DateTime.fromMillisecondsSinceEpoch(timestampMs, isUtc: true);
-    
+    final utcDateTime =
+        DateTime.fromMillisecondsSinceEpoch(timestampMs, isUtc: true);
+
     // Convert to local timezone
     final localDateTime = utcDateTime.toLocal();
-    
+
     return localDateTime;
   }
 
   /// Get last sync time localized to device timezone
   DateTime? getLocalizedLastSyncTime() {
     if (_timeOffsetMs == null) return null;
-    
+
     // Get current time and apply offset to get last sync time
     final now = DateTime.now().millisecondsSinceEpoch;
     final lastSyncMs = now - _timeOffsetMs!;
-    
+
     return getLocalizedTimestamp(lastSyncMs);
   }
 
