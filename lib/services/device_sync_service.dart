@@ -319,14 +319,22 @@ class DeviceSyncService {
         // Save each record to local SQLite database
         for (final record in records) {
           try {
-            final recordMap = record is Map ? Map<String, dynamic>.from(record as Map) : {};
+            // Convert record to proper Map<String, Object?> type
+            final recordMap = <String, Object?>{};
+            if (record is Map) {
+              for (final entry in (record as Map).entries) {
+                recordMap[entry.key.toString()] = entry.value;
+              }
+            }
             
             // Use raw insert or replace to save records
-            await db.insert(
-              tableName,
-              recordMap,
-              conflictAlgorithm: ConflictAlgorithm.replace,
-            );
+            if (recordMap.isNotEmpty) {
+              await db.insert(
+                tableName,
+                recordMap,
+                conflictAlgorithm: ConflictAlgorithm.replace,
+              );
+            }
           } catch (e) {
             debugPrint('Failed to save record from $tableName: $e');
           }
