@@ -47,7 +47,7 @@ void callbackDispatcher() {
         databaseService: dbService,
       );
       
-      await deviceSyncService.performFullSync();
+      await deviceSyncService.performFullSyncDefault();
       return Future.value(true);
     } catch (e) {
       debugPrint('Background sync failed: $e');
@@ -78,7 +78,7 @@ void main() async {
       const Duration(seconds: 10),
       onTimeout: () {
         debugPrint('initDatabase timed out');
-        throw TimeoutException('initDatabase timed out');
+        throw Exception('initDatabase timed out');
       },
     );
   } catch (e) {
@@ -141,10 +141,11 @@ void main() async {
           },
         ),
         // Add SyncManager provider
-        ProxyProvider<DeviceSyncService, SyncManager>(
-          update: (_, deviceSyncService, __) {
+        ProxyProvider2<DeviceSyncService, DatabaseService, SyncManager>(
+          update: (_, deviceSyncService, databaseService, __) {
             return SyncManager(
               deviceSyncService: deviceSyncService,
+              databaseService: databaseService,
               syncInterval: const Duration(minutes: 15),
               maxRetries: 3,
             );

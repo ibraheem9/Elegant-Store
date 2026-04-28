@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:sqflite/sqflite.dart';
 import 'auth_service.dart';
 import 'database_service.dart';
 
@@ -307,6 +308,8 @@ class DeviceSyncService {
   /// Save changed records to local database
   Future<void> _saveChangedRecords(Map<String, dynamic> changedRecords) async {
     try {
+      final db = await _databaseService.database;
+      
       for (final entry in changedRecords.entries) {
         final tableName = entry.key;
         final records = entry.value as List?;
@@ -318,10 +321,11 @@ class DeviceSyncService {
           try {
             final recordMap = record is Map ? Map<String, dynamic>.from(record as Map) : {};
             
-            // Save to local database using DatabaseService
-            await _databaseService.insertOrUpdateRecord(
+            // Use raw insert or replace to save records
+            await db.insert(
               tableName,
               recordMap,
+              conflictAlgorithm: ConflictAlgorithm.replace,
             );
           } catch (e) {
             debugPrint('Failed to save record from $tableName: $e');
