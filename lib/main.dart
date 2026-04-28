@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -7,12 +6,15 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:workmanager/workmanager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:dio/dio.dart';
 
 import 'services/database_service.dart';
 import 'services/auth_service.dart';
 import 'services/theme_service.dart';
 import 'services/notification_service.dart';
 import 'services/sync_service.dart';
+import 'services/device_sync_service.dart';
+import 'services/sync_manager.dart';
 import 'services/license_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
@@ -31,11 +33,24 @@ void callbackDispatcher() {
 
       final dbService = DatabaseService();
       final prefs = await SharedPreferences.getInstance();
-      final syncService = SyncService(dbService, prefs);
       
-      await syncService.performFullSync();
+      // Use new device sync service
+      final dio = Dio();
+      final token = prefs.getString('auth_token');
+      if (token != null) {
+        dio.options.headers['Authorization'] = 'Bearer $token';
+      }
+      
+      final deviceSyncService = DeviceSyncService(
+        dio: dio,
+        authService: AuthService(dbService, SyncService(dbService, prefs)),
+        databaseService: dbService,
+      );
+      
+      await deviceSyncService.performFullSync();
       return Future.value(true);
     } catch (e) {
+      debugPrint('Background sync failed: $e');
       return Future.value(false);
     }
   });
@@ -110,6 +125,31 @@ void main() async {
         ChangeNotifierProvider<SyncService>(create: (_) => syncService),
         ChangeNotifierProvider<AuthService>(create: (_) => authService),
         ChangeNotifierProvider<ThemeNotifier>(create: (_) => ThemeNotifier()),
+        // Add DeviceSyncService provider
+        ProxyProvider<AuthService, DeviceSyncService>(
+          update: (_, authService, __) {
+            final dio = Dio();
+            final token = prefs.getString('auth_token');
+            if (token != null) {
+              dio.options.headers['Authorization'] = 'Bearer $token';
+            }
+            return DeviceSyncService(
+              dio: dio,
+              authService: authService,
+              databaseService: dbService,
+            );
+          },
+        ),
+        // Add SyncManager provider
+        ProxyProvider<DeviceSyncService, SyncManager>(
+          update: (_, deviceSyncService, __) {
+            return SyncManager(
+              deviceSyncService: deviceSyncService,
+              syncInterval: const Duration(minutes: 15),
+              maxRetries: 3,
+            );
+          },
+        ),
       ],
       child: ElegantStoreApp(isLicensed: licenseResult.isValid),
     ),
@@ -198,14 +238,13 @@ class _AppHome extends StatefulWidget {
 }
 
 class _AppHomeState extends State<_AppHome> with WidgetsBindingObserver {
-  /// Tracks whether we have already fired the post-login side effects for the
-  /// current session so we don't repeat them on every notifyListeners() call.
-  bool _postLoginDone = false;
+  bool _postLoginSyncTriggered = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _triggerPostLoginSync();
   }
 
   @override
@@ -214,51 +253,48 @@ class _AppHomeState extends State<_AppHome> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  /// Trigger a background sync whenever the app comes back to the foreground.
-  /// This ensures that data added by other users on other devices is pulled
-  /// immediately when the current user opens the app — without waiting for
-  /// the periodic auto-sync timer.
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) return;
+  void _triggerPostLoginSync() {
+    if (_postLoginSyncTriggered) return;
+
     final authService = context.read<AuthService>();
     if (!authService.isLoggedIn) return;
-    final syncService = context.read<SyncService>();
-    if (syncService.isSyncing) return;
-    syncService.performFullSync().catchError((e) {
-      debugPrint('Resume sync failed: \$e');
+
+    _postLoginSyncTriggered = true;
+
+    // Trigger device sync
+    Future.microtask(() async {
+      try {
+        final syncManager = context.read<SyncManager>();
+        await syncManager.forceSyncNow();
+      } catch (e) {
+        debugPrint('Post-login sync failed: $e');
+      }
     });
   }
 
   @override
-  Widget build(BuildContext context) {
-    final authService = context.watch<AuthService>();
-
-    if (authService.isLoggedIn && authService.currentUser != null) {
-      if (!_postLoginDone) {
-        _postLoginDone = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-
-          // Fix local data ownership (fire-and-forget)
-          context.read<DatabaseService>()
-              .fixLocalDataOwnership(authService.currentUser!)
-              .catchError((e) => debugPrint('fixLocalDataOwnership failed: $e'));
-
-          // Schedule daily notifications check
-          NotificationService.scheduleDailyCheck(context.read<DatabaseService>());
-
-          // Background sync on session restore (not first login — LoginScreen handles that)
-          context.read<SyncService>().performFullSync().catchError((e) {
-            debugPrint('Session restore sync failed: $e');
-          });
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      final authService = context.read<AuthService>();
+      if (authService.isLoggedIn) {
+        Future.microtask(() async {
+          try {
+            final syncManager = context.read<SyncManager>();
+            await syncManager.forceSyncNow();
+          } catch (e) {
+            debugPrint('App resume sync failed: $e');
+          }
         });
       }
-      return const DashboardScreen();
     }
+  }
 
-    // User logged out — reset flag so side effects fire again on next login
-    _postLoginDone = false;
-    return const LoginScreen();
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<AuthService>(
+      builder: (context, authService, _) {
+        return authService.isLoggedIn ? const DashboardScreen() : const LoginScreen();
+      },
+    );
   }
 }

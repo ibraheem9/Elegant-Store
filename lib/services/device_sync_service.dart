@@ -313,14 +313,54 @@ class DeviceSyncService {
 
         if (records == null || records.isEmpty) continue;
 
-        // Save records based on table name
-        // This should be implemented based on your database structure
-        // For now, we'll just log it
-        debugPrint('Saving ${records.length} records from table: $tableName');
+        // Save each record to local SQLite database
+        for (final record in records) {
+          try {
+            final recordMap = record is Map ? Map<String, dynamic>.from(record as Map) : {};
+            
+            // Save to local database using DatabaseService
+            await _databaseService.insertOrUpdateRecord(
+              tableName,
+              recordMap,
+            );
+          } catch (e) {
+            debugPrint('Failed to save record from $tableName: $e');
+          }
+        }
+
+        debugPrint('Saved ${records.length} records from table: $tableName');
       }
     } catch (e) {
       debugPrint('Error saving changed records: $e');
     }
+  }
+
+  /// Get localized timestamp with device timezone
+  DateTime getLocalizedTimestamp(int timestampMs) {
+    // Convert milliseconds to DateTime in UTC
+    final utcDateTime = DateTime.fromMillisecondsSinceEpoch(timestampMs, isUtc: true);
+    
+    // Convert to local timezone
+    final localDateTime = utcDateTime.toLocal();
+    
+    return localDateTime;
+  }
+
+  /// Get last sync time localized to device timezone
+  DateTime? getLocalizedLastSyncTime() {
+    if (_timeOffsetMs == null) return null;
+    
+    // Get current time and apply offset to get last sync time
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final lastSyncMs = now - _timeOffsetMs!;
+    
+    return getLocalizedTimestamp(lastSyncMs);
+  }
+
+  /// Format timestamp for display (localized)
+  String formatLocalizedTime(int timestampMs) {
+    final localDateTime = getLocalizedTimestamp(timestampMs);
+    return localDateTime.toString();
   }
 
   /// Check if sync is in progress
@@ -339,5 +379,18 @@ class DeviceSyncService {
   void reset() {
     _isSyncing = false;
     _timeOffsetMs = null;
+  }
+
+  /// Perform full sync with default tables
+  Future<bool> performFullSyncDefault() async {
+    return performFullSync([
+      'users',
+      'invoices',
+      'transactions',
+      'purchases',
+      'payment_methods',
+      'daily_statistics',
+      'edit_history',
+    ]);
   }
 }
