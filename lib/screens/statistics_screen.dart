@@ -441,14 +441,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             size: 15,
             color: isDark ? Colors.white54 : const Color(0xFF64748B)),
         const SizedBox(width: 6),
-        Text(
-          'المطابقة النقدية: ',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
-            color: isDark ? Colors.white54 : const Color(0xFF64748B),
-          ),
-        ),
+
         Expanded(
           child: Text(
             dateText,
@@ -460,28 +453,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        // Quick day-picker button only in day mode
-        if (_filterMode == _FilterMode.day)
-          GestureDetector(
-            onTap: _pickSingleDay,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
-                border: Border.all(color: Colors.blue.withOpacity(0.5)),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.edit_calendar_rounded, size: 14, color: Colors.blue),
-                  SizedBox(width: 4),
-                  Text('تغيير',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue)),
-                ],
-              ),
-            ),
-          ),
+
       ],
     );
   }
@@ -492,7 +464,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle('المطابقة النقدية', Icons.account_balance_rounded, Colors.green, isDark),
+        _sectionTitle('إجمالي الصندوق', Icons.account_balance_rounded, Colors.green, isDark),
         const SizedBox(height: 16),
         _buildAutoDisplay(
           'إجمالي الصندوق أمس (تلقائي)',
@@ -580,12 +552,15 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           mainAxisSpacing: 16,
           childAspectRatio: isSmall ? 2.8 : 3.8,
           children: [
-            _buildAutoDisplay('إجمالي المبيعات على التطبيق',  _appSales,          Icons.phonelink_ring_rounded,  Colors.blue,    isDark),
-            _buildAutoDisplay('إجمالي الدين على التطبيق',     _appDebt,           Icons.account_balance_rounded, Colors.purple,  isDark),
-            _buildAutoDisplay('إجمالي الدين النقدي (سحب)',    _cashWithdrawals,   Icons.money_off_rounded,       Colors.red,     isDark),
-            _buildAutoDisplay('إجمالي سداد الدين النقدي',     _cashDebtRepayment, Icons.payments_rounded,        Colors.teal,    isDark),
-            _buildAutoDisplay('إجمالي المشتريات تطبيق',       _appPurchases,      Icons.mobile_friendly_rounded, Colors.indigo,  isDark),
-            _buildAutoDisplay('إجمالي المشتريات نقدي',        _cashPurchases,     Icons.shopping_bag_rounded,    Colors.orange,  isDark),
+            _buildAutoDisplay('إجمالي المبيعات من التطبيق',    _appSales,          Icons.phonelink_ring_rounded,  Colors.blue,    isDark),
+            _buildAutoDisplay('إجمالي المبيعات النقدية',       _cashSales,         Icons.local_atm_rounded,       Colors.green,   isDark),
+            _buildAutoDisplay('إجمالي المبيعات',               _totalSales,        Icons.trending_up_rounded,     Colors.teal,    isDark),
+            _buildAutoDisplay('إجمالي الديون من التطبيق',      _appDebt,           Icons.account_balance_rounded, Colors.purple,  isDark),
+            _buildAutoDisplay('إجمالي الديون النقدية',         _cashWithdrawals,   Icons.money_off_rounded,       Colors.red,     isDark),
+            _buildAutoDisplay('إجمالي الديون',                 _appDebt + _cashWithdrawals, Icons.warning_rounded, Colors.orange, isDark),
+            _buildAutoDisplay('إجمالي المشتريات من التطبيق',   _appPurchases,      Icons.mobile_friendly_rounded, Colors.indigo,  isDark),
+            _buildAutoDisplay('إجمالي المشتريات النقدية',      _cashPurchases,     Icons.shopping_bag_rounded,    Colors.amber,   isDark),
+            _buildAutoDisplay('إجمالي المشتريات',              _totalPurchases,    Icons.shopping_cart_rounded,   Colors.cyan,    isDark),
           ],
         ),
       ],
@@ -607,10 +582,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           mainAxisSpacing: 16,
           childAspectRatio: isSmall ? 2.8 : 3.5,
           children: [
-            _buildDerivedCard('إجمالي البيع الكلي',    _totalSales,     Colors.blue,   isDark),
-            _buildDerivedCard('إجمالي البيع نقدي',     _cashSales,      Colors.green,  isDark),
-            _buildDerivedCard('إجمالي المبيعات تطبيق', _appSales,       Colors.purple, isDark),
-            _buildDerivedCard('إجمالي المشتريات',      _totalPurchases, Colors.orange, isDark),
+            _buildDerivedCard('إجمالي المبيعات',      _totalSales,     Colors.blue,   isDark),
+            _buildDerivedCard('إجمالي الديون',        _appDebt + _cashWithdrawals, Colors.red, isDark),
+            _buildDerivedCard('إجمالي المشتريات',     _totalPurchases, Colors.orange, isDark),
           ],
         ),
       ],
