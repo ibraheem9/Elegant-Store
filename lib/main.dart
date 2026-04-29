@@ -20,12 +20,13 @@ import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/license_gate_screen.dart';
 import 'core/config/app_themes.dart';
+import 'core/config/api_config.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 const String syncTaskName = "com.elegantstore.sync_task";
 
-@pragma('vm:entry-point')
+  @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
     try {
@@ -34,8 +35,14 @@ void callbackDispatcher() {
       final dbService = DatabaseService();
       final prefs = await SharedPreferences.getInstance();
       
-      // Use new device sync service
-      final dio = Dio();
+      // Use new device sync service with proper baseUrl
+      final dio = Dio(
+        BaseOptions(
+          baseUrl: ApiConfig.baseUrl,
+          connectTimeout: const Duration(seconds: 30),
+          receiveTimeout: const Duration(seconds: 30),
+        ),
+      );
       final token = prefs.getString('auth_token');
       if (token != null) {
         dio.options.headers['Authorization'] = 'Bearer $token';
@@ -128,7 +135,13 @@ void main() async {
         // Add DeviceSyncService provider
         ProxyProvider<AuthService, DeviceSyncService>(
           update: (_, authService, __) {
-            final dio = Dio();
+            final dio = Dio(
+              BaseOptions(
+                baseUrl: ApiConfig.baseUrl,
+                connectTimeout: const Duration(seconds: 30),
+                receiveTimeout: const Duration(seconds: 30),
+              ),
+            );
             final token = prefs.getString('auth_token');
             if (token != null) {
               dio.options.headers['Authorization'] = 'Bearer $token';
