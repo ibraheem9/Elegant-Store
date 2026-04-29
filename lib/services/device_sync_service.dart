@@ -122,7 +122,7 @@ class DeviceSyncService {
           '[DeviceSync] Initializing sync for device: $deviceId ($deviceName), timezone: $deviceTimezone');
 
       final response = await _dio.post(
-        '/api/sync/device/init',
+        'sync/device/init',
         data: {
           'device_id': deviceId,
           'device_name': deviceName,
@@ -170,7 +170,7 @@ class DeviceSyncService {
       final deviceId = await getDeviceId();
 
       final response = await _dio.post(
-        '/api/sync/device/start',
+        'sync/device/start',
         data: {'device_id': deviceId},
       );
 
@@ -195,7 +195,7 @@ class DeviceSyncService {
       final deviceId = await getDeviceId();
 
       final response = await _dio.post(
-        '/api/sync/device/changed-records',
+        'sync/device/changed-records',
         data: {
           'device_id': deviceId,
           'tables': tables,
@@ -227,7 +227,7 @@ class DeviceSyncService {
       final deviceId = await getDeviceId();
 
       final response = await _dio.post(
-        '/api/sync/device/complete',
+        'sync/device/complete',
         data: {'device_id': deviceId},
       );
 
@@ -253,7 +253,7 @@ class DeviceSyncService {
       final deviceId = await getDeviceId();
 
       final response = await _dio.post(
-        '/api/sync/device/fail',
+        'sync/device/fail',
         data: {'device_id': deviceId},
       );
 
@@ -276,7 +276,7 @@ class DeviceSyncService {
       final deviceId = await getDeviceId();
 
       final response = await _dio.get(
-        '/api/sync/device/status/$deviceId',
+        'sync/device/status/$deviceId',
       );
 
       if (response.statusCode == 200 && response.data['success'] == true) {
@@ -293,7 +293,7 @@ class DeviceSyncService {
   /// Get all devices for current user
   Future<List<Map<String, dynamic>>> getDevices() async {
     try {
-      final response = await _dio.get('/api/sync/device/list');
+      final response = await _dio.get('sync/device/list');
 
       if (response.statusCode == 200 && response.data['success'] == true) {
         final devices = response.data['devices'] as List?;
