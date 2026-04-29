@@ -266,6 +266,9 @@ class _AppHomeState extends State<_AppHome> with WidgetsBindingObserver {
     Future.microtask(() async {
       try {
         final syncManager = context.read<SyncManager>();
+        // Enable automatic sync (15 min interval)
+        syncManager.enable();
+        // Force immediate sync on login
         await syncManager.forceSyncNow();
       } catch (e) {
         debugPrint('Post-login sync failed: $e');
@@ -281,6 +284,11 @@ class _AppHomeState extends State<_AppHome> with WidgetsBindingObserver {
         Future.microtask(() async {
           try {
             final syncManager = context.read<SyncManager>();
+            // Ensure sync is enabled when app resumes
+            if (!syncManager.isEnabled) {
+              syncManager.enable();
+            }
+            // Force sync on app resume
             await syncManager.forceSyncNow();
           } catch (e) {
             debugPrint('App resume sync failed: $e');
