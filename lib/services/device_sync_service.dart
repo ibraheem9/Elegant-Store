@@ -114,9 +114,12 @@ class DeviceSyncService {
       final deviceId = await getDeviceId();
       final deviceName = await getDeviceName();
       final localTimeMs = DateTime.now().millisecondsSinceEpoch;
+      
+      // Get device timezone
+      final deviceTimezone = DateTime.now().timeZoneName;
 
       debugPrint(
-          '[DeviceSync] Initializing sync for device: $deviceId ($deviceName)');
+          '[DeviceSync] Initializing sync for device: $deviceId ($deviceName), timezone: $deviceTimezone');
 
       final response = await _dio.post(
         '/api/sync/device/init',
@@ -124,6 +127,7 @@ class DeviceSyncService {
           'device_id': deviceId,
           'device_name': deviceName,
           'device_local_time_ms': localTimeMs,
+          'device_timezone': deviceTimezone,
         },
         options: Options(
           headers: {
@@ -138,11 +142,15 @@ class DeviceSyncService {
       if (response.statusCode == 200 && response.data['success'] == true) {
         final serverTimeMs = response.data['server_time_ms'] as int?;
         final timeOffsetMs = response.data['time_offset_ms'] as int?;
+        final deviceTz = response.data['device_timezone'] as String?;
+        final userTz = response.data['user_timezone'] as String?;
 
         if (serverTimeMs != null && timeOffsetMs != null) {
           _timeOffsetMs = timeOffsetMs;
           debugPrint(
               '[DeviceSync] Time offset calculated: $_timeOffsetMs ms (server: $serverTimeMs, local: $localTimeMs)');
+          debugPrint(
+              '[DeviceSync] Timezone - Device: $deviceTz, User: $userTz');
           return true;
         }
       }
