@@ -1,3 +1,4 @@
+import '../utils/timestamp_formatter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -462,7 +463,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                         title: Text(p.merchantName,
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                         subtitle: Text(
-                          '${p.amount.toStringAsFixed(2)} ₪  •  ${DateFormat('yyyy/MM/dd').format(DateTime.tryParse(p.createdAt) ?? DateTime.now())}',
+                          '${p.amount.toStringAsFixed(2)} ₪  •  ${p.createdAt.toLocalShort()}',
                           style: const TextStyle(fontSize: 11),
                         ),
                         trailing: TextButton.icon(

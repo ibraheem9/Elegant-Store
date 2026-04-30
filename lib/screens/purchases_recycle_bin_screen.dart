@@ -1,3 +1,4 @@
+import '../utils/timestamp_formatter.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -288,7 +289,7 @@ class _PurchasesRecycleBinScreenState
         : '—';
     final createdAt = p.createdAt.isNotEmpty
         ? DateFormat('yyyy/MM/dd', 'ar')
-            .format(DateTime.tryParse(p.createdAt) ?? DateTime.now())
+            .toLocalShort()
         : '—';
 
     return Container(

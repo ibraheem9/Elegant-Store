@@ -1,3 +1,4 @@
+import '../utils/timestamp_formatter.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/database_service.dart';
@@ -568,7 +569,7 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
                     label: 'تاريخ الفاتورة',
                     value: inv.invoiceDate.isNotEmpty
                         ? inv.invoiceDate
-                        : _formatDate(inv.createdAt),
+                        : inv.createdAt.toLocalShort(),
                     isDark: isDark,
                   ),
                 ),
@@ -617,7 +618,7 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
                     color: isDark ? Colors.white24 : Colors.grey.shade400),
                 const SizedBox(width: 3),
                 Text(
-                  _formatDate(inv.createdAt),
+                  inv.createdAt.toLocalShort(),
                   style: TextStyle(
                       fontSize: 10,
                       color: isDark ? Colors.white24 : Colors.grey.shade400),

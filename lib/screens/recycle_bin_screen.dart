@@ -1,3 +1,4 @@
+import '../utils/timestamp_formatter.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -47,7 +48,7 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
 
         bool matchesDate = true;
         if (_selectedDateRange != null) {
-          DateTime invDate = DateTime.parse(inv.createdAt);
+          DateTime invDate = inv.createdAt.toLocalDateTime();
           matchesDate = invDate.isAfter(_selectedDateRange!.start.subtract(const Duration(days: 1))) &&
               invDate.isBefore(_selectedDateRange!.end.add(const Duration(days: 1)));
         }
