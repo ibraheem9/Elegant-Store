@@ -288,8 +288,7 @@ class _PurchasesRecycleBinScreenState
             .format(DateTime.tryParse(p.deletedAt!) ?? DateTime.now())
         : '—';
     final createdAt = p.createdAt.isNotEmpty
-        ? DateFormat('yyyy/MM/dd', 'ar')
-            .toLocalShort()
+        ? p.createdAt.toLocalShort()
         : '—';
 
     return Container(
