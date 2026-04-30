@@ -1048,7 +1048,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     final reason = reasonController.text.trim().isEmpty
         ? 'تعديل يدوي'
         : reasonController.text.trim();
-    final now = DateTime.now().toIso8601String();
+    final now = DateTime.now().toUtc().toIso8601String();
     final newInv = Invoice(
       id: inv.id,
       uuid: inv.uuid,

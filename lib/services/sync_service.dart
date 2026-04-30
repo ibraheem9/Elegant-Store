@@ -686,7 +686,7 @@ class SyncService extends ChangeNotifier {
         final serverTimestamp =
             _safeString(responseData['timestamp']) ??
             _safeString(responseData['server_time']) ??
-            DateTime.now().toIso8601String();
+            DateTime.now().toUtc().toIso8601String();
 
         final db = await _dbService.database;
         final List<String> mergedNames = [];

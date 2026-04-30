@@ -66,7 +66,7 @@ class User {
     String? updatedAt,
     this.deletedAt,
     this.isSynced = 0,
-  }) : this.updatedAt = updatedAt ?? DateTime.now().toIso8601String();
+  }) : this.updatedAt = updatedAt ?? DateTime.now().toUtc().toIso8601String();
 
   Map<String, dynamic> toMap() {
     return {
@@ -157,8 +157,8 @@ class PaymentMethod {
     String? createdAt,
     String? updatedAt,
     this.isSynced = 0,
-  })  : this.createdAt = createdAt ?? DateTime.now().toIso8601String(),
-        this.updatedAt = updatedAt ?? DateTime.now().toIso8601String();
+  })  : this.createdAt = createdAt ?? DateTime.now().toUtc().toIso8601String(),
+        this.updatedAt = updatedAt ?? DateTime.now().toUtc().toIso8601String();
 
   Map<String, dynamic> toMap() {
     return {
@@ -268,7 +268,7 @@ class Invoice {
     this.userUuid,
     this.customerIsPermanent = 0,
     this.lastEditedBy,
-  }) : this.updatedAt = updatedAt ?? DateTime.now().toIso8601String();
+  }) : this.updatedAt = updatedAt ?? DateTime.now().toUtc().toIso8601String();
 
   Map<String, dynamic> toMap() {
     return {
@@ -356,7 +356,7 @@ class FinancialTransaction {
     this.isSynced = 0,
     this.buyerUuid,
     this.invoiceUuid,
-  }) : this.updatedAt = updatedAt ?? DateTime.now().toIso8601String();
+  }) : this.updatedAt = updatedAt ?? DateTime.now().toUtc().toIso8601String();
 
   Map<String, dynamic> toMap() {
     return {
@@ -431,7 +431,7 @@ class Purchase {
     String? updatedAt,
     this.deletedAt,
     this.isSynced = 0,
-  }) : this.updatedAt = updatedAt ?? DateTime.now().toIso8601String();
+  }) : this.updatedAt = updatedAt ?? DateTime.now().toUtc().toIso8601String();
 
   Map<String, dynamic> toMap() {
     return {
@@ -506,7 +506,7 @@ class DailyStatistics {
     required this.createdAt,
     String? updatedAt,
     this.isSynced = 0,
-  }) : this.updatedAt = updatedAt ?? DateTime.now().toIso8601String();
+  }) : this.updatedAt = updatedAt ?? DateTime.now().toUtc().toIso8601String();
 
   Map<String, dynamic> toMap() {
     return {

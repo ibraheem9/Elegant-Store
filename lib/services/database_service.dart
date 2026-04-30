@@ -85,7 +85,7 @@ class DatabaseService {
               'ALTER TABLE payment_methods ADD COLUMN created_at TEXT',
             );
           } catch (_) {}
-          final now = DateTime.now().toIso8601String();
+          final now = DateTime.now().toUtc().toIso8601String();
           await db.execute(
             "UPDATE payment_methods SET created_at = ? WHERE created_at IS NULL OR created_at = ''",
             [now],
@@ -689,7 +689,7 @@ class DatabaseService {
 
   Future<int> insertUser(User u, String p) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = DateTime.now().toUtc().toIso8601String();
     var map = u.toMap();
     map.remove('id');
     map['uuid'] = (u.uuid.isEmpty) ? _uuid.v4() : u.uuid;
@@ -710,7 +710,7 @@ class DatabaseService {
         'id': newUser.id,
         'version': (oldUser.version) + 1,
         'is_synced': 0,
-        'updated_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
       },
       where: 'id = ?',
       whereArgs: [newUser.id],
@@ -736,7 +736,7 @@ class DatabaseService {
         'password': newPassword,
         'version': currentVersion + 1,
         'is_synced': 0,
-        'updated_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
       },
       where: 'id = ?',
       whereArgs: [userId],
@@ -745,7 +745,7 @@ class DatabaseService {
 
   Future<void> softDeleteUser(int id) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = DateTime.now().toUtc().toIso8601String();
     final existing = await db.query(
       'users',
       where: 'id = ?',
@@ -786,7 +786,7 @@ class DatabaseService {
   Future<int> insertInvoice(Invoice inv) async {
     final db = await database;
     return await db.transaction((txn) async {
-      final now = DateTime.now().toIso8601String();
+      final now = DateTime.now().toUtc().toIso8601String();
 
       // Determine payment method type to decide if this is a cash/app (PAID) invoice.
       // IMPORTANT: We never auto-settle invoices from deposit credit.
@@ -876,7 +876,7 @@ class DatabaseService {
   /// and deleting a SALE/WITHDRAWAL invoice removes its debt effect.
   Future<void> softDeleteInvoice(Invoice inv) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = DateTime.now().toUtc().toIso8601String();
     await db.update(
       'invoices',
       {
@@ -898,7 +898,7 @@ class DatabaseService {
   /// and restoring a SALE/WITHDRAWAL invoice re-applies its debt effect.
   Future<void> restoreInvoice(Invoice inv) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = DateTime.now().toUtc().toIso8601String();
     await db.update(
       'invoices',
       {
@@ -942,7 +942,7 @@ class DatabaseService {
   /// Used when the user wants to delete a customer that still has financial records.
   Future<void> softDeleteCustomerWithInvoices(int customerId) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = DateTime.now().toUtc().toIso8601String();
     await db.transaction((txn) async {
       // Soft-delete all active invoices for this customer
       await txn.rawUpdate(
@@ -1290,7 +1290,7 @@ class DatabaseService {
 
   Future<int> insertPaymentMethod(PaymentMethod m) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = DateTime.now().toUtc().toIso8601String();
     var map = m.toMap();
     map.remove('id');
     map['uuid'] = (m.uuid.isEmpty) ? _uuid.v4() : m.uuid;
@@ -1303,7 +1303,7 @@ class DatabaseService {
 
   Future<int> updatePaymentMethod(PaymentMethod m) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = DateTime.now().toUtc().toIso8601String();
     return await db.update(
       'payment_methods',
       {
@@ -1322,7 +1322,7 @@ class DatabaseService {
   /// of whether the method has been deleted.
   Future<int> deletePaymentMethod(int id) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = DateTime.now().toUtc().toIso8601String();
     final existing = await db.query(
       'payment_methods',
       where: 'id = ?',
@@ -1364,7 +1364,7 @@ class DatabaseService {
 
   Future<void> updatePaymentMethodsOrder(List<PaymentMethod> methods) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = DateTime.now().toUtc().toIso8601String();
     await db.transaction((txn) async {
       for (int i = 0; i < methods.length; i++) {
         await txn.update(
@@ -1424,7 +1424,7 @@ class DatabaseService {
   }) async {
     final db = await database;
     await db.transaction((txn) async {
-      final now = DateTime.now().toIso8601String();
+      final now = DateTime.now().toUtc().toIso8601String();
       final dateStr = DateFormat(
         'dd-MM-yyyy EEEE',
         'ar',
@@ -1467,7 +1467,7 @@ class DatabaseService {
   }) async {
     final db = await database;
     await db.transaction((txn) async {
-      final now = DateTime.now().toIso8601String();
+      final now = DateTime.now().toUtc().toIso8601String();
       await txn.update(
         'invoices',
         {
@@ -1746,7 +1746,7 @@ class DatabaseService {
 
   Future<int> insertDailyStatistics(DailyStatistics stats) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = DateTime.now().toUtc().toIso8601String();
     var map = stats.toMap();
     map.remove('id');
     map['uuid'] = (stats.uuid.isEmpty) ? _uuid.v4() : stats.uuid;
@@ -1818,7 +1818,7 @@ class DatabaseService {
 
   Future<int> insertPurchase(Purchase p) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = DateTime.now().toUtc().toIso8601String();
     var map = p.toMap();
     map.remove('id');
     map['uuid'] = (p.uuid.isEmpty) ? _uuid.v4() : p.uuid;
@@ -1831,7 +1831,7 @@ class DatabaseService {
 
   Future<void> updatePurchase(Purchase p) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = DateTime.now().toUtc().toIso8601String();
     await db.update(
       'purchases',
       {
@@ -1848,7 +1848,7 @@ class DatabaseService {
   /// Soft-delete a purchase (sets deleted_at timestamp)
   Future<void> softDeletePurchase(int purchaseId) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = DateTime.now().toUtc().toIso8601String();
     await db.update(
       'purchases',
       {'deleted_at': now, 'updated_at': now, 'is_synced': 0},
@@ -1860,7 +1860,7 @@ class DatabaseService {
   /// Restore a soft-deleted purchase
   Future<void> restorePurchase(int purchaseId) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = DateTime.now().toUtc().toIso8601String();
     await db.update(
       'purchases',
       {'deleted_at': null, 'updated_at': now, 'is_synced': 0},
@@ -1914,7 +1914,7 @@ class DatabaseService {
     required int editorId,
   }) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = DateTime.now().toUtc().toIso8601String();
     await db.transaction((txn) async {
       await txn.update(
         'purchases',
@@ -2022,7 +2022,7 @@ class DatabaseService {
 
   Future<void> updateInvoice(Invoice inv) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = DateTime.now().toUtc().toIso8601String();
     await db.update(
       'invoices',
       {
@@ -2079,7 +2079,7 @@ class DatabaseService {
     int? storeManagerId,
   }) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = DateTime.now().toUtc().toIso8601String();
     await db.insert('edit_history', {
       'uuid': _uuid.v4(),
       'store_manager_id': storeManagerId,
@@ -2182,7 +2182,7 @@ class DatabaseService {
           updated_at = ?
         WHERE id != ? AND role = 'CUSTOMER'
       ''',
-        [managerId, DateTime.now().toIso8601String(), managerId],
+        [managerId, DateTime.now().toUtc().toIso8601String(), managerId],
       );
 
       final storeTables = [
@@ -2199,7 +2199,7 @@ class DatabaseService {
           await txn.update(table, {
             'store_manager_id': managerId,
             'is_synced': 0,
-            'updated_at': DateTime.now().toIso8601String(),
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
           }, where: 'store_manager_id IS NULL OR store_manager_id = 0');
         }
       }

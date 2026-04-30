@@ -37,7 +37,7 @@ class _AddAccountantScreenState extends State<AddAccountantScreen> {
         name: _nameController.text.trim(),
         role: 'ACCOUNTANT',
         parentId: auth.currentUser?.getStoreManagerIdLocal(),
-        createdAt: DateTime.now().toIso8601String(),
+        createdAt: DateTime.now().toUtc().toIso8601String(),
       );
 
       final newAccId = await db.insertUser(accountant, _passwordController.text);

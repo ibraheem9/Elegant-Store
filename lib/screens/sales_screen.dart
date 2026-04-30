@@ -370,7 +370,7 @@ class _SalesScreenState extends State<SalesScreen> {
           phone: _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
           role: 'CUSTOMER',
           isPermanentCustomer: 0,
-          createdAt: DateTime.now().toIso8601String(),
+          createdAt: DateTime.now().toUtc().toIso8601String(),
         ), '123');
         customer = (await db.getCustomers()).firstWhere((c) => c.id == id);
       }
@@ -396,7 +396,7 @@ class _SalesScreenState extends State<SalesScreen> {
         amount: amount,
         paymentStatus: status,
         paymentMethodId: _selectedPaymentMethod?.id,
-        createdAt: combinedDateTime.toIso8601String(),
+        createdAt: combinedDateTime.toUtc().toIso8601String(),
         notes: _notesController.text,
       );
 
@@ -446,7 +446,7 @@ class _SalesScreenState extends State<SalesScreen> {
           phone: _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
           role: 'CUSTOMER',
           isPermanentCustomer: 0,
-          createdAt: DateTime.now().toIso8601String(),
+          createdAt: DateTime.now().toUtc().toIso8601String(),
         ), '123');
         customer = (await db.getCustomers()).firstWhere((c) => c.id == id);
       }
