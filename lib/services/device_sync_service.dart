@@ -307,6 +307,64 @@ class DeviceSyncService {
     }
   }
 
+  /// Convert system timezone name to IANA timezone
+  /// 
+  /// Maps common Windows timezone names to IANA timezone identifiers
+  /// Falls back to UTC if timezone cannot be determined
+  String _getIanaTimezone() {
+    final tzName = DateTime.now().timeZoneName;
+    
+    // Map of common timezone names to IANA identifiers
+    final timezoneMap = {
+      // Middle East
+      'Arabia Standard Time': 'Asia/Riyadh',
+      'Arab Standard Time': 'Asia/Baghdad',
+      'West Bank Gaza Standard Time': 'Asia/Jerusalem',
+      'West Bank Gaza Daylight Time': 'Asia/Jerusalem',
+      'Israel Standard Time': 'Asia/Jerusalem',
+      'E. Europe Standard Time': 'Europe/Bucharest',
+      'Syria Standard Time': 'Asia/Damascus',
+      'Turkey Standard Time': 'Europe/Istanbul',
+      
+      // Europe
+      'Central European Standard Time': 'Europe/Berlin',
+      'Romance Standard Time': 'Europe/Paris',
+      'GMT Standard Time': 'Europe/London',
+      'Greenwich Standard Time': 'Atlantic/Reykjavik',
+      
+      // Asia
+      'China Standard Time': 'Asia/Shanghai',
+      'Tokyo Standard Time': 'Asia/Tokyo',
+      'Singapore Standard Time': 'Asia/Singapore',
+      'India Standard Time': 'Asia/Kolkata',
+      
+      // Americas
+      'Eastern Standard Time': 'America/New_York',
+      'Central Standard Time': 'America/Chicago',
+      'Mountain Standard Time': 'America/Denver',
+      'Pacific Standard Time': 'America/Los_Angeles',
+      
+      // UTC
+      'UTC': 'UTC',
+      'Coordinated Universal Time': 'UTC',
+    };
+    
+    // Try to find exact match
+    if (timezoneMap.containsKey(tzName)) {
+      return timezoneMap[tzName]!;
+    }
+    
+    // Try to find partial match
+    for (final entry in timezoneMap.entries) {
+      if (tzName.contains(entry.key) || entry.key.contains(tzName)) {
+        return entry.value;
+      }
+    }
+    
+    // Default to UTC if no match found
+    return 'UTC';
+  }
+
   /// Perform full sync cycle
   Future<bool> performFullSync(List<String> tables) async {
     try {
