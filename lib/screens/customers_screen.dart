@@ -1,3 +1,4 @@
+import '../utils/timestamp_formatter.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -1551,8 +1552,8 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                       if (inv.methodName != null)
                         Text('وسيلة الدفع: ${inv.methodName}',
                             style: TextStyle(color: invAccent.withOpacity(0.8), fontWeight: FontWeight.w600, fontSize: 11)),
-                      // Date
-                      Text('التاريخ: ${inv.invoiceDate}',
+                      // Date with time in local timezone
+                      Text('التاريخ: ${inv.createdAt.toLocalMedium()}',
                           style: TextStyle(color: invAccent.withOpacity(0.6), fontSize: 11)),
                       if (inv.notes != null)
                         Text('ملاحظات: ${inv.notes}',
