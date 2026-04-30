@@ -32,42 +32,42 @@ class TimestampFormatter {
 
   /// Format timestamp for display (short format)
   /// 
-  /// Example: "29-04-2026 15:30"
+  /// Example: "29-04-2026 3:30 م"
   static String formatShort(String? utcTimestampString) {
     final localDateTime = toLocalDateTime(utcTimestampString);
-    return DateFormat('dd-MM-yyyy HH:mm').format(localDateTime);
+    return DateFormat('dd-MM-yyyy h:mm a', 'ar_SA').format(localDateTime);
   }
 
   /// Format timestamp for display (medium format)
   /// 
-  /// Example: "29-04-2026 15:30:45"
+  /// Example: "29-04-2026 3:30:45 م"
   static String formatMedium(String? utcTimestampString) {
     final localDateTime = toLocalDateTime(utcTimestampString);
-    return DateFormat('dd-MM-yyyy HH:mm:ss').format(localDateTime);
+    return DateFormat('dd-MM-yyyy h:mm:ss a', 'ar_SA').format(localDateTime);
   }
 
   /// Format timestamp for display (long format with day name)
   /// 
-  /// Example: "الثلاثاء 29-04-2026 15:30"
+  /// Example: "الثلاثاء 29-04-2026 3:30 م"
   static String formatLong(String? utcTimestampString) {
     final localDateTime = toLocalDateTime(utcTimestampString);
-    return DateFormat('EEEE dd-MM-yyyy HH:mm', 'ar_SA').format(localDateTime);
+    return DateFormat('EEEE dd-MM-yyyy h:mm a', 'ar_SA').format(localDateTime);
   }
 
   /// Format timestamp for display (Arabic format with day name)
   /// 
-  /// Example: "الثلاثاء، 29 أبريل 2026 - 15:30"
+  /// Example: "الثلاثاء، 29 أبريل 2026 - 3:30 م"
   static String formatArabic(String? utcTimestampString) {
     final localDateTime = toLocalDateTime(utcTimestampString);
-    return DateFormat('EEEE، d MMMM yyyy - HH:mm', 'ar_SA').format(localDateTime);
+    return DateFormat('EEEE، d MMMM yyyy - h:mm a', 'ar_SA').format(localDateTime);
   }
 
-  /// Format time only (HH:mm)
+  /// Format time only (h:mm a)
   /// 
-  /// Example: "15:30"
+  /// Example: "3:30 م"
   static String formatTimeOnly(String? utcTimestampString) {
     final localDateTime = toLocalDateTime(utcTimestampString);
-    return DateFormat('HH:mm').format(localDateTime);
+    return DateFormat('h:mm a', 'ar_SA').format(localDateTime);
   }
 
   /// Format date only (dd-MM-yyyy)
