@@ -1,3 +1,4 @@
+import '../utils/timestamp_formatter.dart';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1602,7 +1603,7 @@ class _SalesScreenState extends State<SalesScreen> {
                   ),
                 )
               ),
-              DataCell(Text(inv.invoiceDate, style: TextStyle(color: rowNameColor.withOpacity(0.7), fontSize: 12))),
+              DataCell(Text(inv.createdAt.toLocalMedium(), style: TextStyle(color: rowNameColor.withOpacity(0.7), fontSize: 12))),
               DataCell(Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(color: rowNameColor, fontWeight: FontWeight.bold))),
               DataCell(Text(isWithdrawal ? 'سحب نقدي' : (inv.methodName ?? '-'), style: TextStyle(color: rowNameColor.withOpacity(0.8)))),
               DataCell(Row(
