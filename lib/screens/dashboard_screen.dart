@@ -1,3 +1,4 @@
+import '../utils/timestamp_formatter.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -744,8 +745,7 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
     String lastSyncDisplay = 'لم تتم مزامنة بعد';
     if (details != null && details.lastSyncTime.isNotEmpty) {
       try {
-        final dt = DateTime.parse(details.lastSyncTime).toLocal();
-        lastSyncDisplay = DateFormat('yyyy/MM/dd  hh:mm a', 'ar').format(dt);
+        lastSyncDisplay = details.lastSyncTime.toLocalArabic();
       } catch (_) {
         lastSyncDisplay = details.lastSyncTime;
       }
