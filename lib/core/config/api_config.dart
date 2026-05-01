@@ -1,3 +1,3 @@
 class ApiConfig {
-  static const String baseUrl = 'https://api.elegant.vironna.com/api/';
+  static const String baseUrl = 'http://api.elegant.vironna.com/api/';
 }
