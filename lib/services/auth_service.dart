@@ -228,15 +228,18 @@ class AuthService extends ChangeNotifier {
       return LoginResult.wrongCredentials;
     } on DioException catch (e) {
       dev.log('Online login failed (Network): ${e.message}', name: 'AuthService');
+      _lastLoginError = 'Network error: ${e.message}';
 
-      // Offline fallback — only allowed if this is the same user who last logged in
+      // Offline fallback — try to authenticate using local database
+      // This allows both returning users and potentially new users if data was synced
       final prefs = await SharedPreferences.getInstance();
-      final lastUser = prefs.getString('last_logged_username');
 
-      if (lastUser == username) {
+      // Try offline login for any user (not just last logged user)
+      // This is more flexible and allows new users to login if they were synced locally
+      try {
         final localUser = await _dbService.authenticate(username, password);
         if (localUser != null) {
-          // Block CUSTOMER from offline login too
+          // Block CUSTOMER from offline login
           if (localUser.role == 'CUSTOMER') {
             return LoginResult.customerNotAllowed;
           }
@@ -246,7 +249,11 @@ class AuthService extends ChangeNotifier {
           notifyListeners();
           return LoginResult.success;
         }
+      } catch (offlineError) {
+        dev.log('Offline fallback also failed: $offlineError', name: 'AuthService');
       }
+      
+      // If we get here, both online and offline login failed
       return LoginResult.networkError;
     } catch (e, stackTrace) {
       dev.log('Login error (Exception): $e\n$stackTrace', name: 'AuthService', error: e);
