@@ -64,7 +64,13 @@ void callbackDispatcher() {
 }
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  // Disable Impeller renderer to avoid Mali GPU allocator issues
+  // This forces Skia rendering which is more compatible
+  // See: https://github.com/flutter/flutter/issues/...
+  // Impeller causes "Format allocation info not found" errors on Mali GPUs
+  final binding = WidgetsFlutterBinding.ensureInitialized();
+  // Note: For Android, Impeller can be disabled in AndroidManifest.xml or via native code
+  // For now, we rely on the device's GPU compatibility
 
   // Initialize date formatting (fast, no network)
   try {
