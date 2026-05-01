@@ -107,6 +107,68 @@ class DeviceSyncService {
     }
   }
 
+  /// Convert Windows timezone name to IANA timezone
+  /// Examples:
+  ///   "West Bank Gaza Daylight Time" -> "Asia/Jerusalem"
+  ///   "Eastern Standard Time" -> "America/New_York"
+  ///   "UTC" -> "UTC"
+  String _convertToIanaTimezone(String windowsTimezone) {
+    // Mapping of Windows timezone names to IANA timezone identifiers
+    final Map<String, String> timezoneMap = {
+      // Middle East
+      'West Bank Gaza Daylight Time': 'Asia/Jerusalem',
+      'West Bank Gaza Standard Time': 'Asia/Jerusalem',
+      'Israel Standard Time': 'Asia/Jerusalem',
+      'Arabia Standard Time': 'Asia/Riyadh',
+      'Arab Standard Time': 'Asia/Baghdad',
+      'E. Europe Standard Time': 'Europe/Minsk',
+      'Egypt Standard Time': 'Africa/Cairo',
+      
+      // US
+      'Eastern Standard Time': 'America/New_York',
+      'Central Standard Time': 'America/Chicago',
+      'Mountain Standard Time': 'America/Denver',
+      'Pacific Standard Time': 'America/Los_Angeles',
+      'Alaskan Standard Time': 'America/Anchorage',
+      'Hawaiian Standard Time': 'Pacific/Honolulu',
+      
+      // Europe
+      'GMT Standard Time': 'Europe/London',
+      'Central Europe Standard Time': 'Europe/Berlin',
+      'Romance Standard Time': 'Europe/Paris',
+      'W. Europe Standard Time': 'Europe/Berlin',
+      
+      // Asia
+      'India Standard Time': 'Asia/Kolkata',
+      'China Standard Time': 'Asia/Shanghai',
+      'Tokyo Standard Time': 'Asia/Tokyo',
+      'Singapore Standard Time': 'Asia/Singapore',
+      'Bangkok Standard Time': 'Asia/Bangkok',
+      
+      // Australia
+      'AUS Eastern Standard Time': 'Australia/Sydney',
+      'AUS Central Standard Time': 'Australia/Adelaide',
+      'W. Australia Standard Time': 'Australia/Perth',
+      
+      // UTC
+      'UTC': 'UTC',
+    };
+    
+    // If exact match found, return it
+    if (timezoneMap.containsKey(windowsTimezone)) {
+      return timezoneMap[windowsTimezone]!;
+    }
+    
+    // If it's already an IANA timezone, return as-is
+    if (windowsTimezone.contains('/')) {
+      return windowsTimezone;
+    }
+    
+    // Default fallback
+    debugPrint('[DeviceSync] Unknown timezone: $windowsTimezone, using UTC');
+    return 'UTC';
+  }
+
   /// Initialize sync: calculate time offset
   Future<bool> initSync() async {
     try {
@@ -115,8 +177,9 @@ class DeviceSyncService {
       final deviceName = await getDeviceName();
       final localTimeMs = DateTime.now().millisecondsSinceEpoch;
       
-      // Get device timezone
-      final deviceTimezone = DateTime.now().timeZoneName;
+      // Get device timezone and convert to IANA format if needed
+      final rawTimezone = DateTime.now().timeZoneName;
+      final deviceTimezone = _convertToIanaTimezone(rawTimezone);
 
       debugPrint(
           '[DeviceSync] Initializing sync for device: $deviceId ($deviceName), timezone: $deviceTimezone');
