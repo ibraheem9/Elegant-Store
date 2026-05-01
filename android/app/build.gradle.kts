@@ -32,12 +32,10 @@ android {
     buildTypes {
         getByName("release") {
             signingConfig = signingConfigs.getByName("debug")
+            // Completely disable R8 compiler to avoid network code issues
             isMinifyEnabled = false
             isShrinkResources = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android.txt"),
-                "proguard-rules.pro"
-            )
+            // Don't use any ProGuard rules - keep everything as-is
         }
     }
 }
