@@ -397,7 +397,7 @@ class _SalesScreenState extends State<SalesScreen> {
         amount: amount,
         paymentStatus: status,
         paymentMethodId: _selectedPaymentMethod?.id,
-        createdAt: combinedDateTime.toIso8601String(), // Store as local ISO string to maintain exact device time
+        createdAt: combinedDateTime.toUtc().toIso8601String(),
         notes: _notesController.text,
       );
 
@@ -411,7 +411,7 @@ class _SalesScreenState extends State<SalesScreen> {
         action: 'CREATE',
         summary: 'فاتورة جديدة للزبون ${customer.name} بمبلغ ${amount.toStringAsFixed(2)} ₪ - الحالة: ${_translateHistoryValue('payment_status', status)}',
         performedById: _actUser?.id,
-        performedByName: _actUser?.name,
+        performedByName: _actUser?.username ?? _actUser?.name, // Prefer username (e.g. i7) for identity
         storeManagerId: _actUser?.parentId ?? _actUser?.id,
       ).catchError((e) => debugPrint('logActivity failed: $e'));
       _clearFields();
@@ -643,7 +643,7 @@ class _SalesScreenState extends State<SalesScreen> {
         newInv: newInv,
         reason: reasonController.text,
         performedById: _actUser?.id,
-        performedByName: _actUser?.name,
+        performedByName: _actUser?.username ?? _actUser?.name,
         storeManagerId: _actUser?.parentId ?? _actUser?.id,
       );
       // Recalculate balance in case amount or payment_status changed
@@ -815,7 +815,7 @@ class _SalesScreenState extends State<SalesScreen> {
         action: 'DELETE',
         summary: 'حذف فاتورة بمبلغ ${inv.amount.toStringAsFixed(2)} ₪ - الحالة: ${_translateHistoryValue('payment_status', inv.paymentStatus)}',
         performedById: _actUser?.id,
-        performedByName: _actUser?.name,
+        performedByName: _actUser?.username ?? _actUser?.name,
         storeManagerId: _actUser?.parentId ?? _actUser?.id,
       ).catchError((e) => debugPrint('logActivity failed: $e'));
       await _loadData();

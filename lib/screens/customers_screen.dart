@@ -167,7 +167,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
             action: 'DELETE',
             summary: 'حذف الزبون مع جميع فواتيره: ${customer.name}',
             performedById: _actUser?.id,
-            performedByName: _actUser?.name,
+            performedByName: _actUser?.username ?? _actUser?.name,
             storeManagerId: _actUser?.parentId ?? _actUser?.id,
           ).catchError((e) => debugPrint('logActivity failed: $e'));
           _loadCustomers();
@@ -201,7 +201,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
         action: 'DELETE',
         summary: 'حذف الزبون: ${customer.name}',
         performedById: _actUser?.id,
-        performedByName: _actUser?.name,
+        performedByName: _actUser?.username ?? _actUser?.name,
         storeManagerId: _actUser?.parentId ?? _actUser?.id,
       ).catchError((e) => debugPrint('logActivity failed: $e'));
       _loadCustomers();
@@ -781,7 +781,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
             action: 'DELETE',
             summary: 'حذف الزبون مع جميع فواتيره: ${_currentCustomer.name}',
             performedById: _actUser?.id,
-            performedByName: _actUser?.name,
+            performedByName: _actUser?.username ?? _actUser?.name,
             storeManagerId: _actUser?.parentId ?? _actUser?.id,
           ).catchError((e) => debugPrint('logActivity failed: $e'));
           if (mounted) Navigator.of(context).pop();
@@ -816,7 +816,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         action: 'DELETE',
         summary: 'حذف الزبون: ${_currentCustomer.name}',
         performedById: _actUser?.id,
-        performedByName: _actUser?.name,
+        performedByName: _actUser?.username ?? _actUser?.name,
         storeManagerId: _actUser?.parentId ?? _actUser?.id,
       ).catchError((e) => debugPrint('logActivity failed: $e'));
       if (mounted) Navigator.of(context).pop();
@@ -972,7 +972,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       action: 'DELETE',
       summary: 'حذف فاتورة للزبون ${_currentCustomer.name} بمبلغ ${inv.amount.toStringAsFixed(2)} ₪',
       performedById: _actUser?.id,
-      performedByName: _actUser?.name,
+      performedByName: _actUser?.username ?? _actUser?.name,
       storeManagerId: _actUser?.parentId ?? _actUser?.id,
     ).catchError((e) => debugPrint('logActivity failed: $e'));
     _loadData();
@@ -1074,7 +1074,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       newInv: newInv,
       reason: reason,
       performedById: _actUser?.id,
-      performedByName: _actUser?.name,
+      performedByName: _actUser?.username ?? _actUser?.name,
       storeManagerId: _actUser?.parentId ?? _actUser?.id,
     );
     await db.recalculateUserBalance(inv.userId);
