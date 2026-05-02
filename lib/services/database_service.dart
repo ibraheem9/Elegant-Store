@@ -689,7 +689,7 @@ class DatabaseService {
 
   Future<int> insertUser(User u, String p) async {
     final db = await database;
-    final now = DateTime.now().toUtc().toIso8601String();
+    final now = DateTime.now().toIso8601String();
     var map = u.toMap();
     map.remove('id');
     map['uuid'] = (u.uuid.isEmpty) ? _uuid.v4() : u.uuid;
@@ -786,7 +786,7 @@ class DatabaseService {
   Future<int> insertInvoice(Invoice inv) async {
     final db = await database;
     return await db.transaction((txn) async {
-      final now = DateTime.now().toUtc().toIso8601String();
+      final now = DateTime.now().toIso8601String();
 
       // Determine payment method type to decide if this is a cash/app (PAID) invoice.
       // IMPORTANT: We never auto-settle invoices from deposit credit.
@@ -1424,7 +1424,7 @@ class DatabaseService {
   }) async {
     final db = await database;
     await db.transaction((txn) async {
-      final now = DateTime.now().toUtc().toIso8601String();
+      final now = DateTime.now().toIso8601String();
       final dateStr = DateFormat(
         'dd-MM-yyyy EEEE',
         'ar',
@@ -1818,7 +1818,7 @@ class DatabaseService {
 
   Future<int> insertPurchase(Purchase p) async {
     final db = await database;
-    final now = DateTime.now().toUtc().toIso8601String();
+    final now = DateTime.now().toIso8601String();
     var map = p.toMap();
     map.remove('id');
     map['uuid'] = (p.uuid.isEmpty) ? _uuid.v4() : p.uuid;
@@ -2079,7 +2079,8 @@ class DatabaseService {
     int? storeManagerId,
   }) async {
     final db = await database;
-    final now = DateTime.now().toUtc().toIso8601String();
+    // Log using local device time for accuracy in audit logs
+    final now = DateTime.now().toIso8601String();
     await db.insert('edit_history', {
       'uuid': _uuid.v4(),
       'store_manager_id': storeManagerId,

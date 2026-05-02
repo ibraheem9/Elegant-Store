@@ -113,16 +113,22 @@ class DeviceSyncService {
   ///   "Eastern Standard Time" -> "America/New_York"
   ///   "UTC" -> "UTC"
   String _convertToIanaTimezone(String windowsTimezone) {
-    // Mapping of Windows timezone names to IANA timezone identifiers
+    // Mapping of Windows/System timezone names to IANA timezone identifiers
     final Map<String, String> timezoneMap = {
-      // Middle East
+      // Middle East / Jerusalem / Palestine
       'West Bank Gaza Daylight Time': 'Asia/Jerusalem',
       'West Bank Gaza Standard Time': 'Asia/Jerusalem',
       'Israel Standard Time': 'Asia/Jerusalem',
+      'Israel Daylight Time': 'Asia/Jerusalem',
+      'Jerusalem Standard Time': 'Asia/Jerusalem',
+      'Jerusalem Daylight Time': 'Asia/Jerusalem',
       'Arabia Standard Time': 'Asia/Riyadh',
       'Arab Standard Time': 'Asia/Baghdad',
       'E. Europe Standard Time': 'Europe/Minsk',
       'Egypt Standard Time': 'Africa/Cairo',
+      'Jordan Standard Time': 'Asia/Amman',
+      'Lebanon Standard Time': 'Asia/Beirut',
+      'Syria Standard Time': 'Asia/Damascus',
       
       // US
       'Eastern Standard Time': 'America/New_York',
@@ -379,15 +385,19 @@ class DeviceSyncService {
     
     // Map of common timezone names to IANA identifiers
     final timezoneMap = {
-      // Middle East
-      'Arabia Standard Time': 'Asia/Riyadh',
-      'Arab Standard Time': 'Asia/Baghdad',
+      // Middle East / Jerusalem
       'West Bank Gaza Standard Time': 'Asia/Jerusalem',
       'West Bank Gaza Daylight Time': 'Asia/Jerusalem',
       'Israel Standard Time': 'Asia/Jerusalem',
+      'Israel Daylight Time': 'Asia/Jerusalem',
+      'Jerusalem Standard Time': 'Asia/Jerusalem',
+      'Jerusalem Daylight Time': 'Asia/Jerusalem',
+      'Arabia Standard Time': 'Asia/Riyadh',
+      'Arab Standard Time': 'Asia/Baghdad',
       'E. Europe Standard Time': 'Europe/Bucharest',
       'Syria Standard Time': 'Asia/Damascus',
       'Turkey Standard Time': 'Europe/Istanbul',
+      'Jordan Standard Time': 'Asia/Amman',
       
       // Europe
       'Central European Standard Time': 'Europe/Berlin',

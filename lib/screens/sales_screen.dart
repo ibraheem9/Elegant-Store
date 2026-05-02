@@ -397,7 +397,7 @@ class _SalesScreenState extends State<SalesScreen> {
         amount: amount,
         paymentStatus: status,
         paymentMethodId: _selectedPaymentMethod?.id,
-        createdAt: combinedDateTime.toUtc().toIso8601String(),
+        createdAt: combinedDateTime.toIso8601String(), // Store as local ISO string to maintain exact device time
         notes: _notesController.text,
       );
 
