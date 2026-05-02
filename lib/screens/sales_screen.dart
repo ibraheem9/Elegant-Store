@@ -88,8 +88,8 @@ class _SalesScreenState extends State<SalesScreen> {
     if (!mounted) return;
     try {
       final db = context.read<DatabaseService>();
-      DateTime rangeStart = DateTime(_startDate.year, _startDate.month, _startDate.day);
-      DateTime rangeEnd = DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59);
+      DateTime rangeStart = DateTime(_startDate.year, _startDate.month, _startDate.day).toUtc();
+      DateTime rangeEnd = DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59).toUtc();
       final stats = await db.getSalesStats(start: rangeStart, end: rangeEnd);
       final invoices = await db.getInvoices(start: rangeStart, end: rangeEnd);
       if (mounted) {
@@ -114,8 +114,8 @@ class _SalesScreenState extends State<SalesScreen> {
       final seenIds = <int?>{};
       final methods = rawMethods.where((m) => seenIds.add(m.id)).toList();
 
-      DateTime rangeStart = DateTime(_startDate.year, _startDate.month, _startDate.day);
-      DateTime rangeEnd = DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59);
+      DateTime rangeStart = DateTime(_startDate.year, _startDate.month, _startDate.day).toUtc();
+      DateTime rangeEnd = DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59).toUtc();
       
       final stats = await db.getSalesStats(start: rangeStart, end: rangeEnd);
       final invoices = await db.getInvoices(start: rangeStart, end: rangeEnd);
@@ -1475,12 +1475,19 @@ class _SalesScreenState extends State<SalesScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(inv.customerName ?? 'عابر', style: TextStyle(color: nameColor, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
-                      if (isDeposit) Text('دفعة سداد ديون', style: TextStyle(color: nameColor.withOpacity(0.8), fontSize: 10, fontWeight: FontWeight.bold)),
-                      if (isWithdrawal) Row(children: [
-                        Icon(Icons.account_balance_wallet, size: 11, color: nameColor.withOpacity(0.8)),
-                        const SizedBox(width: 3),
-                        Flexible(child: Text('سحب نقدي من الصندوق', style: TextStyle(color: nameColor.withOpacity(0.8), fontSize: 10, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
-                      ]),
+                      if (isDeposit) 
+                        Text('دفعة سداد ديون', style: TextStyle(color: nameColor.withOpacity(0.8), fontSize: 10, fontWeight: FontWeight.bold))
+                      else if (isWithdrawal) 
+                        Row(children: [
+                          Icon(Icons.account_balance_wallet, size: 11, color: nameColor.withOpacity(0.8)),
+                          const SizedBox(width: 3),
+                          Flexible(child: Text('سحب نقدي من الصندوق', style: TextStyle(color: nameColor.withOpacity(0.8), fontSize: 10, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                        ])
+                      else
+                        Text(
+                          inv.paymentStatus == 'PAID' ? 'فاتورة بيع (نقدي)' : 'فاتورة بيع (دين)',
+                          style: TextStyle(color: nameColor.withOpacity(0.8), fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
                     ],
                   ),
                 ),
@@ -1492,7 +1499,7 @@ class _SalesScreenState extends State<SalesScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(inv.invoiceDate, style: TextStyle(color: nameColor.withOpacity(0.6), fontSize: 12)),
+              Text(inv.createdAt.toLocalMedium(), style: TextStyle(color: nameColor.withOpacity(0.6), fontSize: 12)),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
@@ -1597,8 +1604,15 @@ class _SalesScreenState extends State<SalesScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(inv.customerName ?? 'عابر', style: TextStyle(color: rowNameColor, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
-                      if (isDeposit) Text('دفعة سداد ديون', style: TextStyle(color: rowNameColor.withOpacity(0.8), fontSize: 9, fontWeight: FontWeight.bold)),
-                      if (isWithdrawal) Text('سحب نقدي من الصندوق', style: TextStyle(color: rowNameColor.withOpacity(0.8), fontSize: 9, fontWeight: FontWeight.bold)),
+                      if (isDeposit) 
+                        Text('دفعة سداد ديون', style: TextStyle(color: rowNameColor.withOpacity(0.8), fontSize: 9, fontWeight: FontWeight.bold))
+                      else if (isWithdrawal) 
+                        Text('سحب نقدي من الصندوق', style: TextStyle(color: rowNameColor.withOpacity(0.8), fontSize: 9, fontWeight: FontWeight.bold))
+                      else
+                        Text(
+                          inv.paymentStatus == 'PAID' ? 'فاتورة بيع (نقدي)' : 'فاتورة بيع (دين)',
+                          style: TextStyle(color: rowNameColor.withOpacity(0.8), fontSize: 9, fontWeight: FontWeight.bold),
+                        ),
                     ],
                   ),
                 )
