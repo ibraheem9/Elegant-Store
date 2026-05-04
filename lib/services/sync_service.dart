@@ -772,18 +772,9 @@ class SyncService extends ChangeNotifier {
     } finally {
       _isSyncing = false;
       notifyListeners();
-      /// Forces a complete re-sync by clearing the last sync time and performing a full sync.
-  Future<void> forceFullReSync() async {
-    await _prefs.remove('last_sync_time');
-    await performFullSync(isInitialSync: true);
+    }
   }
-}
-    /// Forces a complete re-sync by clearing the last sync time and performing a full sync.
-  Future<void> forceFullReSync() async {
-    await _prefs.remove('last_sync_time');
-    await performFullSync(isInitialSync: true);
-  }
-}
+
   /// Forces a complete re-sync by clearing the last sync time and performing a full sync.
   Future<void> forceFullReSync() async {
     await _prefs.remove('last_sync_time');
