@@ -537,6 +537,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     return Column(
       children: list
           .take(_unpaidDisplayCount)
+          .toList()
           .asMap().entries.map((e) => _buildSlimCard(e.value, isDark, true, isMobile, e.key + 1))
           .toList()
         ..addAll([
