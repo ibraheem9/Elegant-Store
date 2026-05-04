@@ -784,13 +784,13 @@ class SyncService extends ChangeNotifier {
         final int lastPage = (tableTotal / perPage).ceil();
         final tableLabel = _tableLabel(table);
         dev.log(
-          'Restore v3: fetching \$table (\$tableTotal records, \$lastPage pages)…',
+          'Restore v3: fetching $table ($tableTotal records, $lastPage pages)…',
           name: 'SyncService',
         );
         for (int page = 1; page <= lastPage; page++) {
           _setRestoreProgress(
             0.08 + (writtenRecords / (totalRecords == 0 ? 1 : totalRecords)) * 0.82,
-            'جاري تحميل \$tableLabel (صفحة \$page/\$lastPage)…',
+            'جاري تحميل $tableLabel (صفحة $page/$lastPage)…',
           );
           final pageResponse = await _dio.post(
             'sync/restore',
