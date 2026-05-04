@@ -742,10 +742,11 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
     final syncService = context.read<SyncService>();
     final details = syncService.lastSyncDetails;
 
-    // Format last sync time for display
-    String lastSyncDisplay = 'لم تتم مزامنة بعد';
+    // Format last sync time for display (using local time saved during sync)
+    String lastSyncDisplay = 'لم تتم المزامنة بعد';
     if (details != null && details.lastSyncTime.isNotEmpty) {
       try {
+        // Now it's reading the local timestamp we just added to SyncDetails
         lastSyncDisplay = details.lastSyncTime.toLocalArabic();
       } catch (_) {
         lastSyncDisplay = details.lastSyncTime;

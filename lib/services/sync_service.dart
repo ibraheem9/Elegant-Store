@@ -302,10 +302,12 @@ class SyncService extends ChangeNotifier {
         });
 
         await _dbService.recalculateAllBalances();
-        await _prefs.setString('last_sync_time', serverTimestamp);
+        final localTimestamp = DateTime.now().toIso8601String();
+        await _prefs.setString('last_sync_time', serverTimestamp); // keep server version for next sync request
+        await _prefs.setString('last_sync_time_local', localTimestamp); // local version for display
 
         await _saveSyncDetails(SyncDetails(
-          lastSyncTime: serverTimestamp,
+          lastSyncTime: localTimestamp,
           customersUploaded: custUp,
           invoicesUploaded: invUp,
           customersDownloaded: custDown,
@@ -710,13 +712,15 @@ class SyncService extends ChangeNotifier {
         );
 
         await _dbService.recalculateAllBalances();
+        final localTimestamp = DateTime.now().toIso8601String();
         await _prefs.setString('last_sync_time', serverTimestamp);
+        await _prefs.setString('last_sync_time_local', localTimestamp);
 
         final int custDown = (pullData['users'] as List?)?.length ?? 0;
         final int invDown  = (pullData['invoices'] as List?)?.length ?? 0;
 
         await _saveSyncDetails(SyncDetails(
-          lastSyncTime: serverTimestamp,
+          lastSyncTime: localTimestamp,
           customersUploaded: 0,
           invoicesUploaded: 0,
           customersDownloaded: custDown,
