@@ -11,6 +11,7 @@ import 'dart:developer' as dev;
 import 'package:uuid/uuid.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import 'package:file_picker/file_picker.dart';
 
 class SyncDetails {
   final String lastSyncTime;
@@ -1044,5 +1045,160 @@ class SyncService extends ChangeNotifier {
   Future<void> forceFullReSync() async {
     await _prefs.remove('last_sync_time');
     await performFullSync(isInitialSync: true);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // IMPORT FROM FILE  (JSON exported from admin panel)
+  // ─────────────────────────────────────────────────────────────────────────
+  //
+  // Opens a file picker, reads the JSON file exported from the admin panel,
+  // clears the local DB, and writes all records using INSERT OR REPLACE.
+  // Same engine as restore v3 but completely offline — no network calls.
+  //
+  // Expected file format:
+  // {
+  //   "version": 1,
+  //   "exported_at": "2026-05-04T12:00:00Z",
+  //   "store_manager_id": 5,
+  //   "tables": {
+  //     "payment_methods": [...],
+  //     "users": [...],
+  //     "invoices": [...],
+  //     ...
+  //   }
+  // }
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Opens a file picker, validates the JSON, clears local DB, and imports.
+  /// Calls [onProgress] with (0.0–1.0, statusMessage) during the process.
+  Future<void> importFromFile({
+    void Function(double progress, String status)? onProgress,
+  }) async {
+    if (_isSyncing) throw Exception('عملية مزامنة جارية بالفعل');
+    _isSyncing = true;
+    notifyListeners();
+
+    final Stopwatch stopwatch = Stopwatch()..start();
+
+    try {
+      // ── Step 1: Pick file ─────────────────────────────────────────────────
+      onProgress?.call(0.01, 'جاري اختيار الملف…');
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        dialogTitle: 'اختر ملف JSON للاستيراد',
+      );
+
+      if (result == null || result.files.isEmpty) {
+        throw Exception('لم يتم اختيار أي ملف');
+      }
+
+      final pickedFile = result.files.first;
+      final String? filePath = pickedFile.path;
+      if (filePath == null) throw Exception('تعذّر الوصول إلى الملف');
+
+      // ── Step 2: Read and parse JSON ───────────────────────────────────────
+      onProgress?.call(0.05, 'جاري قراءة الملف…');
+      final String rawJson = await File(filePath).readAsString();
+      final Map<String, dynamic> payload =
+          jsonDecode(rawJson) as Map<String, dynamic>;
+
+      // Basic validation
+      final int version = (payload['version'] as num?)?.toInt() ?? 0;
+      if (version != 1) {
+        throw Exception('تنسيق الملف غير مدعوم (version=$version)');
+      }
+      final Map<String, dynamic> tables =
+          (payload['tables'] as Map<String, dynamic>?) ?? {};
+      if (tables.isEmpty) {
+        throw Exception('الملف لا يحتوي على بيانات');
+      }
+
+      final String exportedAt =
+          (payload['exported_at'] as String?) ?? TimestampFormatter.nowUtc();
+
+      // Count total records for progress
+      int totalRecords = 0;
+      for (final list in tables.values) {
+        if (list is List) totalRecords += list.length;
+      }
+
+      dev.log(
+        'Import from file: version=$version, exported_at=$exportedAt, '
+        'tables=${tables.keys.toList()}, total=$totalRecords records',
+        name: 'SyncService',
+      );
+
+      // ── Step 3: Clear local DB ────────────────────────────────────────────
+      onProgress?.call(0.08, 'جاري مسح البيانات المحلية…');
+      final db = await _dbService.database;
+      await _dbService.clearAllData();
+      dev.log('Import from file: local DB cleared.', name: 'SyncService');
+
+      // ── Step 4: Insert each table in parent-first order ───────────────────
+      final allTables = [..._parentTables, ..._childTables];
+      int writtenRecords = 0;
+      int totalUsersWritten = 0;
+      int totalInvoicesWritten = 0;
+
+      for (final tableKey in allTables) {
+        final dynamic tableData = tables[tableKey];
+        if (tableData == null) continue;
+        final List<dynamic> records = tableData is List ? tableData : [];
+        if (records.isEmpty) continue;
+
+        final tableLabel = _tableLabel(tableKey);
+        onProgress?.call(
+          0.10 + (writtenRecords / (totalRecords == 0 ? 1 : totalRecords)) * 0.80,
+          'جاري استيراد $tableLabel (${records.length} سجل)…',
+        );
+
+        await _insertRawRecords(db: db, table: tableKey, records: records);
+        writtenRecords += records.length;
+        if (tableKey == 'users') totalUsersWritten += records.length;
+        if (tableKey == 'invoices') totalInvoicesWritten += records.length;
+
+        dev.log(
+          'Import from file: wrote $tableKey (${records.length} records)',
+          name: 'SyncService',
+        );
+      }
+
+      // ── Step 5: Recalculate balances and save timestamp ───────────────────
+      onProgress?.call(0.92, 'جاري إعادة حساب الأرصدة…');
+      await _dbService.recalculateAllBalances();
+
+      final localTimestamp = TimestampFormatter.nowUtc();
+      await _prefs.setString('last_sync_time', exportedAt);
+      await _prefs.setString('last_sync_time_local', localTimestamp);
+      await _saveSyncDetails(SyncDetails(
+        lastSyncTime: localTimestamp,
+        customersUploaded: 0,
+        invoicesUploaded: 0,
+        customersDownloaded: totalUsersWritten,
+        invoicesDownloaded: totalInvoicesWritten,
+        mergedCustomers: [],
+      ));
+
+      stopwatch.stop();
+      onProgress?.call(
+        1.0,
+        'اكتمل الاستيراد في ${stopwatch.elapsed.inSeconds} ثانية'
+        ' ($writtenRecords سجل)',
+      );
+
+      dev.log(
+        'Import from file completed in ${stopwatch.elapsed.inSeconds}s — '
+        '$totalUsersWritten users, $totalInvoicesWritten invoices, '
+        '$writtenRecords total.',
+        name: 'SyncService',
+      );
+    } catch (e) {
+      dev.log('Import from file failed: $e', name: 'SyncService', error: e);
+      rethrow;
+    } finally {
+      _isSyncing = false;
+      notifyListeners();
+    }
   }
 }
