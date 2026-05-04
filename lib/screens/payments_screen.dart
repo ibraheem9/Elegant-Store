@@ -460,7 +460,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         if (paidList.isEmpty)
           _buildEmptyHint(isDark, 'لا توجد مدفوعات في هذه الفترة')
         else
-          ...paidList.take(_paidDisplayCount).map((inv) => _buildSlimCard(inv, isDark, false, isMobile)),
+          ...paidList.take(_paidDisplayCount).toList().asMap().entries.map((e) => _buildSlimCard(e.value, isDark, false, isMobile, e.key + 1)),
         if (paidList.length > _paidDisplayCount)
           _buildLoadMoreButton(() => setState(() => _paidDisplayCount += _pageSize),
               paidList.length - _paidDisplayCount),
@@ -537,7 +537,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     return Column(
       children: list
           .take(_unpaidDisplayCount)
-          .map((inv) => _buildSlimCard(inv, isDark, true, isMobile))
+          .asMap().entries.map((e) => _buildSlimCard(e.value, isDark, true, isMobile, e.key + 1))
           .toList()
         ..addAll([
           if (list.length > _unpaidDisplayCount)
@@ -551,7 +551,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
 
   // ── Slim card ──────────────────────────────────────────────────────────────
 
-  Widget _buildSlimCard(Invoice inv, bool isDark, bool isTransfer, bool isMobile) {
+  Widget _buildSlimCard(Invoice inv, bool isDark, bool isTransfer, bool isMobile, [int? index]) {
     final typeColor = isTransfer
         ? Colors.teal
         : (inv.type == 'DEPOSIT' ? Colors.green : Colors.blue);
@@ -570,7 +570,27 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         ),
         child: Row(
           children: [
-            // Left: color dot
+            // Left: number badge + color dot
+            if (index != null) ...[  
+              Container(
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: typeColor.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  '$index',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: typeColor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
             Container(
               width: 4,
               height: 36,
