@@ -801,12 +801,12 @@ class SyncService extends ChangeNotifier {
               : pageResponse.data as Map<String, dynamic>;
           if (!_isSuccessResponse(pageData['success'])) {
             throw Exception(
-              'فشل تحميل $tableLabel صفحة $page: ${pageData[\'message\']}',
+              "فشل تحميل $tableLabel صفحة $page: ${pageData['message']}",
             );
           }
           final List<dynamic> records = pageData['records'] as List? ?? [];
           dev.log(
-            'Restore v3: $table page $page/${pageData[\'last_page\']} — ${records.length} records',
+            "Restore v3: $table page $page/${pageData['last_page']} — ${records.length} records",
             name: 'SyncService',
           );
           await _insertRawRecords(db: db, table: table, records: records);
@@ -910,14 +910,13 @@ class SyncService extends ChangeNotifier {
           }
         }
         try {
-          await txn.rawInsert(
-            'INSERT OR REPLACE INTO $table (${record.keys.join(', ')}) '
-            'VALUES (${List.filled(record.length, '?').join(', ')});',
-            record.values.toList(),
-          );
+          final cols = record.keys.join(', ');
+          final placeholders = List.filled(record.length, '?').join(', ');
+          final sql = 'INSERT OR REPLACE INTO $table ($cols) VALUES ($placeholders);';
+          await txn.rawInsert(sql, record.values.toList());
         } catch (e) {
           dev.log(
-            'Restore v3: failed to insert into $table: $e — record id=${record[\'id\']}',
+            "Restore v3: failed to insert into $table: $e — record id=${record['id']}",
             name: 'SyncService',
             error: e,
           );
