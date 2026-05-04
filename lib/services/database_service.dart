@@ -2205,6 +2205,27 @@ class DatabaseService {
     });
   }
 
+  /// Clears all local data in preparation for a full server restore.
+  /// Keeps the currently logged-in user row so the session stays active.
+  Future<void> clearAllDataForRestore(int keepUserId) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      // Delete child tables first (FK order)
+      await txn.rawDelete('DELETE FROM edit_history');
+      await txn.rawDelete('DELETE FROM daily_statistics');
+      await txn.rawDelete('DELETE FROM transactions');
+      await txn.rawDelete('DELETE FROM invoices');
+      await txn.rawDelete('DELETE FROM purchases');
+      await txn.rawDelete('DELETE FROM payment_methods');
+      // Delete all users EXCEPT the currently logged-in user
+      await txn.rawDelete('DELETE FROM users WHERE id != ?', [keepUserId]);
+    });
+    dev.log(
+      'clearAllDataForRestore: all tables cleared except user id=$keepUserId.',
+      name: 'DatabaseService',
+    );
+  }
+
   Future<void> clearAllData() async {
     final db = await database;
     await db.transaction((txn) async {

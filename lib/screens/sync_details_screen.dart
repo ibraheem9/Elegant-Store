@@ -625,33 +625,95 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
   }
 
   Widget _buildActionButtons(bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // ── Full Restore from Server ───────────────────────────────────────
-        // Clears all local data and downloads a fresh copy from the server.
-        // This is the primary recovery action for switching devices or
-        // recovering from data corruption.
-        ElevatedButton.icon(
-          onPressed: (_isResetting || _isRestoring) ? null : _handleRestore,
-          icon: _isRestoring
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                )
-              : const Icon(Icons.cloud_download_rounded, color: Colors.white),
-          label: Text(
-            _isRestoring ? 'جاري الاستعادة...' : 'استعادة كاملة من السيرفر',
-            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15),
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.teal,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          ),
-        ),
-      ],
+    return Consumer<SyncService>(
+      builder: (context, syncService, _) {
+        final isRestoring = _isRestoring || (syncService.isSyncing && syncService.restoreProgress > 0);
+        final progress = syncService.restoreProgress;
+        final statusText = syncService.restoreStatus;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── Progress bar (visible only during restore) ─────────────────
+            if (isRestoring) ..[
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: Colors.teal.withOpacity(0.3),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.cloud_download_rounded, color: Colors.teal, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            statusText.isNotEmpty ? statusText : 'جاري الاستعادة…',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white : Colors.black87,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '${(progress * 100).toStringAsFixed(0)}%',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.teal,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        value: progress > 0 ? progress : null,
+                        minHeight: 8,
+                        backgroundColor: isDark
+                            ? Colors.white.withOpacity(0.08)
+                            : Colors.teal.withOpacity(0.12),
+                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.teal),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+
+            // ── Full Restore from Server button ────────────────────────────
+            ElevatedButton.icon(
+              onPressed: (_isResetting || isRestoring) ? null : _handleRestore,
+              icon: isRestoring
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.cloud_download_rounded, color: Colors.white),
+              label: Text(
+                isRestoring ? 'جاري الاستعادة...' : 'استعادة كاملة من السيرفر',
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
   Widget _buildResetConfirmDialog(BuildContext ctx) {
