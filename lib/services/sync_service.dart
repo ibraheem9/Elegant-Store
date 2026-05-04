@@ -495,14 +495,15 @@ class SyncService extends ChangeNotifier {
   }
 
   /// Returns true if [table] has a critical NOT NULL FK that resolved to null.
+  /// Only invoices and transactions have truly critical FKs (user_id / buyer_id
+  /// are NOT NULL in the local schema).  edit_history.edited_by_id is nullable
+  /// so we never defer those records.
   bool _hasCriticalNullFk(String table, Map<String, dynamic> data) {
     switch (table) {
       case 'invoices':
         return data['user_id'] == null;
       case 'transactions':
         return data['buyer_id'] == null;
-      case 'edit_history':
-        return data['edited_by_id'] == null;
       default:
         return false;
     }
@@ -711,66 +712,56 @@ class SyncService extends ChangeNotifier {
   // ─────────────────────────────────────────────────────────────────────────
   // FULL RESTORE  (POST sync/restore)
   // ─────────────────────────────────────────────────────────────────────────
-
-  /// Downloads ALL store data from the server and writes it to the local DB.
+  /// Downloads ALL active store data from the server and writes it to the local DB.
   ///
-  /// Strategy:
-  ///  1. Fetch all data from server (POST sync/restore)
-  ///  2. Clear all local tables EXCEPT the currently logged-in user row
-  ///  3. Write parents first (payment_methods, users) so FK resolution works
-  ///  4. Write children (invoices, transactions, …)
-  ///  5. Recalculate balances and save sync timestamp
+  /// Uses a paginated, table-by-table approach to avoid memory/timeout issues:
+  ///  1. POST sync/restore (meta mode) → get total counts per table
+  ///  2. Clear all local tables except the logged-in user
+  ///  3. For each table in FK order, fetch pages of 500 records and write them
+  ///  4. Recalculate balances and save sync timestamp
+  ///
+  /// Only ACTIVE records (no soft-deleted) are restored.  This avoids FK
+  /// resolution issues and matches what the app needs to display.
   ///
   /// Progress is reported via [restoreProgress] (0.0–1.0) and [restoreStatus].
   Future<void> performFullRestore() async {
     if (_isSyncing) return;
     _isSyncing = true;
     _setRestoreProgress(0.0, 'جاري الاتصال بالسيرفر…');
-
     final Stopwatch stopwatch = Stopwatch()..start();
-
     try {
       dev.log('Starting full restore from server…', name: 'SyncService');
 
-      // ── Step 1: Fetch all data from server (10%) ────────────────────────
-      _setRestoreProgress(0.05, 'جاري تحميل البيانات من السيرفر…');
-
-      final response = await _dio.post(
+      // ── Step 1: Fetch meta (total counts per table) ──────────────────────
+      _setRestoreProgress(0.03, 'جاري تحميل معلومات البيانات من السيرفر…');
+      final metaResponse = await _dio.post(
         'sync/restore',
-        options: Options(receiveTimeout: const Duration(minutes: 3)),
+        options: Options(receiveTimeout: const Duration(seconds: 30)),
+        // no body → server returns __meta__ mode
       );
-      final responseData = response.data is String
-          ? jsonDecode(response.data)
-          : response.data as Map<String, dynamic>;
-
-      final bool isSuccess = _isSuccessResponse(responseData['success']);
-      if (!isSuccess) {
-        final errorMsg =
-            responseData['message'] as String? ?? 'Restore failed on server';
-        throw Exception(errorMsg);
+      final metaData = metaResponse.data is String
+          ? jsonDecode(metaResponse.data) as Map<String, dynamic>
+          : metaResponse.data as Map<String, dynamic>;
+      if (!_isSuccessResponse(metaData['success'])) {
+        throw Exception(metaData['message'] ?? 'فشل تحميل معلومات البيانات');
       }
+      final Map<String, dynamic> tableCounts =
+          _safeMap(metaData['tables']) ?? {};
+      final String serverTimestamp =
+          _safeString(metaData['timestamp']) ?? TimestampFormatter.nowUtc();
 
-      final pullData = _safeMap(responseData['pull_data']) ?? {};
-      final serverTimestamp =
-          _safeString(responseData['timestamp']) ??
-          _safeString(responseData['server_time']) ??
-          TimestampFormatter.nowUtc();
-
-      // Count total records for progress estimation
+      // Calculate total records for progress tracking
       int totalRecords = 0;
       for (final key in [..._parentTables, ..._childTables]) {
-        totalRecords += (pullData[key] as List?)?.length ?? 0;
+        totalRecords += (tableCounts[key] as int? ?? 0);
       }
-      dev.log('Restore: $totalRecords total records to write.', name: 'SyncService');
-      // Log per-table counts to diagnose missing data issues
-      for (final key in [..._parentTables, ..._childTables]) {
-        final count = (pullData[key] as List?)?.length ?? 0;
-        dev.log('Restore payload [$key]: $count records', name: 'SyncService');
-      }
+      dev.log(
+        'Restore meta: $totalRecords total active records. Counts: $tableCounts',
+        name: 'SyncService',
+      );
 
-      _setRestoreProgress(0.10, 'تم تحميل البيانات. جاري تحضير قاعدة البيانات…');
-
-      // ── Step 2: Get logged-in user's local ID before clearing ───────────
+      // ── Step 2: Get logged-in user before clearing ───────────────────────
+      _setRestoreProgress(0.05, 'جاري تحضير قاعدة البيانات…');
       final String? loggedInUsername = _prefs.getString('username');
       final db = await _dbService.database;
       int? keepUserId;
@@ -784,72 +775,107 @@ class SyncService extends ChangeNotifier {
         }
       }
 
-      // ── Step 3: Clear all local tables except the logged-in user (15%) ──
-      _setRestoreProgress(0.15, 'جاري مسح البيانات المحلية…');
+      // ── Step 3: Clear all local tables except the logged-in user ────────
+      _setRestoreProgress(0.08, 'جاري مسح البيانات المحلية…');
       if (keepUserId != null) {
         await _dbService.clearAllDataForRestore(keepUserId);
       } else {
-        // No logged-in user found locally — clear everything
         await _dbService.clearAllData();
       }
 
-      _setRestoreProgress(0.20, 'جاري كتابة البيانات…');
-
-      // ── Step 4: Write parents first, then children ───────────────────────
-      // Track progress across all tables
+      // ── Step 4: Fetch each table page-by-page and write to SQLite ───────
       int writtenRecords = 0;
+      int totalUsersWritten = 0;
+      int totalInvoicesWritten = 0;
       final List<String> mergedNames = [];
 
       for (final table in [..._parentTables, ..._childTables]) {
-        final tableItems = pullData[table];
-        if (tableItems == null || tableItems is! List || tableItems.isEmpty) continue;
+        final int tableTotal = tableCounts[table] as int? ?? 0;
+        if (tableTotal == 0) continue;
 
+        final int perPage = 500;
+        final int lastPage = (tableTotal / perPage).ceil();
         final tableLabel = _tableLabel(table);
-        _setRestoreProgress(
-          0.20 + (writtenRecords / (totalRecords == 0 ? 1 : totalRecords)) * 0.70,
-          'جاري كتابة $tableLabel (${tableItems.length} سجل)…',
-        );
-
-        await _writePullPass(
-          db: db,
-          pullData: pullData,
-          tables: [table],
-          mergedNames: mergedNames,
-          allowSoftDeleted: true, // Full restore: include soft-deleted records
-        );
 
         dev.log(
-          'Restore: wrote $table (${tableItems.length} records)',
+          'Restore: fetching $table ($tableTotal records, $lastPage pages)…',
           name: 'SyncService',
         );
-        writtenRecords += tableItems.length as int;
+
+        for (int page = 1; page <= lastPage; page++) {
+          _setRestoreProgress(
+            0.10 + (writtenRecords / (totalRecords == 0 ? 1 : totalRecords)) * 0.80,
+            'جاري تحميل $tableLabel (صفحة $page/$lastPage)…',
+          );
+
+          // Fetch one page from server
+          final pageResponse = await _dio.post(
+            'sync/restore',
+            data: {'table': table, 'page': page},
+            options: Options(receiveTimeout: const Duration(seconds: 60)),
+          );
+          final pageData = pageResponse.data is String
+              ? jsonDecode(pageResponse.data) as Map<String, dynamic>
+              : pageResponse.data as Map<String, dynamic>;
+          if (!_isSuccessResponse(pageData['success'])) {
+            throw Exception(
+              'فشل تحميل $tableLabel صفحة $page: ${pageData['message']}',
+            );
+          }
+          final List<dynamic> records = pageData['records'] as List? ?? [];
+          dev.log(
+            'Restore: $table page $page/${pageData['last_page']} — ${records.length} records',
+            name: 'SyncService',
+          );
+
+          // Write this page to SQLite
+          final pullData = {table: records};
+          await _writePullPass(
+            db: db,
+            pullData: pullData,
+            tables: [table],
+            mergedNames: mergedNames,
+            allowSoftDeleted: false, // active-only restore: never insert deleted records
+          );
+
+          writtenRecords += records.length;
+          if (table == 'users') totalUsersWritten += records.length;
+          if (table == 'invoices') totalInvoicesWritten += records.length;
+        }
+
+        dev.log(
+          'Restore: finished $table ($tableTotal records written)',
+          name: 'SyncService',
+        );
       }
 
-      // ── Step 5: Recalculate balances and save timestamps (95%) ──────────
-      _setRestoreProgress(0.90, 'جاري إعادة حساب الأرصدة…');
+      // ── Step 5: Recalculate balances and save timestamps ─────────────────
+      _setRestoreProgress(0.92, 'جاري إعادة حساب الأرصدة…');
       await _dbService.recalculateAllBalances();
 
       final localTimestamp = TimestampFormatter.nowUtc();
       await _prefs.setString('last_sync_time', serverTimestamp);
       await _prefs.setString('last_sync_time_local', localTimestamp);
 
-      final int custDown = (pullData['users'] as List?)?.length ?? 0;
-      final int invDown  = (pullData['invoices'] as List?)?.length ?? 0;
-
       await _saveSyncDetails(SyncDetails(
         lastSyncTime: localTimestamp,
         customersUploaded: 0,
         invoicesUploaded: 0,
-        customersDownloaded: custDown,
-        invoicesDownloaded: invDown,
+        customersDownloaded: totalUsersWritten,
+        invoicesDownloaded: totalInvoicesWritten,
         mergedCustomers: mergedNames,
       ));
 
       stopwatch.stop();
-      _setRestoreProgress(1.0, 'اكتملت الاستعادة في ${stopwatch.elapsed.inSeconds} ثانية');
+      _setRestoreProgress(
+        1.0,
+        'اكتملت الاستعادة في ${stopwatch.elapsed.inSeconds} ثانية'
+        ' ($writtenRecords سجل)',
+      );
       dev.log(
         'Full restore completed in ${stopwatch.elapsed.inSeconds}s — '
-        '$custDown users, $invDown invoices.',
+        '$totalUsersWritten users, $totalInvoicesWritten invoices, '
+        '$writtenRecords total.',
         name: 'SyncService',
       );
     } on DioException catch (e) {
