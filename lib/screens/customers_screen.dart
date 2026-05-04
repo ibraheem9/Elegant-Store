@@ -1,5 +1,6 @@
 import '../utils/timestamp_formatter.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../models/models.dart';
@@ -689,6 +690,7 @@ class CustomerDetailsScreen extends StatefulWidget {
 
 class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   List<Invoice> _invoices = [];
+  List<PaymentMethod> _paymentMethods = [];
   bool _isLoading = true;
   late User _currentCustomer;
   double _calculatedBalance = 0.0;
@@ -710,10 +712,17 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     final fresh = customers.firstWhere((c) => c.id == _currentCustomer.id,
         orElse: () => _currentCustomer);
     final invoices = await db.getCustomerInvoices(fresh.id!);
+    final methods = await db.getPaymentMethods(category: 'SALE');
+    
+    // De-duplicate payment methods by ID if necessary
+    final seenIds = <int?>{};
+    final uniqueMethods = methods.where((m) => seenIds.add(m.id)).toList();
+
     if (!mounted) return;
     setState(() {
       _currentCustomer = fresh;
       _invoices = invoices;
+      _paymentMethods = uniqueMethods;
       _calculatedBalance = fresh.balance;
       _isLoading = false;
     });
@@ -986,85 +995,146 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     final amountController = TextEditingController(text: _fmt(inv.amount));
     final notesController = TextEditingController(text: inv.notes ?? '');
     final reasonController = TextEditingController();
+    
+    PaymentMethod? selectedMethod;
+    try {
+      selectedMethod = _paymentMethods.firstWhere((m) => m.id == inv.paymentMethodId);
+    } catch (_) {
+      selectedMethod = _paymentMethods.isNotEmpty ? _paymentMethods.first : null;
+    }
+
+    // Parse existing createdAt to pre-fill the date picker
+    DateTime editSelectedDate = DateTime.tryParse(inv.createdAt) ?? DateTime.now();
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(children: [
-          Icon(Icons.edit_rounded, color: Colors.blue, size: 24),
-          SizedBox(width: 10),
-          Text('تعديل الفاتورة', style: TextStyle(fontWeight: FontWeight.bold)),
-        ]),
-        content: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(
-              controller: amountController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(
-                labelText: 'المبلغ',
-                prefixText: '₪ ',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: notesController,
-              maxLines: 2,
-              decoration: InputDecoration(
-                labelText: 'ملاحظات',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: reasonController,
-              decoration: InputDecoration(
-                labelText: 'سبب التعديل *',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
+      builder: (_) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(children: [
+            Icon(Icons.edit_rounded, color: Colors.blue, size: 24),
+            SizedBox(width: 10),
+            Text('تعديل الفاتورة', style: TextStyle(fontWeight: FontWeight.bold)),
           ]),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('إلغاء')),
-          ElevatedButton.icon(
-            onPressed: () => Navigator.pop(context, true),
-            icon: const Icon(Icons.save_rounded, color: Colors.white, size: 18),
-            label: const Text('حفظ',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12))),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(
+                controller: amountController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+                decoration: InputDecoration(
+                  labelText: 'المبلغ الجديد',
+                  prefixText: '₪ ',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 14),
+              DropdownButtonFormField<PaymentMethod>(
+                value: selectedMethod,
+                items: _paymentMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name))).toList(),
+                onChanged: (v) => setDialogState(() => selectedMethod = v),
+                decoration: InputDecoration(
+                  labelText: 'طريقة الدفع',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 14),
+              InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: editSelectedDate,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2101),
+                  );
+                  if (picked != null) {
+                    setDialogState(() => editSelectedDate = DateTime(
+                      picked.year, picked.month, picked.day,
+                      editSelectedDate.hour, editSelectedDate.minute, editSelectedDate.second,
+                    ));
+                  }
+                },
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: 'تاريخ الفاتورة',
+                    prefixIcon: const Icon(Icons.calendar_today, size: 18),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: Text(DateFormat('yyyy/MM/dd').format(editSelectedDate)),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: notesController,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  labelText: 'ملاحظات',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: reasonController,
+                decoration: InputDecoration(
+                  labelText: 'سبب التعديل *',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ]),
           ),
-        ],
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('إلغاء')),
+            ElevatedButton.icon(
+              onPressed: () {
+                if (reasonController.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('يرجى ذكر سبب التعديل'), backgroundColor: Colors.orange)
+                  );
+                  return;
+                }
+                Navigator.pop(context, true);
+              },
+              icon: const Icon(Icons.save_rounded, color: Colors.white, size: 18),
+              label: const Text('حفظ',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12))),
+            ),
+          ],
+        ),
       ),
     );
     if (confirmed != true) return;
     final newAmount = double.tryParse(amountController.text.trim());
     if (newAmount == null || newAmount <= 0) return;
-    final reason = reasonController.text.trim().isEmpty
-        ? 'تعديل يدوي'
-        : reasonController.text.trim();
-    final now = DateTime.now().toUtc().toIso8601String();
+    
+    final reason = reasonController.text.trim();
+    
+    // Build new createdAt from the selected date (apply past date rule)
+    final adjustedDateTime = TimestampFormatter.applyPastDateRule(editSelectedDate);
+    final newCreatedAt = adjustedDateTime.toIso8601String();
+    // Update invoice_date text to match the new date
+    final newInvoiceDate = DateFormat('yyyy-MM-dd HH:mm:ss').format(adjustedDateTime);
+
     final newInv = Invoice(
       id: inv.id,
       uuid: inv.uuid,
       storeManagerId: inv.storeManagerId,
       userId: inv.userId,
-      invoiceDate: inv.invoiceDate,
+      invoiceDate: newInvoiceDate,
       amount: newAmount,
       paidAmount: inv.paidAmount,
-      paymentMethodId: inv.paymentMethodId,
+      paymentMethodId: selectedMethod?.id,
       paymentStatus: inv.paymentStatus,
       type: inv.type,
       notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
       version: inv.version,
-      createdAt: inv.createdAt,
-      updatedAt: now,
+      createdAt: newCreatedAt,
+      updatedAt: DateTime.now().toIso8601String(),
       isSynced: 0,
     );
     final db = context.read<DatabaseService>();
@@ -1134,7 +1204,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                     // Format date
                     String dateStr = h['created_at']?.toString() ?? '';
                     try {
-                      final dt = DateTime.parse(dateStr).toLocal();
+                      final dt = DateTime.parse(dateStr);
                       dateStr = '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}  ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
                     } catch (_) {
                       if (dateStr.length > 16) dateStr = dateStr.substring(0, 16);

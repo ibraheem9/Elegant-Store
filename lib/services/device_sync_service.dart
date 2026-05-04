@@ -251,6 +251,25 @@ class DeviceSyncService {
 
       onSyncError?.call('Failed to start sync');
       return false;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 409) {
+        debugPrint('[DeviceSync] 409 Conflict: Attempting to reset stale session on server...');
+        // Try to mark the old session as failed so we can start a new one
+        await failSync();
+        // Give the server a small moment to process
+        await Future.delayed(const Duration(seconds: 1));
+        
+        // Retry start once
+        try {
+          final deviceId = await getDeviceId();
+          final retryResponse = await _dio.post('sync/device/start', data: {'device_id': deviceId});
+          if (retryResponse.statusCode == 200) return true;
+        } catch (_) {}
+      }
+      
+      debugPrint('[DeviceSync] Start sync error: $e');
+      onSyncError?.call('Start sync failed: $e');
+      return false;
     } catch (e) {
       debugPrint('[DeviceSync] Start sync error: $e');
       onSyncError?.call('Start sync failed: $e');
@@ -519,10 +538,10 @@ class DeviceSyncService {
   DateTime getLocalizedTimestamp(int timestampMs) {
     // Convert milliseconds to DateTime in UTC
     final utcDateTime =
-        DateTime.fromMillisecondsSinceEpoch(timestampMs, isUtc: true);
+        DateTime.fromMillisecondsSinceEpoch(timestampMs, isUtc: false);
 
     // Convert to local timezone
-    final localDateTime = utcDateTime.toLocal();
+    final localDateTime = utcDateTime;
 
     return localDateTime;
   }

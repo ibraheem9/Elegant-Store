@@ -125,7 +125,7 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
       if (windowStart != null) {
         DateTime? dt;
         try {
-          dt = DateTime.parse(row.invoice.createdAt).toLocal();
+          dt = DateTime.parse(row.invoice.createdAt);
         } catch (_) {}
         if (dt == null) return false;
         if (dt.isBefore(windowStart)) return false;
@@ -229,7 +229,7 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
 
   String _formatDate(String raw) {
     try {
-      final dt = DateTime.parse(raw).toLocal();
+      final dt = DateTime.parse(raw);
       return '${dt.year}-'
           '${dt.month.toString().padLeft(2, '0')}-'
           '${dt.day.toString().padLeft(2, '0')}';

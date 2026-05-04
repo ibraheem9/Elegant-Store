@@ -114,8 +114,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
       ),
       child: TableCalendar(
         locale: 'ar_SA',
-        firstDay: DateTime.utc(2020, 1, 1),
-        lastDay: DateTime.utc(2030, 12, 31),
+        firstDay: DateTime(2020, 1, 1),
+        lastDay: DateTime(2030, 12, 31),
         focusedDay: _focusedDay,
         calendarFormat: _calendarFormat,
         startingDayOfWeek: StartingDayOfWeek.sunday,

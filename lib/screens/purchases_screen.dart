@@ -148,8 +148,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     try {
       final db  = context.read<DatabaseService>();
       final now = DateTime.now();
-      final dt  = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day,
-          now.hour, now.minute, now.second);
+      final dt = TimestampFormatter.applyPastDateRule(_selectedDate);
       final purchaseId = await db.insertPurchase(Purchase(
         merchantName:  _merchantController.text.trim(),
         amount:        amount,
@@ -303,8 +302,9 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       final auth   = context.read<AuthService>();
       final editor = auth.currentUser;
       final db     = context.read<DatabaseService>();
-      // Build new createdAt from selected date + original time
-      final newCreatedAt = editSelectedDate.toIso8601String();
+      // Build new createdAt from selected date (apply past date rule)
+      final adjustedDateTime = TimestampFormatter.applyPastDateRule(editSelectedDate);
+      final newCreatedAt = adjustedDateTime.toIso8601String();
       await db.editPurchaseWithLog(
         oldPurchase: p,
         newPurchase: Purchase(

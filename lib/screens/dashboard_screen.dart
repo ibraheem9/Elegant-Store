@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../services/sync_service.dart';
+import '../services/sync_manager.dart';
 import '../models/models.dart';
 import 'sales_screen.dart';
 import 'statistics_screen.dart';
@@ -588,10 +589,10 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
     });
 
     try {
-      final syncService = context.read<SyncService>();
-      await syncService.performFullSync();
+      final syncManager = context.read<SyncManager>();
+      final success = await syncManager.forceSyncNow();
       if (mounted) {
-        setState(() => _syncStatus = "تمت المزامنة بنجاح");
+        setState(() => _syncStatus = success ? "تمت المزامنة بنجاح" : "فشلت المزامنة");
       }
     } catch (e) {
       if (mounted) {

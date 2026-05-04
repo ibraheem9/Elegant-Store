@@ -369,11 +369,13 @@ class SyncService extends ChangeNotifier {
 
       final List<Map<String, dynamic>> failedItems = [];
 
-      await db.transaction((txn) async {
-        for (final rawItem in rawItems) {
-          if (rawItem is! Map) continue;
-          final item = Map<String, dynamic>.from(rawItem);
+      // Using multiple small transactions instead of one giant one per table.
+      // This ensures that if one record fails, others in the same table still sync.
+      for (final rawItem in rawItems) {
+        if (rawItem is! Map) continue;
+        final item = Map<String, dynamic>.from(rawItem);
 
+        await db.transaction((txn) async {
           try {
             if (table == 'users') {
               final name = item['name'];
@@ -404,10 +406,10 @@ class SyncService extends ChangeNotifier {
               'Error on $table item ${item['uuid']}: $itemError — skipping',
               name: 'SyncService',
             );
-            failedItems.add(item);
+            // We don't add to failedItems here because it's a real error, not just an FK dependency
           }
-        }
-      });
+        });
+      }
 
       if (failedItems.isNotEmpty) {
         deferred[table] = failedItems;
@@ -426,8 +428,8 @@ class SyncService extends ChangeNotifier {
         final table = entry.key;
         final items = entry.value;
 
-        await db.transaction((txn) async {
-          for (final item in items) {
+        for (final item in items) {
+          await db.transaction((txn) async {
             try {
               final resolved = await _resolveRelationsInTxn(table, item, txn);
               await _dbService.upsertFromSyncInTxn(table, resolved, txn);
@@ -438,8 +440,8 @@ class SyncService extends ChangeNotifier {
                 name: 'SyncService',
               );
             }
-          }
-        });
+          });
+        }
       }
     }
   }
@@ -686,7 +688,7 @@ class SyncService extends ChangeNotifier {
         final serverTimestamp =
             _safeString(responseData['timestamp']) ??
             _safeString(responseData['server_time']) ??
-            DateTime.now().toUtc().toIso8601String();
+            DateTime.now().toIso8601String();
 
         final db = await _dbService.database;
         final List<String> mergedNames = [];
@@ -746,6 +748,21 @@ class SyncService extends ChangeNotifier {
     } finally {
       _isSyncing = false;
       notifyListeners();
-    }
+      /// Forces a complete re-sync by clearing the last sync time and performing a full sync.
+  Future<void> forceFullReSync() async {
+    await _prefs.remove('last_sync_time');
+    await performFullSync(isInitialSync: true);
+  }
+}
+    /// Forces a complete re-sync by clearing the last sync time and performing a full sync.
+  Future<void> forceFullReSync() async {
+    await _prefs.remove('last_sync_time');
+    await performFullSync(isInitialSync: true);
+  }
+}
+  /// Forces a complete re-sync by clearing the last sync time and performing a full sync.
+  Future<void> forceFullReSync() async {
+    await _prefs.remove('last_sync_time');
+    await performFullSync(isInitialSync: true);
   }
 }

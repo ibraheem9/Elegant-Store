@@ -40,18 +40,17 @@ class TimezoneService {
     return '${hours >= 0 ? '+' : ''}${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}';
   }
 
-  /// Convert UTC timestamp to local timezone
+  /// Convert timestamp to local timezone
   static DateTime convertFromUtc(int timestampMs) {
     final utcDateTime =
-        DateTime.fromMillisecondsSinceEpoch(timestampMs, isUtc: true);
-    return utcDateTime.toLocal();
+        DateTime.fromMillisecondsSinceEpoch(timestampMs, isUtc: false);
+    return utcDateTime;
   }
 
-  /// Convert local time to UTC timestamp
+  /// Convert local time to timestamp
   static int convertToUtc(DateTime localDateTime) {
-    // Convert local to UTC
-    final utcDateTime = localDateTime.toUtc();
-    return utcDateTime.millisecondsSinceEpoch;
+    // Return timestamp directly (no UTC conversion)
+    return localDateTime.millisecondsSinceEpoch;
   }
 
   /// Format datetime for display with timezone

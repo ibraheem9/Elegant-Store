@@ -175,7 +175,7 @@ class AuthService extends ChangeNotifier {
           dev.log('Fresh device — cleared last_sync_time to force full sync.', name: 'AuthService');
         }
 
-        final now = DateTime.now().toUtc().toIso8601String();
+        final now = DateTime.now().toIso8601String();
 
         // Prepare data for local DB
         final Map<String, dynamic> localUserDataMap = {
@@ -294,7 +294,7 @@ class AuthService extends ChangeNotifier {
     try {
       // Always update locally first — instant and offline-safe.
       final db = await _dbService.database;
-      final now = DateTime.now().toUtc().toIso8601String();
+      final now = DateTime.now().toIso8601String();
       await db.update(
         'users',
         {'name': name, 'username': username, 'updated_at': now, 'is_synced': 0},

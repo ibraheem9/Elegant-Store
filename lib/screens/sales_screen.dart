@@ -88,8 +88,8 @@ class _SalesScreenState extends State<SalesScreen> {
     if (!mounted) return;
     try {
       final db = context.read<DatabaseService>();
-      DateTime rangeStart = DateTime(_startDate.year, _startDate.month, _startDate.day).toUtc();
-      DateTime rangeEnd = DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59).toUtc();
+      DateTime rangeStart = DateTime(_startDate.year, _startDate.month, _startDate.day);
+      DateTime rangeEnd = DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59);
       final stats = await db.getSalesStats(start: rangeStart, end: rangeEnd);
       final invoices = await db.getInvoices(start: rangeStart, end: rangeEnd);
       if (mounted) {
@@ -114,8 +114,8 @@ class _SalesScreenState extends State<SalesScreen> {
       final seenIds = <int?>{};
       final methods = rawMethods.where((m) => seenIds.add(m.id)).toList();
 
-      DateTime rangeStart = DateTime(_startDate.year, _startDate.month, _startDate.day).toUtc();
-      DateTime rangeEnd = DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59).toUtc();
+      DateTime rangeStart = DateTime(_startDate.year, _startDate.month, _startDate.day);
+      DateTime rangeEnd = DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59);
       
       final stats = await db.getSalesStats(start: rangeStart, end: rangeEnd);
       final invoices = await db.getInvoices(start: rangeStart, end: rangeEnd);
@@ -371,7 +371,7 @@ class _SalesScreenState extends State<SalesScreen> {
           phone: _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
           role: 'CUSTOMER',
           isPermanentCustomer: 0,
-          createdAt: DateTime.now().toUtc().toIso8601String(),
+          createdAt: DateTime.now().toIso8601String(),
         ), '123');
         customer = (await db.getCustomers()).firstWhere((c) => c.id == id);
       }
@@ -381,23 +381,15 @@ class _SalesScreenState extends State<SalesScreen> {
         status = (customer.isPermanentCustomer == 1) ? 'DEFERRED' : 'UNPAID';
       }
 
-      final now = DateTime.now();
-      final combinedDateTime = DateTime(
-        _selectedInvoiceDate.year,
-        _selectedInvoiceDate.month,
-        _selectedInvoiceDate.day,
-        now.hour,
-        now.minute,
-        now.second,
-      );
+      final combinedDateTime = TimestampFormatter.applyPastDateRule(_selectedInvoiceDate);
 
       final invoice = Invoice(
         userId: customer.id!,
-        invoiceDate: DateFormat('dd-MM-yyyy EEEE', 'ar').format(combinedDateTime),
+        invoiceDate: DateFormat('yyyy-MM-dd HH:mm:ss').format(combinedDateTime),
         amount: amount,
         paymentStatus: status,
         paymentMethodId: _selectedPaymentMethod?.id,
-        createdAt: combinedDateTime.toUtc().toIso8601String(),
+        createdAt: combinedDateTime.toIso8601String(),
         notes: _notesController.text,
       );
 
@@ -431,8 +423,12 @@ class _SalesScreenState extends State<SalesScreen> {
       return;
     }
     final amount = double.tryParse(_amountController.text) ?? 0;
-    if (amount <= 0) { _showSnackBar('يرجى إدخال مبلغ صحيح أكبر من صفر', Colors.redAccent); return; }
+    if (amount <= 0) { _showSnackBar('يرجى إدخل مبلغ صحيح أكبر من صفر', Colors.redAccent); return; }
     final db = context.read<DatabaseService>();
+
+    // Combine selected date with current time (apply past date rule)
+    final combinedDateTime = TimestampFormatter.applyPastDateRule(_selectedInvoiceDate);
+
     setState(() => _isLoading = true);
     try {
       User customer;
@@ -447,64 +443,64 @@ class _SalesScreenState extends State<SalesScreen> {
           phone: _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
           role: 'CUSTOMER',
           isPermanentCustomer: 0,
-          createdAt: DateTime.now().toUtc().toIso8601String(),
+          createdAt: DateTime.now().toIso8601String(),
         ), '123');
         customer = (await db.getCustomers()).firstWhere((c) => c.id == id);
       }
-      await db.recordCashWithdrawal(customer: customer, amount: amount, notes: _notesController.text, paymentMethodId: _selectedPaymentMethod?.id);
+      await db.recordCashWithdrawal(
+        customer: customer,
+        amount: amount,
+        notes: _notesController.text,
+        paymentMethodId: _selectedPaymentMethod?.id,
+        date: combinedDateTime,
+      );
       _clearFields(); await _loadData(); _showSnackBar('تم تسجيل السحب بنجاح', Colors.orange);
     } catch (e) { _showSnackBar('خطأ: $e', Colors.red); } finally { setState(() => _isLoading = false); }
   }
 
   Future<void> _handleAddCredit() async {
-    if (_selectedCustomer == null) { _showSnackBar('يرجى اختيار زبون مسجل أولاً', Colors.orange); return; }
+    if (_selectedCustomer == null) {
+      _showSnackBar('يرجى اختيار زبون مسجل أولاً', Colors.orange);
+      return;
+    }
+    if (_amountController.text.isEmpty) {
+      _showSnackBar('يرجى إدخال مبلغ الدفعة', Colors.orange);
+      return;
+    }
+    final amount = double.tryParse(_amountController.text) ?? 0;
+    if (amount <= 0) {
+      _showSnackBar('يرجى إدخال مبلغ صحيح أكبر من صفر', Colors.orange);
+      return;
+    }
+    if (_selectedPaymentMethod == null) {
+      _showSnackBar('يرجى اختيار طريقة الدفع', Colors.orange);
+      return;
+    }
+
+    // Validate payment method type
+    if (_selectedPaymentMethod!.type == 'deferred' || _selectedPaymentMethod!.type == 'unpaid') {
+      _showSnackBar('لا يسمح ان تكون دفعة السداد بطريقة دفع دين أو غير مدفوع', Colors.red);
+      return;
+    }
+
     final db = context.read<DatabaseService>();
-    final creditMethods = _paymentMethods.where((m) => m.type == 'cash' || m.type == 'app').toList();
-    PaymentMethod? localMethod = creditMethods.isNotEmpty ? creditMethods.first : null;
-    final creditAmountController = TextEditingController(text: _amountController.text);
-    final creditNotesController = TextEditingController(text: _notesController.text);
-
-    DateTime depositDate = DateTime.now();
-    final depositDateController = TextEditingController(text: DateFormat('yyyy-MM-dd').format(depositDate));
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('دفعة (سداد)'),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: creditAmountController, decoration: const InputDecoration(labelText: 'المبلغ'), keyboardType: TextInputType.number),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<PaymentMethod>(value: localMethod, items: creditMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name))).toList(), onChanged: (v) => setDialogState(() => localMethod = v), decoration: const InputDecoration(labelText: 'طريقة الدفع')),
-            const SizedBox(height: 12),
-            TextField(
-              controller: depositDateController,
-              readOnly: true,
-              decoration: const InputDecoration(labelText: 'تاريخ الدفعة', prefixIcon: Icon(Icons.calendar_today, size: 18)),
-              onTap: () async {
-                final picked = await showDatePicker(
-                  context: context,
-                  initialDate: depositDate,
-                  firstDate: DateTime(2000),
-                  lastDate: DateTime(2101),
-                );
-                if (picked != null) {
-                  setDialogState(() {
-                    depositDate = picked;
-                    depositDateController.text = DateFormat('yyyy-MM-dd').format(picked);
-                  });
-                }
-              },
-            ),
-          ]),
-          actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')), ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('تأكيد'))],
-        ),
-      ),
-    );
-    if (result == true && localMethod != null) {
-      final amount = double.tryParse(creditAmountController.text) ?? 0;
-      setState(() => _isLoading = true);
-      try { await db.addCredit(userId: _selectedCustomer!.id!, amount: amount, notes: creditNotesController.text, paymentMethodId: localMethod!.id!, date: depositDate); _clearFields(); await _loadData(); _showSnackBar('تم تسجيل الدفعة بنجاح', Colors.green); } catch (e) { _showSnackBar('خطأ: $e', Colors.red); } finally { setState(() => _isLoading = false); }
+    setState(() => _isLoading = true);
+    try {
+      final combinedDateTime = TimestampFormatter.applyPastDateRule(_selectedInvoiceDate);
+      await db.addCredit(
+        userId: _selectedCustomer!.id!,
+        amount: amount,
+        notes: _notesController.text,
+        paymentMethodId: _selectedPaymentMethod!.id!,
+        date: combinedDateTime,
+      );
+      _clearFields();
+      await _loadData();
+      _showSnackBar('تم تسجيل الدفعة بنجاح', Colors.green);
+    } catch (e) {
+      _showSnackBar('خطأ: $e', Colors.red);
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
@@ -617,10 +613,11 @@ class _SalesScreenState extends State<SalesScreen> {
     if (result == true) {
       final db = context.read<DatabaseService>();
       final newAmount = double.tryParse(amountController.text) ?? inv.amount;
-      // Build new createdAt from the selected date + original time
-      final newCreatedAt = editSelectedDate.toIso8601String();
+      // Build new createdAt from the selected date (apply past date rule)
+      final adjustedDateTime = TimestampFormatter.applyPastDateRule(editSelectedDate);
+      final newCreatedAt = adjustedDateTime.toIso8601String();
       // Update invoice_date text to match the new date
-      final newInvoiceDate = DateFormat('dd-MM-yyyy EEEE', 'ar').format(editSelectedDate);
+      final newInvoiceDate = DateFormat('yyyy-MM-dd HH:mm:ss').format(adjustedDateTime);
       final newInv = Invoice(
         id: inv.id,
         uuid: inv.uuid,
@@ -700,7 +697,7 @@ class _SalesScreenState extends State<SalesScreen> {
                   // Format date
                   String dateStr = item['created_at'] as String? ?? '';
                   try {
-                    final dt = DateTime.parse(dateStr).toLocal();
+                    final dt = DateTime.parse(dateStr);
                     dateStr = '${dt.year}-${dt.month.toString().padLeft(2,'0')}-${dt.day.toString().padLeft(2,'0')}  ${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
                   } catch (_) {}
                   // Action badge color
@@ -828,17 +825,26 @@ class _SalesScreenState extends State<SalesScreen> {
     if (raw == null || raw.isEmpty || raw == 'null') return '-';
     // Translate payment status
     if (field == 'payment_status') {
-      switch (raw) {
+      switch (raw.toUpperCase()) {
         case 'DEFERRED': return 'دين';
         case 'PAID':     return 'مدفوع';
         case 'UNPAID':   return 'غير مدفوع';
+        case 'PARTIAL':  return 'مدفوع جزئياً';
+      }
+    }
+    // Translate invoice type
+    if (field == 'type') {
+      switch (raw.toUpperCase()) {
+        case 'SALE':       return 'بيع';
+        case 'WITHDRAWAL': return 'سحب';
+        case 'DEPOSIT':    return 'سداد';
       }
     }
     // Format ISO date strings to readable local time
     if (field == 'created_at' || raw.contains('T') || raw.contains('Z')) {
       final dt = DateTime.tryParse(raw);
       if (dt != null) {
-        final local = dt.toLocal();
+        final local = dt;
         return DateFormat('yyyy/MM/dd  HH:mm').format(local);
       }
     }
@@ -1594,7 +1600,7 @@ class _SalesScreenState extends State<SalesScreen> {
             rowNameColor = AppColors.invoiceStatusColor(inv.paymentStatus);
           }
           return DataRow(
-            color: MaterialStateProperty.all(rowColor.withOpacity(0.5)),
+            color: WidgetStateProperty.all(rowColor.withOpacity(0.5)),
             cells: [
               DataCell(
                 InkWell(
@@ -1604,15 +1610,10 @@ class _SalesScreenState extends State<SalesScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(inv.customerName ?? 'عابر', style: TextStyle(color: rowNameColor, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
-                      if (isDeposit) 
-                        Text('دفعة سداد ديون', style: TextStyle(color: rowNameColor.withOpacity(0.8), fontSize: 9, fontWeight: FontWeight.bold))
-                      else if (isWithdrawal) 
-                        Text('سحب نقدي من الصندوق', style: TextStyle(color: rowNameColor.withOpacity(0.8), fontSize: 9, fontWeight: FontWeight.bold))
-                      else
-                        Text(
-                          inv.paymentStatus == 'PAID' ? 'فاتورة بيع (نقدي)' : 'فاتورة بيع (دين)',
-                          style: TextStyle(color: rowNameColor.withOpacity(0.8), fontSize: 9, fontWeight: FontWeight.bold),
-                        ),
+                      Text(
+                        '${_translateHistoryValue('type', inv.type)} (${_translateHistoryValue('payment_status', inv.paymentStatus)})',
+                        style: TextStyle(color: rowNameColor.withOpacity(0.8), fontSize: 9, fontWeight: FontWeight.bold),
+                      ),
                     ],
                   ),
                 )

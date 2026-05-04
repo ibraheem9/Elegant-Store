@@ -72,6 +72,9 @@ class AppColors {
   static const Color invoiceDeferred = Color(0xFFD97706); // Amber 600
   static const Color invoiceDeferredBackground = Color(0xFFFFFBEB); // Amber 50
   static const Color invoiceDeferredBorder = Color(0xFFFDE68A); // Amber 200
+  static const Color invoicePartial = Color(0xFF7C3AED); // Violet 600
+  static const Color invoicePartialBackground = Color(0xFFF5F3FF); // Violet 50
+  static const Color invoicePartialBorder = Color(0xFFDDD6FE); // Violet 200
   static const Color invoiceDeposit = Color(0xFF16A34A); // Green 600
   static const Color invoiceDepositBackground = Color(0xFFF0FDF4); // Green 50
   static const Color invoiceDepositBorder = Color(0xFFBBF7D0); // Green 200
@@ -109,6 +112,8 @@ class AppColors {
         return invoiceUnpaid;
       case 'DEFERRED':
         return invoiceDeferred;
+      case 'PARTIAL':
+        return invoicePartial;
       default:
         return zeroText;
     }
@@ -123,6 +128,8 @@ class AppColors {
         return invoiceUnpaidBackground;
       case 'DEFERRED':
         return invoiceDeferredBackground;
+      case 'PARTIAL':
+        return invoicePartialBackground;
       default:
         return zeroBackground;
     }
@@ -137,6 +144,8 @@ class AppColors {
         return invoiceUnpaidBorder;
       case 'DEFERRED':
         return invoiceDeferredBorder;
+      case 'PARTIAL':
+        return invoicePartialBorder;
       default:
         return zeroBorder;
     }
