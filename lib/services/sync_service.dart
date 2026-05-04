@@ -396,6 +396,7 @@ class SyncService extends ChangeNotifier {
     required Map<String, dynamic> pullData,
     required List<String> tables,
     required List<String> mergedNames,
+    bool allowSoftDeleted = false,
   }) async {
     // Collect deferred items: {table -> [item]} for FK-retry pass
     final Map<String, List<Map<String, dynamic>>> deferred = {};
@@ -437,7 +438,12 @@ class SyncService extends ChangeNotifier {
               return; // skip this item in this pass
             }
 
-            await _dbService.upsertFromSyncInTxn(table, resolved, txn);
+            await _dbService.upsertFromSyncInTxn(
+              table,
+              resolved,
+              txn,
+              allowSoftDeleted: allowSoftDeleted,
+            );
           } catch (itemError) {
             dev.log(
               'Error on $table item ${item['uuid']}: $itemError — skipping',
@@ -469,7 +475,12 @@ class SyncService extends ChangeNotifier {
           await db.transaction((txn) async {
             try {
               final resolved = await _resolveRelationsInTxn(table, item, txn);
-              await _dbService.upsertFromSyncInTxn(table, resolved, txn);
+              await _dbService.upsertFromSyncInTxn(
+                table,
+                resolved,
+                txn,
+                allowSoftDeleted: allowSoftDeleted,
+              );
               dev.log('Retry succeeded for $table item ${item['uuid']}', name: 'SyncService');
             } catch (retryError) {
               dev.log(
@@ -751,6 +762,11 @@ class SyncService extends ChangeNotifier {
         totalRecords += (pullData[key] as List?)?.length ?? 0;
       }
       dev.log('Restore: $totalRecords total records to write.', name: 'SyncService');
+      // Log per-table counts to diagnose missing data issues
+      for (final key in [..._parentTables, ..._childTables]) {
+        final count = (pullData[key] as List?)?.length ?? 0;
+        dev.log('Restore payload [$key]: $count records', name: 'SyncService');
+      }
 
       _setRestoreProgress(0.10, 'تم تحميل البيانات. جاري تحضير قاعدة البيانات…');
 
@@ -799,8 +815,13 @@ class SyncService extends ChangeNotifier {
           pullData: pullData,
           tables: [table],
           mergedNames: mergedNames,
+          allowSoftDeleted: true, // Full restore: include soft-deleted records
         );
 
+        dev.log(
+          'Restore: wrote $table (${tableItems.length} records)',
+          name: 'SyncService',
+        );
         writtenRecords += tableItems.length as int;
       }
 

@@ -2364,8 +2364,9 @@ class DatabaseService {
   Future<int> upsertFromSyncInTxn(
     String table,
     Map<String, dynamic> data,
-    dynamic txn,
-  ) async {
+    dynamic txn, {
+    bool allowSoftDeleted = false,
+  }) async {
     final uuid = data['uuid'];
     if (uuid == null) return -1;
 
@@ -2480,7 +2481,9 @@ class DatabaseService {
 
       // 4. Insert new record — skip if server is telling us it is deleted
       // (no point creating a record locally that is already deleted on server)
-      if (isDeletedOnServer) return -1;
+      // Exception: during a full restore, we MUST insert soft-deleted records
+      // so that FK references from child records (invoices → users) can be resolved.
+      if (isDeletedOnServer && !allowSoftDeleted) return -1;
 
       if (table == 'users') {
         // Assign a safe local password; real auth goes through the server token
