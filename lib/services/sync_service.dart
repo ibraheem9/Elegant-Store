@@ -10,6 +10,7 @@ import '../utils/timestamp_formatter.dart';
 import 'dart:developer' as dev;
 import 'package:uuid/uuid.dart';
 import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 
 class SyncDetails {
   final String lastSyncTime;
@@ -736,7 +737,7 @@ class SyncService extends ChangeNotifier {
       _setRestoreProgress(0.03, 'جاري تحميل معلومات البيانات من السيرفر…');
       final metaResponse = await _dio.post(
         'sync/restore',
-        options: Options(receiveTimeout: const Duration(seconds: 30)),
+        options: Options(receiveTimeout: null), // no timeout for restore
         // no body → server returns __meta__ mode
       );
       final metaData = metaResponse.data is String
@@ -812,7 +813,7 @@ class SyncService extends ChangeNotifier {
           final pageResponse = await _dio.post(
             'sync/restore',
             data: {'table': table, 'page': page},
-            options: Options(receiveTimeout: const Duration(seconds: 60)),
+            options: Options(receiveTimeout: null), // no timeout for restore pages
           );
           final pageData = pageResponse.data is String
               ? jsonDecode(pageResponse.data) as Map<String, dynamic>
@@ -913,6 +914,106 @@ class SyncService extends ChangeNotifier {
       'edit_history': 'سجل التعديلات',
     };
     return labels[table] ?? table;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // JSON EXPORT  (GET sync/export)
+  // ─────────────────────────────────────────────────────────────────────────
+  /// Downloads all active store data from the server as a single JSON file.
+  ///
+  /// The file is saved to the user's Downloads folder (Windows/Linux/macOS)
+  /// or the app's documents directory (Android/iOS).
+  ///
+  /// Returns the path of the saved file.
+  Future<String> downloadFullExport({
+    void Function(double progress, String status)? onProgress,
+  }) async {
+    onProgress?.call(0.02, 'جاري الاتصال بالسيرفر…');
+    dev.log('Starting full JSON export from server…', name: 'SyncService');
+
+    // ── Step 1: Fetch meta ───────────────────────────────────────────────
+    final metaResponse = await _dio.post(
+      'sync/restore',
+      options: Options(receiveTimeout: null),
+    );
+    final metaData = metaResponse.data is String
+        ? jsonDecode(metaResponse.data) as Map<String, dynamic>
+        : metaResponse.data as Map<String, dynamic>;
+    if (!_isSuccessResponse(metaData['success'])) {
+      throw Exception(metaData['message'] ?? 'فشل تحميل معلومات البيانات');
+    }
+    final Map<String, dynamic> tableCounts = _safeMap(metaData['tables']) ?? {};
+    final String timestamp = _safeString(metaData['timestamp']) ?? TimestampFormatter.nowUtc();
+
+    int totalRecords = 0;
+    for (final key in [..._parentTables, ..._childTables]) {
+      totalRecords += (tableCounts[key] as int? ?? 0);
+    }
+    dev.log('Export meta: $totalRecords total records.', name: 'SyncService');
+
+    // ── Step 2: Fetch all tables page by page ────────────────────────────
+    final Map<String, List<dynamic>> allData = {};
+    int fetchedRecords = 0;
+
+    for (final table in [..._parentTables, ..._childTables]) {
+      final int tableTotal = tableCounts[table] as int? ?? 0;
+      if (tableTotal == 0) continue;
+
+      final int perPage = 500;
+      final int lastPage = (tableTotal / perPage).ceil();
+      final tableLabel = _tableLabel(table);
+      allData[table] = [];
+
+      for (int page = 1; page <= lastPage; page++) {
+        onProgress?.call(
+          0.05 + (fetchedRecords / (totalRecords == 0 ? 1 : totalRecords)) * 0.85,
+          'جاري تحميل $tableLabel (صفحة $page/$lastPage)…',
+        );
+        final pageResponse = await _dio.post(
+          'sync/restore',
+          data: {'table': table, 'page': page},
+          options: Options(receiveTimeout: null),
+        );
+        final pageData = pageResponse.data is String
+            ? jsonDecode(pageResponse.data) as Map<String, dynamic>
+            : pageResponse.data as Map<String, dynamic>;
+        if (!_isSuccessResponse(pageData['success'])) {
+          throw Exception('فشل تحميل $tableLabel صفحة $page: ${pageData['message']}');
+        }
+        final List<dynamic> records = pageData['records'] as List? ?? [];
+        allData[table]!.addAll(records);
+        fetchedRecords += records.length;
+      }
+      dev.log('Export: $table — ${allData[table]!.length} records', name: 'SyncService');
+    }
+
+    // ── Step 3: Build JSON payload ───────────────────────────────────────
+    onProgress?.call(0.92, 'جاري إنشاء ملف JSON…');
+    final exportPayload = {
+      'exported_at': timestamp,
+      'total_records': fetchedRecords,
+      'tables': allData,
+    };
+    final jsonString = const JsonEncoder.withIndent('  ').convert(exportPayload);
+
+    // ── Step 4: Save to file ─────────────────────────────────────────────
+    onProgress?.call(0.96, 'جاري حفظ الملف…');
+    final dateStr = DateTime.now().toIso8601String().substring(0, 10);
+    final fileName = 'elegant_store_export_$dateStr.json';
+    Directory saveDir;
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      // Desktop: save to Downloads folder
+      final downloads = await getDownloadsDirectory();
+      saveDir = downloads ?? await getApplicationDocumentsDirectory();
+    } else {
+      // Mobile: save to app documents directory
+      saveDir = await getApplicationDocumentsDirectory();
+    }
+    final filePath = '${saveDir.path}${Platform.pathSeparator}$fileName';
+    await File(filePath).writeAsString(jsonString, flush: true);
+    dev.log('Export saved to: $filePath ($fetchedRecords records)', name: 'SyncService');
+    onProgress?.call(1.0, 'تم تصدير $fetchedRecords سجل بنجاح');
+    return filePath;
   }
 
   /// Forces a complete re-sync by clearing the last sync time and performing a full sync.

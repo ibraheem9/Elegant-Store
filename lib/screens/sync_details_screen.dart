@@ -16,6 +16,9 @@ class SyncDetailsScreen extends StatefulWidget {
 class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
   bool _isResetting = false;
   bool _isRestoring = false;
+  bool _isExporting = false;
+  double _exportProgress = 0.0;
+  String _exportStatus = '';
 
   Map<String, int> _unsyncedCounts = {};
   Map<String, int> _totalCounts = {};
@@ -77,7 +80,7 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
             ],
           ),
           content: const Text(
-            'سيتم تحميل جميع البيانات من السيرفر (بما فيها المحذوفة) وكتابتها محلياً.\n\nهذا لا يحذف أي شيء من السيرفر.\n\nهل تريد المتابعة؟',
+            'سيتم تحميل جميع البيانات النشطة من السيرفر وكتابتها محلياً.\n\nالسجلات المحذوفة لن تُستعاد (وهذا صحيح).\n\nهذا لا يحذف أي شيء من السيرفر.\n\nهل تريد المتابعة؟',
             style: TextStyle(height: 1.6),
           ),
           actions: [
@@ -124,6 +127,57 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
       }
     } finally {
       if (mounted) setState(() => _isRestoring = false);
+    }
+  }
+
+  Future<void> _handleExport() async {
+    setState(() {
+      _isExporting = true;
+      _exportProgress = 0.0;
+      _exportStatus = 'جاري الاتصال بالسيرفر…';
+    });
+    try {
+      final syncService = context.read<SyncService>();
+      final filePath = await syncService.downloadFullExport(
+        onProgress: (progress, status) {
+          if (mounted) {
+            setState(() {
+              _exportProgress = progress;
+              _exportStatus = status;
+            });
+          }
+        },
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text('تم تصدير البيانات بنجاح ✓\n$filePath'),
+              backgroundColor: Colors.indigo,
+              duration: const Duration(seconds: 6),
+            ),
+          );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text('فشل التصدير: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isExporting = false;
+          _exportProgress = 0.0;
+          _exportStatus = '';
+        });
+      }
     }
   }
 
@@ -692,7 +746,7 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
 
             // ── Full Restore from Server button ────────────────────────────
             ElevatedButton.icon(
-              onPressed: (_isResetting || isRestoring) ? null : _handleRestore,
+              onPressed: (_isResetting || isRestoring || _isExporting) ? null : _handleRestore,
               icon: isRestoring
                   ? const SizedBox(
                       width: 18,
@@ -707,6 +761,85 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.teal,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // ── Export progress bar (visible only during export) ────────────
+            if (_isExporting) ...[  
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: Colors.indigo.withOpacity(0.3),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.file_download_rounded, color: Colors.indigo, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _exportStatus.isNotEmpty ? _exportStatus : 'جاري التصدير…',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white : Colors.black87,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '${(_exportProgress * 100).toStringAsFixed(0)}%',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.indigo,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        value: _exportProgress > 0 ? _exportProgress : null,
+                        minHeight: 8,
+                        backgroundColor: isDark
+                            ? Colors.white.withOpacity(0.08)
+                            : Colors.indigo.withOpacity(0.12),
+                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.indigo),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+
+            // ── Export JSON button ───────────────────────────────────────
+            ElevatedButton.icon(
+              onPressed: (_isResetting || isRestoring || _isExporting) ? null : _handleExport,
+              icon: _isExporting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.file_download_rounded, color: Colors.white),
+              label: Text(
+                _isExporting ? 'جاري التصدير...' : 'تصدير قاعدة البيانات JSON',
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.indigo,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
