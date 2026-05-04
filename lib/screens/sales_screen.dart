@@ -262,7 +262,7 @@ class _SalesScreenState extends State<SalesScreen> {
                             ],
                           ),
                           subtitle: Text(c.phone ?? 'بدون هاتف', style: TextStyle(color: isDark ? Colors.white60 : Colors.black54)),
-                          trailing: Text('${c.balance.toStringAsFixed(2)} ₪', style: TextStyle(color: c.balance > 0 ? Colors.red : Colors.green, fontWeight: FontWeight.bold)),
+                          trailing: Text('${c.balance.toStringAsFixed(2)} NIS', style: TextStyle(color: c.balance > 0 ? Colors.red : Colors.green, fontWeight: FontWeight.bold)),
                           onTap: () {
                             _selectCustomer(c);
                             _hideOverlay();
@@ -346,18 +346,30 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Future<void> _createInvoice() async {
-    if (_amountController.text.isEmpty) { _showSnackBar('يرجى إدخال المبلغ', Colors.redAccent); return; }
-    if (_selectedPaymentMethod == null) { _showSnackBar('يرجى اختيار طريقة الدفع', Colors.redAccent); return; }
+    if (_amountController.text.isEmpty) {
+      _showSnackBar('يرجى إدخال المبلغ', Colors.redAccent);
+      return;
+    }
+    if (_selectedPaymentMethod == null) {
+      _showSnackBar('يرجى اختيار طريقة الدفع', Colors.redAccent);
+      return;
+    }
     if (_selectedCustomer == null && _customerSearchController.text.trim().isEmpty) {
       _showSnackBar('يرجى إدخال اسم المشتري', Colors.redAccent);
       return;
     }
 
     final amount = double.tryParse(_amountController.text) ?? 0;
-    if (amount <= 0) { _showSnackBar('يرجى إدخال مبلغ صحيح أكبر من صفر', Colors.redAccent); return; }
+    if (amount <= 0) {
+      _showSnackBar('يرجى إدخال مبلغ صحيح أكبر من صفر', Colors.redAccent);
+      return;
+    }
     final db = context.read<DatabaseService>();
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+    });
+
     try {
       User customer;
       if (_selectedCustomer != null) {
@@ -365,14 +377,15 @@ class _SalesScreenState extends State<SalesScreen> {
       } else {
         // Auto-create as non-permanent customer
         final name = _customerSearchController.text.trim();
-        final id = await db.insertUser(User(
+        final newUser = User(
           username: 'cust_${DateTime.now().millisecondsSinceEpoch}',
           name: name.isEmpty ? 'زبون عابر' : name,
           phone: _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
           role: 'CUSTOMER',
           isPermanentCustomer: 0,
           createdAt: TimestampFormatter.nowUtc(),
-        }, '123');
+        );
+        final id = await db.insertUser(newUser, '123');
         customer = (await db.getCustomers()).firstWhere((c) => c.id == id);
       }
 
@@ -401,7 +414,7 @@ class _SalesScreenState extends State<SalesScreen> {
         targetId: invoiceId,
         targetType: 'INVOICE',
         action: 'CREATE',
-        summary: 'فاتورة جديدة للزبون ${customer.name} بمبلغ ${amount.toStringAsFixed(2)} ₪ - الحالة: ${_translateHistoryValue('payment_status', status)}',
+        summary: 'فاتورة جديدة للزبون ${customer.name} بمبلغ ${amount.toStringAsFixed(2)} NIS - الحالة: ${_translateHistoryValue('payment_status', status)}',
         performedById: _actUser?.id,
         performedByName: _actUser?.username ?? _actUser?.name, // Prefer username (e.g. i7) for identity
         storeManagerId: _actUser?.parentId ?? _actUser?.id,
@@ -412,24 +425,34 @@ class _SalesScreenState extends State<SalesScreen> {
     } catch (e) {
       _showSnackBar('خطأ أثناء الحفظ: $e', Colors.red);
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
   Future<void> _handleCashWithdrawal() async {
-    if (_amountController.text.isEmpty) { _showSnackBar('يرجى إدخال المبلغ المسحوب', Colors.redAccent); return; }
+    if (_amountController.text.isEmpty) {
+      _showSnackBar('يرجى إدخال المبلغ المسحوب', Colors.redAccent);
+      return;
+    }
     if (_selectedCustomer == null && _customerSearchController.text.trim().isEmpty) {
       _showSnackBar('يرجى إدخال اسم المشتري', Colors.redAccent);
       return;
     }
     final amount = double.tryParse(_amountController.text) ?? 0;
-    if (amount <= 0) { _showSnackBar('يرجى إدخل مبلغ صحيح أكبر من صفر', Colors.redAccent); return; }
+    if (amount <= 0) {
+      _showSnackBar('يرجى إدخل مبلغ صحيح أكبر من صفر', Colors.redAccent);
+      return;
+    }
     final db = context.read<DatabaseService>();
 
-    // Combine selected date with current time (apply past date rule)
-    final combinedDateTime = TimestampFormatter.applyPastDateRule(_selectedInvoiceDate);
+    setState(() {
+      _isLoading = true;
+    });
 
-    setState(() => _isLoading = true);
     try {
       User customer;
       if (_selectedCustomer != null) {
@@ -437,14 +460,15 @@ class _SalesScreenState extends State<SalesScreen> {
       } else {
         // Auto-create as non-permanent customer
         final name = _customerSearchController.text.trim();
-        final id = await db.insertUser(User(
+        final newUser = User(
           username: 'cust_${DateTime.now().millisecondsSinceEpoch}',
           name: name.isEmpty ? 'زبون عابر' : name,
           phone: _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
           role: 'CUSTOMER',
           isPermanentCustomer: 0,
           createdAt: TimestampFormatter.nowUtc(),
-        }, '123');
+        );
+        final id = await db.insertUser(newUser, '123');
         customer = (await db.getCustomers()).firstWhere((c) => c.id == id);
       }
       await db.recordCashWithdrawal(
@@ -454,9 +478,20 @@ class _SalesScreenState extends State<SalesScreen> {
         paymentMethodId: _selectedPaymentMethod?.id,
         date: TimestampFormatter.applyPastDateRule(_selectedInvoiceDate),
       );
-      _clearFields(); await _loadData(); _showSnackBar('تم تسجيل السحب بنجاح', Colors.orange);
-    } catch (e) { _showSnackBar('خطأ: $e', Colors.red); } finally { setState(() => _isLoading = false); }
+      _clearFields();
+      await _loadData();
+      _showSnackBar('تم تسجيل السحب بنجاح', Colors.orange);
+    } catch (e) {
+      _showSnackBar('خطأ: $e', Colors.red);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
+
 
   Future<void> _handleAddCredit() async {
     if (_selectedCustomer == null) {
@@ -500,7 +535,9 @@ class _SalesScreenState extends State<SalesScreen> {
     } catch (e) {
       _showSnackBar('خطأ: $e', Colors.red);
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -790,7 +827,7 @@ class _SalesScreenState extends State<SalesScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('تأكيد الحذف'),
-        content: Text('هل أنت متأكد من نقل الفاتورة (مبلغ: ${inv.amount.toStringAsFixed(2)} ₪) إلى سلة المحذوفات؟'),
+        content: Text('هل أنت متأكد من نقل الفاتورة (مبلغ: ${inv.amount.toStringAsFixed(2)} NIS) إلى سلة المحذوفات؟'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
           TextButton(
@@ -809,7 +846,7 @@ class _SalesScreenState extends State<SalesScreen> {
         targetId: inv.id!,
         targetType: 'INVOICE',
         action: 'DELETE',
-        summary: 'حذف فاتورة بمبلغ ${inv.amount.toStringAsFixed(2)} ₪ - الحالة: ${_translateHistoryValue('payment_status', inv.paymentStatus)}',
+        summary: 'حذف فاتورة بمبلغ ${inv.amount.toStringAsFixed(2)} NIS - الحالة: ${_translateHistoryValue('payment_status', inv.paymentStatus)}',
         performedById: _actUser?.id,
         performedByName: _actUser?.username ?? _actUser?.name,
         storeManagerId: _actUser?.parentId ?? _actUser?.id,
@@ -1031,10 +1068,10 @@ class _SalesScreenState extends State<SalesScreen> {
               Text('رصيد الزبون الحالي', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
               Text(
                 currentBalance > 0
-                    ? '+${currentBalance.toStringAsFixed(2)} ₪ (دين عليه)'
+                    ? '+${currentBalance.toStringAsFixed(2)} NIS (دين عليه)'
                     : currentBalance < 0
-                        ? '-${currentBalance.abs().toStringAsFixed(2)} ₪ (رصيد له)'
-                        : '0.00 ₪',
+                        ? '-${currentBalance.abs().toStringAsFixed(2)} NIS (رصيد له)'
+                        : '0.00 NIS',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
@@ -1052,10 +1089,10 @@ class _SalesScreenState extends State<SalesScreen> {
                 Text('بعد الفاتورة', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
                 Text(
                   projectedBalance > 0
-                      ? '+${projectedBalance.toStringAsFixed(2)} ₪ (دين عليه)'
+                      ? '+${projectedBalance.toStringAsFixed(2)} NIS (دين عليه)'
                       : projectedBalance < 0
-                          ? '-${projectedBalance.abs().toStringAsFixed(2)} ₪ (رصيد له)'
-                          : '0.00 ₪',
+                          ? '-${projectedBalance.abs().toStringAsFixed(2)} NIS (رصيد له)'
+                          : '0.00 NIS',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
@@ -1076,7 +1113,7 @@ class _SalesScreenState extends State<SalesScreen> {
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
       decoration: const InputDecoration(
-        labelText: 'المبلغ (₪)',
+        labelText: 'المبلغ (NIS)',
         prefixIcon: Icon(Icons.payments, color: Colors.green),
       ),
     );
@@ -1497,7 +1534,7 @@ class _SalesScreenState extends State<SalesScreen> {
                   ),
                 ),
               ),
-              Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: nameColor)),
+              Text('${inv.amount.toStringAsFixed(2)} NIS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: nameColor)),
             ],
           ),
           const SizedBox(height: 8),
@@ -1618,7 +1655,7 @@ class _SalesScreenState extends State<SalesScreen> {
                 )
               ),
               DataCell(Text(inv.createdAt.toLocalMedium(), style: TextStyle(color: rowNameColor.withOpacity(0.7), fontSize: 12))),
-              DataCell(Text('${inv.amount.toStringAsFixed(2)} ₪', style: TextStyle(color: rowNameColor, fontWeight: FontWeight.bold))),
+              DataCell(Text('${inv.amount.toStringAsFixed(2)} NIS', style: TextStyle(color: rowNameColor, fontWeight: FontWeight.bold))),
               DataCell(Text(isWithdrawal ? 'سحب نقدي' : (inv.methodName ?? '-'), style: TextStyle(color: rowNameColor.withOpacity(0.8)))),
               DataCell(Row(
                 mainAxisSize: MainAxisSize.min,
