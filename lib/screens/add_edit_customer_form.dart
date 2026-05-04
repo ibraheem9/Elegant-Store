@@ -1,3 +1,4 @@
+import '../utils/timestamp_formatter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -570,7 +571,7 @@ Future<void> _performSave(
         : 0.0,
     transferNames: ctrl.transferNames.text.trim(),
     notes: ctrl.notes.text.trim(),
-    createdAt: customer?.createdAt ?? DateTime.now().toIso8601String(),
+    createdAt: customer?.createdAt ?? TimestampFormatter.nowUtc(),
   );
 
   if (customer == null) {

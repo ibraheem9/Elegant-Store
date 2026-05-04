@@ -1,3 +1,4 @@
+import '../utils/timestamp_formatter.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -186,7 +187,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
       paidAmount: newPaidAmount, notes: notes + editLog,
       paymentStatus: newStatus, paymentMethodId: selectedMethod.id,
       type: inv.type, version: inv.version, isSynced: 0,
-      createdAt: inv.createdAt, updatedAt: DateTime.now().toIso8601String(),
+      createdAt: inv.createdAt, updatedAt: TimestampFormatter.nowUtc(),
     ));
 
     db.logActivity(
@@ -595,7 +596,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    inv.invoiceDate,
+                    inv.invoiceDate.toLocalShort(),
                     style: const TextStyle(fontSize: 11, color: Colors.grey),
                   ),
                 ],
@@ -709,7 +710,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
 
                   // Info grid
                   _detailRow(isDark, 'المبلغ', '${inv.amount.toStringAsFixed(2)} ₪', valueColor: typeColor),
-                  _detailRow(isDark, 'التاريخ', inv.invoiceDate),
+                  _detailRow(isDark, 'التاريخ', inv.invoiceDate.toLocalShort()),
                   _detailRow(isDark, 'النوع', typeLabel, valueColor: typeColor),
                   _detailRow(isDark, 'الحالة', statusLabel, valueColor: statusColor),
                   if (inv.methodName != null)

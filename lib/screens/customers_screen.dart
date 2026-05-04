@@ -946,7 +946,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('المبلغ: ${_fmt(inv.amount)} ₪',
                   style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
-              Text('التاريخ: ${inv.invoiceDate}',
+              Text('التاريخ: ${inv.invoiceDate.toLocalShort()}',
                   style: const TextStyle(fontSize: 12, color: Colors.grey)),
             ]),
           ),
@@ -1003,8 +1003,8 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       selectedMethod = _paymentMethods.isNotEmpty ? _paymentMethods.first : null;
     }
 
-    // Parse existing createdAt to pre-fill the date picker
-    DateTime editSelectedDate = DateTime.tryParse(inv.createdAt) ?? DateTime.now();
+    // Parse existing createdAt (stored as UTC) and convert to local for date picker
+    DateTime editSelectedDate = inv.createdAt.toLocalDateTime();
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1114,16 +1114,15 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     
     final reason = reasonController.text.trim();
     
-    // Build new createdAt from the selected date (apply past date rule)
-    final adjustedDateTime = TimestampFormatter.applyPastDateRule(editSelectedDate);
-    final now = adjustedDateTime.toIso8601String();
+    // Build new createdAt from the selected date (apply past date rule) — stored as UTC
+    final nowUtc = TimestampFormatter.applyPastDateRuleUtc(editSelectedDate);
 
     final newInv = Invoice(
       id: inv.id,
       uuid: inv.uuid,
       storeManagerId: inv.storeManagerId,
       userId: inv.userId,
-      invoiceDate: now,
+      invoiceDate: nowUtc,
       amount: newAmount,
       paidAmount: inv.paidAmount,
       paymentMethodId: selectedMethod?.id,
@@ -1131,8 +1130,8 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       type: inv.type,
       notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
       version: inv.version,
-      createdAt: now,
-      updatedAt: DateTime.now().toIso8601String(),
+      createdAt: nowUtc,
+      updatedAt: TimestampFormatter.nowUtc(),
       isSynced: 0,
     );
     final db = context.read<DatabaseService>();

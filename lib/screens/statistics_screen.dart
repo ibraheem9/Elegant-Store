@@ -1,3 +1,4 @@
+import '../utils/timestamp_formatter.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -242,7 +243,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       totalAppPurchases:      _appPurchases,
       totalSalesCash:         _cashSales,
       totalSalesCredit:       _appSales,
-      createdAt:              _cashBoxDate.toIso8601String(),
+      createdAt:              TimestampFormatter.toUtcString(_cashBoxDate),
     );
     await db.insertDailyStatistics(stats);
     setState(() {

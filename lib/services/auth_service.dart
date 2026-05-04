@@ -1,3 +1,4 @@
+import '../utils/timestamp_formatter.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -175,7 +176,7 @@ class AuthService extends ChangeNotifier {
           dev.log('Fresh device — cleared last_sync_time to force full sync.', name: 'AuthService');
         }
 
-        final now = DateTime.now().toIso8601String();
+        final now = TimestampFormatter.nowUtc();
 
         // Prepare data for local DB
         final Map<String, dynamic> localUserDataMap = {
@@ -294,7 +295,7 @@ class AuthService extends ChangeNotifier {
     try {
       // Always update locally first — instant and offline-safe.
       final db = await _dbService.database;
-      final now = DateTime.now().toIso8601String();
+      final now = TimestampFormatter.nowUtc();
       await db.update(
         'users',
         {'name': name, 'username': username, 'updated_at': now, 'is_synced': 0},

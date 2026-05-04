@@ -125,28 +125,17 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
         DateTime? dt;
         final inv = row.invoice;
         
-        // Priority 1: Business Date (invoiceDate)
+        // Priority 1: Business Date (invoiceDate) — stored as UTC, convert to local
         if (inv.invoiceDate.isNotEmpty) {
           try {
-            dt = DateTime.tryParse(inv.invoiceDate);
-            // Handle common dash-separated formats
-            if (dt == null && inv.invoiceDate.contains('-')) {
-              final parts = inv.invoiceDate.split('-');
-              if (parts.length == 3) {
-                if (parts[0].length == 4) { // YYYY-MM-DD
-                   dt = DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
-                } else if (parts[2].length == 4) { // DD-MM-YYYY
-                   dt = DateTime(int.parse(parts[2]), int.parse(parts[1]), int.parse(parts[0]));
-                }
-              }
-            }
+            dt = TimestampFormatter.toLocalDateTime(inv.invoiceDate);
           } catch (_) {}
         }
         
-        // Priority 2: Created At
+        // Priority 2: Created At — stored as UTC, convert to local
         if (dt == null) {
           try {
-            dt = DateTime.parse(inv.createdAt).toLocal();
+            dt = TimestampFormatter.toLocalDateTime(inv.createdAt);
           } catch (_) {}
         }
         
@@ -256,15 +245,9 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
     }
   }
 
+  /// Formats a UTC timestamp string to a local date-only string (dd-MM-yyyy).
   String _formatDate(String raw) {
-    try {
-      final dt = DateTime.parse(raw);
-      return '${dt.year}-'
-          '${dt.month.toString().padLeft(2, '0')}-'
-          '${dt.day.toString().padLeft(2, '0')}';
-    } catch (_) {
-      return raw;
-    }
+    return TimestampFormatter.formatDateOnly(raw);
   }
 
   // ── Summary totals ────────────────────────────────────────────────────────────
@@ -614,7 +597,7 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
                     icon: Icons.calendar_today_outlined,
                     label: 'تاريخ الفاتورة',
                     value: inv.invoiceDate.isNotEmpty
-                        ? inv.invoiceDate
+                        ? inv.invoiceDate.toLocalShort()
                         : inv.createdAt.toLocalShort(),
                     isDark: isDark,
                   ),

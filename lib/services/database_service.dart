@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:uuid/uuid.dart';
 import '../models/models.dart';
+import '../utils/timestamp_formatter.dart';
 import 'dart:developer' as dev;
 
 class DatabaseService {
@@ -85,7 +86,7 @@ class DatabaseService {
               'ALTER TABLE payment_methods ADD COLUMN created_at TEXT',
             );
           } catch (_) {}
-          final now = DateTime.now().toIso8601String();
+          final now = TimestampFormatter.nowUtc();
           await db.execute(
             "UPDATE payment_methods SET created_at = ? WHERE created_at IS NULL OR created_at = ''",
             [now],
@@ -628,11 +629,11 @@ class DatabaseService {
     }
     if (start != null) {
       where += ' AND i.created_at >= ?';
-      args.add(start.toIso8601String());
+      args.add(TimestampFormatter.toUtcString(start));
     }
     if (end != null) {
       where += ' AND i.created_at <= ?';
-      args.add(end.toIso8601String());
+      args.add(TimestampFormatter.toUtcString(end));
     }
     args.addAll([pageSize, offset]);
     final r = await db.rawQuery('''
@@ -665,11 +666,11 @@ class DatabaseService {
     }
     if (start != null) {
       where += ' AND created_at >= ?';
-      args.add(start.toIso8601String());
+      args.add(TimestampFormatter.toUtcString(start));
     }
     if (end != null) {
       where += ' AND created_at <= ?';
-      args.add(end.toIso8601String());
+      args.add(TimestampFormatter.toUtcString(end));
     }
     final r = await db.rawQuery(
       'SELECT COUNT(*) as cnt FROM invoices WHERE $where',
@@ -689,7 +690,7 @@ class DatabaseService {
 
   Future<int> insertUser(User u, String p) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = TimestampFormatter.nowUtc();
     var map = u.toMap();
     map.remove('id');
     map['uuid'] = (u.uuid.isEmpty) ? _uuid.v4() : u.uuid;
@@ -710,7 +711,7 @@ class DatabaseService {
         'id': newUser.id,
         'version': (oldUser.version) + 1,
         'is_synced': 0,
-        'updated_at': DateTime.now().toIso8601String(),
+        'updated_at': TimestampFormatter.nowUtc(),
       },
       where: 'id = ?',
       whereArgs: [newUser.id],
@@ -736,7 +737,7 @@ class DatabaseService {
         'password': newPassword,
         'version': currentVersion + 1,
         'is_synced': 0,
-        'updated_at': DateTime.now().toIso8601String(),
+        'updated_at': TimestampFormatter.nowUtc(),
       },
       where: 'id = ?',
       whereArgs: [userId],
@@ -745,7 +746,7 @@ class DatabaseService {
 
   Future<void> softDeleteUser(int id) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = TimestampFormatter.nowUtc();
     final existing = await db.query(
       'users',
       where: 'id = ?',
@@ -786,7 +787,7 @@ class DatabaseService {
   Future<int> insertInvoice(Invoice inv) async {
     final db = await database;
     return await db.transaction((txn) async {
-      final now = DateTime.now().toIso8601String();
+      final now = TimestampFormatter.nowUtc();
 
       // Determine payment method type to decide if this is a cash/app (PAID) invoice.
       // IMPORTANT: We never auto-settle invoices from deposit credit.
@@ -841,11 +842,11 @@ class DatabaseService {
     List<dynamic> args = [];
     if (start != null) {
       where += ' AND i.created_at >= ?';
-      args.add(start.toIso8601String());
+      args.add(TimestampFormatter.toUtcString(start));
     }
     if (end != null) {
       where += ' AND i.created_at <= ?';
-      args.add(end.toIso8601String());
+      args.add(TimestampFormatter.toUtcString(end));
     }
     final r = await db.rawQuery('''
       SELECT i.*,
@@ -876,7 +877,7 @@ class DatabaseService {
   /// and deleting a SALE/WITHDRAWAL invoice removes its debt effect.
   Future<void> softDeleteInvoice(Invoice inv) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = TimestampFormatter.nowUtc();
     await db.update(
       'invoices',
       {
@@ -898,7 +899,7 @@ class DatabaseService {
   /// and restoring a SALE/WITHDRAWAL invoice re-applies its debt effect.
   Future<void> restoreInvoice(Invoice inv) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = TimestampFormatter.nowUtc();
     await db.update(
       'invoices',
       {
@@ -942,7 +943,7 @@ class DatabaseService {
   /// Used when the user wants to delete a customer that still has financial records.
   Future<void> softDeleteCustomerWithInvoices(int customerId) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = TimestampFormatter.nowUtc();
     await db.transaction((txn) async {
       // Soft-delete all active invoices for this customer
       await txn.rawUpdate(
@@ -1040,7 +1041,7 @@ class DatabaseService {
   ///   All other combinations         → 0
   Future<void> recalculateUserBalance(int userId) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = TimestampFormatter.nowUtc();
     await db.rawUpdate(
       '''
       UPDATE users SET
@@ -1191,7 +1192,7 @@ class DatabaseService {
     final db = await database;
     await db.transaction((txn) async {
       final effectiveDate = date ?? DateTime.now();
-      final now = effectiveDate.toIso8601String();
+      final now = TimestampFormatter.toUtcString(effectiveDate);
       final invId = await txn.insert('invoices', {
         'uuid': _uuid.v4(),
         'user_id': userId,
@@ -1290,7 +1291,7 @@ class DatabaseService {
 
   Future<int> insertPaymentMethod(PaymentMethod m) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = TimestampFormatter.nowUtc();
     var map = m.toMap();
     map.remove('id');
     map['uuid'] = (m.uuid.isEmpty) ? _uuid.v4() : m.uuid;
@@ -1303,7 +1304,7 @@ class DatabaseService {
 
   Future<int> updatePaymentMethod(PaymentMethod m) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = TimestampFormatter.nowUtc();
     return await db.update(
       'payment_methods',
       {
@@ -1322,7 +1323,7 @@ class DatabaseService {
   /// of whether the method has been deleted.
   Future<int> deletePaymentMethod(int id) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = TimestampFormatter.nowUtc();
     final existing = await db.query(
       'payment_methods',
       where: 'id = ?',
@@ -1364,7 +1365,7 @@ class DatabaseService {
 
   Future<void> updatePaymentMethodsOrder(List<PaymentMethod> methods) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = TimestampFormatter.nowUtc();
     await db.transaction((txn) async {
       for (int i = 0; i < methods.length; i++) {
         await txn.update(
@@ -1391,11 +1392,11 @@ class DatabaseService {
     List<dynamic> args = [];
     if (start != null) {
       where += ' AND created_at >= ?';
-      args.add(start.toIso8601String());
+      args.add(TimestampFormatter.toUtcString(start));
     }
     if (end != null) {
       where += ' AND created_at <= ?';
-      args.add(end.toIso8601String());
+      args.add(TimestampFormatter.toUtcString(end));
     }
     final salesResult = await db.rawQuery(
       "SELECT SUM(amount) as t FROM invoices WHERE $where",
@@ -1426,7 +1427,7 @@ class DatabaseService {
     final db = await database;
     await db.transaction((txn) async {
       final effectiveDate = date ?? DateTime.now();
-      final now = effectiveDate.toIso8601String();
+      final now = TimestampFormatter.toUtcString(effectiveDate);
       await txn.insert('invoices', {
         'uuid': _uuid.v4(),
         'user_id': customer.id,
@@ -1465,7 +1466,7 @@ class DatabaseService {
   }) async {
     final db = await database;
     await db.transaction((txn) async {
-      final now = DateTime.now().toIso8601String();
+      final now = TimestampFormatter.nowUtc();
       await txn.update(
         'invoices',
         {
@@ -1654,8 +1655,8 @@ class DatabaseService {
     required DateTime end,
   }) async {
     final db = await database;
-    final startStr = start.toIso8601String();
-    final endStr = end.toIso8601String();
+    final startStr = TimestampFormatter.toUtcString(start);
+    final endStr = TimestampFormatter.toUtcString(end);
     final invRows = await db.rawQuery(
       '''
       SELECT
@@ -1744,7 +1745,7 @@ class DatabaseService {
 
   Future<int> insertDailyStatistics(DailyStatistics stats) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = TimestampFormatter.nowUtc();
     var map = stats.toMap();
     map.remove('id');
     map['uuid'] = (stats.uuid.isEmpty) ? _uuid.v4() : stats.uuid;
@@ -1760,8 +1761,8 @@ class DatabaseService {
 
   Future<Map<String, double>> getMonthlySales(int year, int month) async {
     final db = await database;
-    final start = DateTime(year, month, 1).toIso8601String();
-    final end = DateTime(year, month + 1, 0, 23, 59, 59).toIso8601String();
+    final start = TimestampFormatter.toUtcString(DateTime(year, month, 1));
+    final end = TimestampFormatter.toUtcString(DateTime(year, month + 1, 0, 23, 59, 59));
     final r = await db.rawQuery(
       '''
       SELECT day, SUM(daily_total) as daily_total FROM (
@@ -1799,11 +1800,11 @@ class DatabaseService {
     List<dynamic> args = [methodId];
     if (start != null) {
       where += ' AND created_at >= ?';
-      args.add(start.toIso8601String());
+      args.add(TimestampFormatter.toUtcString(start));
     }
     if (end != null) {
       where += ' AND created_at <= ?';
-      args.add(end.toIso8601String());
+      args.add(TimestampFormatter.toUtcString(end));
     }
     final r = await db.query(
       'purchases',
@@ -1816,7 +1817,7 @@ class DatabaseService {
 
   Future<int> insertPurchase(Purchase p) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = TimestampFormatter.nowUtc();
     var map = p.toMap();
     map.remove('id');
     map['uuid'] = (p.uuid.isEmpty) ? _uuid.v4() : p.uuid;
@@ -1829,7 +1830,7 @@ class DatabaseService {
 
   Future<void> updatePurchase(Purchase p) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = TimestampFormatter.nowUtc();
     await db.update(
       'purchases',
       {
@@ -1846,7 +1847,7 @@ class DatabaseService {
   /// Soft-delete a purchase (sets deleted_at timestamp)
   Future<void> softDeletePurchase(int purchaseId) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = TimestampFormatter.nowUtc();
     await db.update(
       'purchases',
       {'deleted_at': now, 'updated_at': now, 'is_synced': 0},
@@ -1858,7 +1859,7 @@ class DatabaseService {
   /// Restore a soft-deleted purchase
   Future<void> restorePurchase(int purchaseId) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = TimestampFormatter.nowUtc();
     await db.update(
       'purchases',
       {'deleted_at': null, 'updated_at': now, 'is_synced': 0},
@@ -1912,7 +1913,7 @@ class DatabaseService {
     required int editorId,
   }) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = TimestampFormatter.nowUtc();
     await db.transaction((txn) async {
       await txn.update(
         'purchases',
@@ -2020,7 +2021,7 @@ class DatabaseService {
 
   Future<void> updateInvoice(Invoice inv) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = TimestampFormatter.nowUtc();
     await db.update(
       'invoices',
       {
@@ -2077,7 +2078,7 @@ class DatabaseService {
     int? storeManagerId,
   }) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = TimestampFormatter.nowUtc();
     await db.insert('edit_history', {
       'uuid': _uuid.v4(),
       'store_manager_id': storeManagerId,
@@ -2129,11 +2130,11 @@ class DatabaseService {
     }
     if (from != null) {
       conditions.add('created_at >= ?');
-      args.add(from.toIso8601String());
+      args.add(TimestampFormatter.toUtcString(from));
     }
     if (to != null) {
       conditions.add('created_at <= ?');
-      args.add(to.toIso8601String());
+      args.add(TimestampFormatter.toUtcString(to));
     }
 
     return db.query(
@@ -2180,7 +2181,7 @@ class DatabaseService {
           updated_at = ?
         WHERE id != ? AND role = 'CUSTOMER'
       ''',
-        [managerId, DateTime.now().toIso8601String(), managerId],
+        [managerId, TimestampFormatter.nowUtc(), managerId],
       );
 
       final storeTables = [
@@ -2197,7 +2198,7 @@ class DatabaseService {
           await txn.update(table, {
             'store_manager_id': managerId,
             'is_synced': 0,
-            'updated_at': DateTime.now().toIso8601String(),
+            'updated_at': TimestampFormatter.nowUtc(),
           }, where: 'store_manager_id IS NULL OR store_manager_id = 0');
         }
       }
@@ -2363,7 +2364,7 @@ class DatabaseService {
       if (key == 'created_at' || key == 'updated_at' || key == 'deleted_at') {
         if (value == null || value.toString().contains('0000-00-00')) {
           if (key == 'deleted_at') return null;
-          return DateTime.now().toIso8601String();
+          return TimestampFormatter.nowUtc();
         }
       }
       return value;

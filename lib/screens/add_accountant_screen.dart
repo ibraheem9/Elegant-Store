@@ -1,3 +1,4 @@
+import '../utils/timestamp_formatter.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/models.dart';
@@ -37,7 +38,7 @@ class _AddAccountantScreenState extends State<AddAccountantScreen> {
         name: _nameController.text.trim(),
         role: 'ACCOUNTANT',
         parentId: auth.currentUser?.getStoreManagerIdLocal(),
-        createdAt: DateTime.now().toIso8601String(),
+        createdAt: TimestampFormatter.nowUtc(),
       );
 
       final newAccId = await db.insertUser(accountant, _passwordController.text);

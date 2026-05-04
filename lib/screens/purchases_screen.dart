@@ -155,7 +155,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         paymentSource: _selectedMethod?.type == 'app' ? 'APP' : 'CASH',
         paymentMethodId: _selectedMethod?.id,
         notes:         _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
-        createdAt:     dt.toIso8601String(),
+        createdAt:     TimestampFormatter.toUtcString(dt),
       ));
       final actUser = context.read<AuthService>().currentUser;
       db.logActivity(
@@ -221,8 +221,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     final merchantCtrl = TextEditingController(text: p.merchantName);
     final notesCtrl    = TextEditingController(text: p.notes ?? '');
     final reasonCtrl   = TextEditingController();
-    // Parse existing createdAt to pre-fill the date picker
-    DateTime editSelectedDate = DateTime.tryParse(p.createdAt) ?? DateTime.now();
+    // Parse existing createdAt (stored as UTC) and convert to local for date picker
+    DateTime editSelectedDate = p.createdAt.toLocalDateTime();
 
     final result = await showDialog<bool>(
       context: context,
@@ -302,9 +302,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       final auth   = context.read<AuthService>();
       final editor = auth.currentUser;
       final db     = context.read<DatabaseService>();
-      // Build new createdAt from selected date (apply past date rule)
-      final adjustedDateTime = TimestampFormatter.applyPastDateRule(editSelectedDate);
-      final newCreatedAt = adjustedDateTime.toIso8601String();
+      // Build new createdAt from selected date (apply past date rule) — stored as UTC
+      final newCreatedAt = TimestampFormatter.applyPastDateRuleUtc(editSelectedDate);
       await db.editPurchaseWithLog(
         oldPurchase: p,
         newPurchase: Purchase(

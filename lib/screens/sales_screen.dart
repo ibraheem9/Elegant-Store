@@ -371,8 +371,8 @@ class _SalesScreenState extends State<SalesScreen> {
           phone: _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
           role: 'CUSTOMER',
           isPermanentCustomer: 0,
-          createdAt: DateTime.now().toIso8601String(),
-        ), '123');
+          createdAt: TimestampFormatter.nowUtc(),
+        }, '123');
         customer = (await db.getCustomers()).firstWhere((c) => c.id == id);
       }
 
@@ -381,15 +381,15 @@ class _SalesScreenState extends State<SalesScreen> {
         status = (customer.isPermanentCustomer == 1) ? 'DEFERRED' : 'UNPAID';
       }
 
-      final combinedDateTime = TimestampFormatter.applyPastDateRule(_selectedInvoiceDate);
+      final combinedDateTimeUtc = TimestampFormatter.applyPastDateRuleUtc(_selectedInvoiceDate);
 
       final invoice = Invoice(
         userId: customer.id!,
-        invoiceDate: combinedDateTime.toIso8601String(),
+        invoiceDate: combinedDateTimeUtc,
         amount: amount,
         paymentStatus: status,
         paymentMethodId: _selectedPaymentMethod?.id,
-        createdAt: combinedDateTime.toIso8601String(),
+        createdAt: combinedDateTimeUtc,
         notes: _notesController.text,
       );
 
@@ -443,8 +443,8 @@ class _SalesScreenState extends State<SalesScreen> {
           phone: _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
           role: 'CUSTOMER',
           isPermanentCustomer: 0,
-          createdAt: DateTime.now().toIso8601String(),
-        ), '123');
+          createdAt: TimestampFormatter.nowUtc(),
+        }, '123');
         customer = (await db.getCustomers()).firstWhere((c) => c.id == id);
       }
       await db.recordCashWithdrawal(
@@ -452,7 +452,7 @@ class _SalesScreenState extends State<SalesScreen> {
         amount: amount,
         notes: _notesController.text,
         paymentMethodId: _selectedPaymentMethod?.id,
-        date: combinedDateTime,
+        date: TimestampFormatter.applyPastDateRule(_selectedInvoiceDate),
       );
       _clearFields(); await _loadData(); _showSnackBar('تم تسجيل السحب بنجاح', Colors.orange);
     } catch (e) { _showSnackBar('خطأ: $e', Colors.red); } finally { setState(() => _isLoading = false); }
@@ -539,8 +539,8 @@ class _SalesScreenState extends State<SalesScreen> {
     } catch (_) {
       selectedMethod = _paymentMethods.isNotEmpty ? _paymentMethods.first : null;
     }
-    // Parse existing createdAt to pre-fill the date picker
-    DateTime editSelectedDate = DateTime.tryParse(inv.createdAt) ?? DateTime.now();
+    // Parse existing createdAt (stored as UTC) and convert to local for date picker
+    DateTime editSelectedDate = inv.createdAt.toLocalDateTime();
 
     final result = await showDialog<bool>(
       context: context,
@@ -614,10 +614,9 @@ class _SalesScreenState extends State<SalesScreen> {
       final db = context.read<DatabaseService>();
       final newAmount = double.tryParse(amountController.text) ?? inv.amount;
       // Build new createdAt from the selected date (apply past date rule)
-      final adjustedDateTime = TimestampFormatter.applyPastDateRule(editSelectedDate);
-      final newCreatedAt = adjustedDateTime.toIso8601String();
-      // Update invoice_date to match createdAt exactly (ISO8601)
-      final newInvoiceDate = adjustedDateTime.toIso8601String();
+      final newCreatedAt = TimestampFormatter.applyPastDateRuleUtc(editSelectedDate);
+      // Update invoice_date to match createdAt exactly (UTC ISO8601)
+      final newInvoiceDate = newCreatedAt;
       final newInv = Invoice(
         id: inv.id,
         uuid: inv.uuid,

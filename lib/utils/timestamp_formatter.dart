@@ -2,97 +2,153 @@ import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
 /// TimestampFormatter
-/// 
-/// Utility class for formatting timestamps with timezone awareness.
-/// All timestamps are stored in UTC on the server.
-/// This class converts them to local timezone for display.
+///
+/// Unified UTC timestamp utility for the Elegant Store app.
+///
+/// STORAGE CONTRACT (enforced everywhere in the codebase):
+///   • ALL timestamps (created_at, updated_at, deleted_at, invoice_date) are
+///     stored as ISO-8601 UTC strings ending with 'Z'.
+///     Example: "2026-05-04T12:30:00.000Z"
+///   • The server (Laravel, config timezone = UTC) already stores UTC.
+///   • The Flutter app MUST call [nowUtc] / [toUtcString] before every DB write.
+///
+/// DISPLAY CONTRACT:
+///   • NEVER display a raw timestamp string to the user.
+///   • Always call one of the format* helpers below, which convert UTC → local.
 class TimestampFormatter {
-  /// Convert timestamp string to local DateTime
-  /// 
-  /// Input: ISO8601 timestamp string
-  /// Output: DateTime in local timezone
+  // ---------------------------------------------------------------------------
+  // UTC STORAGE HELPERS  (use these when writing to the database)
+  // ---------------------------------------------------------------------------
+
+  /// Returns the current moment as a UTC ISO-8601 string ending with 'Z'.
+  /// Use this instead of `DateTime.now().toIso8601String()` everywhere.
+  ///
+  /// Example output: "2026-05-04T12:30:00.000Z"
+  static String nowUtc() => DateTime.now().toUtc().toIso8601String();
+
+  /// Converts any [DateTime] to a UTC ISO-8601 string ending with 'Z'.
+  /// Safe to call on both local and UTC DateTime objects.
+  static String toUtcString(DateTime dt) => dt.toUtc().toIso8601String();
+
+  /// Applies the "end-of-day" rule for past dates, then returns a UTC string.
+  ///
+  /// Rule:
+  ///   • If [date] is before today (local) → set time to 23:59:59 local, then convert to UTC.
+  ///   • If [date] is today or in the future → use current local time, then convert to UTC.
+  ///
+  /// This is the canonical function to call when the user picks a date for an invoice.
+  static String applyPastDateRuleUtc(DateTime date) {
+    final now = DateTime.now();
+    final todayLocal = DateTime(now.year, now.month, now.day);
+    final inputLocal = DateTime(date.year, date.month, date.day);
+
+    DateTime localResult;
+    if (inputLocal.isBefore(todayLocal)) {
+      // Past date: treat as end-of-business-day in local time
+      localResult = DateTime(date.year, date.month, date.day, 23, 59, 59);
+    } else {
+      // Today or future: use the current clock time
+      localResult = DateTime(
+          date.year, date.month, date.day, now.hour, now.minute, now.second);
+    }
+    return localResult.toUtc().toIso8601String();
+  }
+
+  /// Legacy helper kept for backward compatibility with screens that still
+  /// use [applyPastDateRule] directly. Prefer [applyPastDateRuleUtc] for new code.
+  static DateTime applyPastDateRule(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final inputDate = DateTime(date.year, date.month, date.day);
+    if (inputDate.isBefore(today)) {
+      return DateTime(date.year, date.month, date.day, 23, 59, 59);
+    } else {
+      return DateTime(
+          date.year, date.month, date.day, now.hour, now.minute, now.second);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // PARSING  (always produces a LOCAL DateTime for display)
+  // ---------------------------------------------------------------------------
+
+  /// Parses a timestamp string and returns a LOCAL DateTime for display.
+  ///
+  /// Handles all formats that may exist in the database:
+  ///   1. UTC with 'Z'         → "2026-05-04T12:30:00.000Z"   (new format)
+  ///   2. UTC with offset      → "2026-05-04T12:30:00+00:00"
+  ///   3. Local without offset → "2026-05-04T15:30:00.000"    (legacy local)
+  ///   4. Date only            → "2026-05-04"
+  ///
+  /// For case 3 (legacy local strings without timezone info), DateTime.parse
+  /// returns a local DateTime, so .toLocal() is a no-op — correct behaviour.
   static DateTime toLocalDateTime(String? timestampString) {
     if (timestampString == null || timestampString.isEmpty) {
       return DateTime.now();
     }
-
     try {
-      // Parse timestamp
-      // DateTime.parse() handles both UTC (with 'Z') and local formats
-      final dateTime = DateTime.parse(timestampString);
-      
-      // Return as-is (no forced conversion to/from UTC)
-      return dateTime;
+      // DateTime.parse returns UTC if string ends with 'Z' or has offset;
+      // returns local if no timezone indicator. .toLocal() is safe in both cases.
+      return DateTime.parse(timestampString).toLocal();
     } catch (e) {
-      debugPrint('[TimestampFormatter] Error parsing timestamp: $e');
+      debugPrint(
+          '[TimestampFormatter] Error parsing timestamp "$timestampString": $e');
       return DateTime.now();
     }
   }
 
-  /// Format timestamp for display (short format)
-  /// 
-  /// Example: "29-04-2026 3:30 م"
+  // ---------------------------------------------------------------------------
+  // DISPLAY FORMATTERS  (all produce Arabic-localised strings)
+  // ---------------------------------------------------------------------------
+
+  /// Short format: "04-05-2026 3:30 م"
   static String formatShort(String? timestampString) {
     final localDateTime = toLocalDateTime(timestampString);
     return DateFormat('dd-MM-yyyy h:mm a', 'ar_SA').format(localDateTime);
   }
 
-  /// Format timestamp for display (medium format)
-  /// 
-  /// Example: "29-04-2026 3:30:45 م"
+  /// Medium format: "04-05-2026 3:30:45 م"
   static String formatMedium(String? timestampString) {
     final localDateTime = toLocalDateTime(timestampString);
     return DateFormat('dd-MM-yyyy h:mm:ss a', 'ar_SA').format(localDateTime);
   }
 
-  /// Format timestamp for display (long format with day name)
-  /// 
-  /// Example: "الثلاثاء 29-04-2026 3:30 م"
+  /// Long format with day name: "الاثنين 04-05-2026 3:30 م"
   static String formatLong(String? timestampString) {
     final localDateTime = toLocalDateTime(timestampString);
     return DateFormat('EEEE dd-MM-yyyy h:mm a', 'ar_SA').format(localDateTime);
   }
 
-  /// Format timestamp for display (Arabic format with day name)
-  /// 
-  /// Example: "الثلاثاء، 29 أبريل 2026 - 3:30 م"
+  /// Arabic format with day name: "الاثنين، 4 مايو 2026 - 3:30 م"
   static String formatArabic(String? timestampString) {
     final localDateTime = toLocalDateTime(timestampString);
-    return DateFormat('EEEE، d MMMM yyyy - h:mm a', 'ar_SA').format(localDateTime);
+    return DateFormat('EEEE، d MMMM yyyy - h:mm a', 'ar_SA')
+        .format(localDateTime);
   }
 
-  /// Format time only (h:mm a)
-  /// 
-  /// Example: "3:30 م"
+  /// Time only: "3:30 م"
   static String formatTimeOnly(String? timestampString) {
     final localDateTime = toLocalDateTime(timestampString);
     return DateFormat('h:mm a', 'ar_SA').format(localDateTime);
   }
 
-  /// Format date only (dd-MM-yyyy)
-  /// 
-  /// Example: "29-04-2026"
+  /// Date only: "04-05-2026"
   static String formatDateOnly(String? timestampString) {
     final localDateTime = toLocalDateTime(timestampString);
     return DateFormat('dd-MM-yyyy').format(localDateTime);
   }
 
-  /// Format date only with day name (Arabic)
-  /// 
-  /// Example: "الثلاثاء 29-04-2026"
+  /// Date with day name: "الاثنين 04-05-2026"
   static String formatDateWithDayName(String? timestampString) {
     final localDateTime = toLocalDateTime(timestampString);
     return DateFormat('EEEE dd-MM-yyyy', 'ar_SA').format(localDateTime);
   }
 
-  /// Get relative time (e.g., "2 hours ago", "3 days ago")
-  /// 
-  /// Example: "منذ ساعتين"
+  /// Relative time: "منذ ساعتين", "منذ 3 أيام", etc.
   static String formatRelative(String? timestampString) {
     final localDateTime = toLocalDateTime(timestampString);
     final now = DateTime.now();
     final difference = now.difference(localDateTime);
-
     if (difference.inSeconds < 60) {
       return 'الآن';
     } else if (difference.inMinutes < 60) {
@@ -106,7 +162,11 @@ class TimestampFormatter {
     }
   }
 
-  /// Check if timestamp is today
+  // ---------------------------------------------------------------------------
+  // UTILITY CHECKS
+  // ---------------------------------------------------------------------------
+
+  /// Returns true if the timestamp falls on today (local time).
   static bool isToday(String? timestampString) {
     final localDateTime = toLocalDateTime(timestampString);
     final now = DateTime.now();
@@ -115,7 +175,7 @@ class TimestampFormatter {
         localDateTime.day == now.day;
   }
 
-  /// Check if timestamp is yesterday
+  /// Returns true if the timestamp falls on yesterday (local time).
   static bool isYesterday(String? timestampString) {
     final localDateTime = toLocalDateTime(timestampString);
     final yesterday = DateTime.now().subtract(const Duration(days: 1));
@@ -124,9 +184,7 @@ class TimestampFormatter {
         localDateTime.day == yesterday.day;
   }
 
-  /// Get timezone offset from UTC
-  /// 
-  /// Example: "+03:00" for GMT+3
+  /// Returns the device's UTC offset string, e.g. "+03:00".
   static String getTimezoneOffset() {
     final now = DateTime.now();
     final offset = now.timeZoneOffset;
@@ -134,55 +192,41 @@ class TimestampFormatter {
     final minutes = offset.inMinutes.remainder(60);
     return '${hours >= 0 ? '+' : ''}'
         '${hours.toString().padLeft(2, '0')}:'
-        '${minutes.toString().padLeft(2, '0')}';
+        '${minutes.abs().toString().padLeft(2, '0')}';
   }
 
-  /// Get device timezone name
-  /// 
-  /// Example: "Asia/Baghdad"
+  /// Returns the device's timezone name, e.g. "Asia/Baghdad".
   static String getTimezoneNameFromDateTime() {
     return DateTime.now().timeZoneName;
   }
-
-  /// Apply "end of day" rule for past dates
-  /// 
-  /// If [date] is before today, returns a DateTime with time set to 23:59:59.
-  /// Otherwise, returns a DateTime with the current time.
-  static DateTime applyPastDateRule(DateTime date) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final inputDate = DateTime(date.year, date.month, date.day);
-
-    if (inputDate.isBefore(today)) {
-      // Past date: set to 23:59:59
-      return DateTime(date.year, date.month, date.day, 23, 59, 59);
-    } else {
-      // Today or future: use current time
-      return DateTime(date.year, date.month, date.day, now.hour, now.minute, now.second);
-    }
-  }
 }
 
-// Helper extension for easy formatting on String
+// ---------------------------------------------------------------------------
+// EXTENSION  (convenience methods on nullable String)
+// ---------------------------------------------------------------------------
+
 extension TimestampFormatterExtension on String? {
-  /// Format timestamp to local short format
+  /// Converts UTC timestamp to local short display format.
   String toLocalShort() => TimestampFormatter.formatShort(this);
 
-  /// Format timestamp to local medium format
+  /// Converts UTC timestamp to local medium display format.
   String toLocalMedium() => TimestampFormatter.formatMedium(this);
 
-  /// Format timestamp to local long format
+  /// Converts UTC timestamp to local long display format.
   String toLocalLong() => TimestampFormatter.formatLong(this);
 
-  /// Format timestamp to local Arabic format
+  /// Converts UTC timestamp to local Arabic display format.
   String toLocalArabic() => TimestampFormatter.formatArabic(this);
 
-  /// Get local DateTime from timestamp
+  /// Converts UTC timestamp to local date-only display format.
+  String toLocalDateOnly() => TimestampFormatter.formatDateOnly(this);
+
+  /// Parses the string and returns a local DateTime.
   DateTime toLocalDateTime() => TimestampFormatter.toLocalDateTime(this);
 
-  /// Check if timestamp is today
+  /// Returns true if the timestamp is today (local time).
   bool isToday() => TimestampFormatter.isToday(this);
 
-  /// Check if timestamp is yesterday
+  /// Returns true if the timestamp is yesterday (local time).
   bool isYesterday() => TimestampFormatter.isYesterday(this);
 }

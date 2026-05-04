@@ -228,7 +228,7 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${inv.amount.toStringAsFixed(2)} ₪ - ${inv.invoiceDate}',
+                        '${inv.amount.toStringAsFixed(2)} ₪ - ${inv.invoiceDate.toLocalShort()}',
                         style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontWeight: FontWeight.w500),
                       ),
                       if (inv.notes != null && inv.notes!.isNotEmpty)

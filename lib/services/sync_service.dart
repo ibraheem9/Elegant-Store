@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'database_service.dart';
 import '../models/models.dart';
 import '../core/config/api_config.dart';
+import '../utils/timestamp_formatter.dart';
 import 'dart:developer' as dev;
 import 'dart:io';
 
@@ -302,7 +303,7 @@ class SyncService extends ChangeNotifier {
         });
 
         await _dbService.recalculateAllBalances();
-        final localTimestamp = DateTime.now().toIso8601String();
+        final localTimestamp = TimestampFormatter.nowUtc();
         await _prefs.setString('last_sync_time', serverTimestamp); // keep server version for next sync request
         await _prefs.setString('last_sync_time_local', localTimestamp); // local version for display
 
@@ -690,7 +691,7 @@ class SyncService extends ChangeNotifier {
         final serverTimestamp =
             _safeString(responseData['timestamp']) ??
             _safeString(responseData['server_time']) ??
-            DateTime.now().toIso8601String();
+            TimestampFormatter.nowUtc();
 
         final db = await _dbService.database;
         final List<String> mergedNames = [];
@@ -712,7 +713,7 @@ class SyncService extends ChangeNotifier {
         );
 
         await _dbService.recalculateAllBalances();
-        final localTimestamp = DateTime.now().toIso8601String();
+        final localTimestamp = TimestampFormatter.nowUtc();
         await _prefs.setString('last_sync_time', serverTimestamp);
         await _prefs.setString('last_sync_time_local', localTimestamp);
 

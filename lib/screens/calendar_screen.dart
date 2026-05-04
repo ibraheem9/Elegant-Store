@@ -1,3 +1,4 @@
+import '../utils/timestamp_formatter.dart';
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:provider/provider.dart';
@@ -40,7 +41,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
     for (var inv in invoices) {
       if (inv.type != 'SALE') continue;
       
-      final dateKey = inv.createdAt.substring(0, 10);
+      final _localDt = TimestampFormatter.toLocalDateTime(inv.createdAt);
+      final dateKey = '${_localDt.year}-${_localDt.month.toString().padLeft(2, '0')}-${_localDt.day.toString().padLeft(2, '0')}';
       if (!stats.containsKey(dateKey)) {
         stats[dateKey] = {'cash': 0.0, 'app': 0.0};
       }
