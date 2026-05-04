@@ -15,7 +15,6 @@ class SyncDetailsScreen extends StatefulWidget {
 
 class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
   bool _isResetting = false;
-  bool _isSyncing = false;
   bool _isRestoring = false;
 
   Map<String, int> _unsyncedCounts = {};
@@ -51,34 +50,6 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
   // ─────────────────────────────────────────────────────────────────────────
   // ACTIONS
   // ─────────────────────────────────────────────────────────────────────────
-
-  Future<void> _handleSync() async {
-    setState(() => _isSyncing = true);
-    try {
-      final syncService = context.read<SyncService>();
-      await syncService.performFullSync();
-      await _loadStats();
-      if (mounted) {
-        ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
-          const SnackBar(
-            content: Text('تمت المزامنة بنجاح ✓'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
-          SnackBar(
-            content: Text('فشلت المزامنة: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isSyncing = false);
-    }
-  }
 
   Future<void> _handleRestore() async {
     final confirmed = await showDialog<bool>(
@@ -657,30 +628,12 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // ── Sync Now ──────────────────────────────────────────────────────
+        // ── Full Restore from Server ───────────────────────────────────────
+        // Clears all local data and downloads a fresh copy from the server.
+        // This is the primary recovery action for switching devices or
+        // recovering from data corruption.
         ElevatedButton.icon(
-          onPressed: (_isSyncing || _isResetting || _isRestoring) ? null : _handleSync,
-          icon: _isSyncing
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                )
-              : const Icon(Icons.sync_rounded, color: Colors.white),
-          label: Text(
-            _isSyncing ? 'جاري المزامنة...' : 'مزامنة الآن',
-            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15),
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF3B82F6),
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          ),
-        ),
-        // ── Full Restore from Server (Safe-House) ──────────────────────────────
-        const SizedBox(height: 12),
-        ElevatedButton.icon(
-          onPressed: (_isSyncing || _isResetting || _isRestoring) ? null : _handleRestore,
+          onPressed: (_isResetting || _isRestoring) ? null : _handleRestore,
           icon: _isRestoring
               ? const SizedBox(
                   width: 18,
@@ -698,33 +651,9 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
         ),
-        // ── Reset Local Data (DEVELOPER only) ─────────────────────────────────────
-        if (context.read<AuthService>().isDeveloper()) ...[  
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: (_isSyncing || _isResetting || _isRestoring) ? null : _confirmAndReset,
-            icon: _isResetting
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.red),
-                  )
-                : const Icon(Icons.delete_sweep_rounded, color: Colors.red),
-            label: Text(
-              _isResetting ? 'جاري المسح...' : 'مسح البيانات المحلية وإعادة التهيئة',
-              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 14),
-            ),
-            style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: Colors.red, width: 1.5),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            ),
-          ),
-        ],
       ],
     );
   }
-
   Widget _buildResetConfirmDialog(BuildContext ctx) {
     final isDark = Theme.of(ctx).brightness == Brightness.dark;
     return AlertDialog(

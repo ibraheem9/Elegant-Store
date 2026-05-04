@@ -8,6 +8,7 @@ import '../models/models.dart';
 import '../core/config/api_config.dart';
 import '../utils/timestamp_formatter.dart';
 import 'dart:developer' as dev;
+import 'package:uuid/uuid.dart';
 import 'dart:io';
 
 class SyncDetails {
@@ -204,6 +205,22 @@ class SyncService extends ChangeNotifier {
   // MAIN SYNC ENTRY POINT
   // ─────────────────────────────────────────────────────────────────────────
 
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // DEVICE ID
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Returns the device ID stored in SharedPreferences.
+  /// If none exists yet (first run before DeviceSyncService has initialised),
+  /// generates a UUID, persists it, and returns it.
+  Future<String> _getOrCreateDeviceId() async {
+    final saved = _prefs.getString('device_id');
+    if (saved != null && saved.isNotEmpty) return saved;
+    final newId = const Uuid().v4();
+    await _prefs.setString('device_id', newId);
+    return newId;
+  }
+
   Future<void> performFullSync({bool isInitialSync = false}) async {
     if (_isSyncing) return;
 
@@ -227,9 +244,11 @@ class SyncService extends ChangeNotifier {
       final int custUp = payload['users']?.length ?? 0;
       final int invUp  = payload['invoices']?.length ?? 0;
 
+      final deviceId = await _getOrCreateDeviceId();
       final response = await _dio.post('sync/receive', data: {
         'data': payload,
         'last_sync_time': lastSyncTime,
+        'device_id': deviceId,
       });
 
       final responseData = response.data is String

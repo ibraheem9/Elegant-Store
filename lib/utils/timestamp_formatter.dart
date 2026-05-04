@@ -79,9 +79,12 @@ class TimestampFormatter {
   ///   2. UTC with offset      → "2026-05-04T12:30:00+00:00"
   ///   3. Local without offset → "2026-05-04T15:30:00.000"    (legacy local)
   ///   4. Date only            → "2026-05-04"
+  ///   5. Legacy Arabic string → "٢٨-٠٤-٢٠٢٦ الثلاثاء"       (old display string)
   ///
   /// For case 3 (legacy local strings without timezone info), DateTime.parse
   /// returns a local DateTime, so .toLocal() is a no-op — correct behaviour.
+  /// For case 5, Eastern Arabic numerals are converted to Western numerals and
+  /// Arabic day names are stripped before parsing.
   static DateTime toLocalDateTime(String? timestampString) {
     if (timestampString == null || timestampString.isEmpty) {
       return DateTime.now();
@@ -90,11 +93,43 @@ class TimestampFormatter {
       // DateTime.parse returns UTC if string ends with 'Z' or has offset;
       // returns local if no timezone indicator. .toLocal() is safe in both cases.
       return DateTime.parse(timestampString).toLocal();
-    } catch (e) {
+    } catch (_) {
+      // First parse attempt failed — try normalizing Arabic/Persian numerals
+      // and stripping Arabic day names (legacy display strings stored in DB).
+      try {
+        final normalized = _normalizeArabicString(timestampString);
+        if (normalized != timestampString) {
+          return DateTime.parse(normalized).toLocal();
+        }
+      } catch (_) {}
       debugPrint(
-          '[TimestampFormatter] Error parsing timestamp "$timestampString": $e');
+          '[TimestampFormatter] Error parsing timestamp "$timestampString": FormatException: Invalid date format\n$timestampString');
       return DateTime.now();
     }
+  }
+
+  /// Converts Eastern Arabic (٠-٩) and Persian (۰-۹) digits to Western (0-9)
+  /// and strips Arabic day names from legacy display strings.
+  ///
+  /// Example: "٢٨-٠٤-٢٠٢٦ الثلاثاء" → "28-04-2026"
+  static String _normalizeArabicString(String value) {
+    const eastern = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
+    const persian = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
+    const western = ['0','1','2','3','4','5','6','7','8','9'];
+    var result = value;
+    for (var i = 0; i < 10; i++) {
+      result = result.replaceAll(eastern[i], western[i]);
+      result = result.replaceAll(persian[i], western[i]);
+    }
+    // Strip Arabic day names
+    const dayNames = [
+      'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء',
+      'الخميس', 'الجمعة', 'السبت',
+    ];
+    for (final day in dayNames) {
+      result = result.replaceAll(day, '');
+    }
+    return result.trim();
   }
 
   // ---------------------------------------------------------------------------
