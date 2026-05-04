@@ -30,9 +30,7 @@ class UnpaidInvoicesScreen extends StatefulWidget {
 
 class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
   // ── Data ──────────────────────────────────────────────────────────────────────
-  /// All UNPAID/DEFERRED rows fetched from DB (never mutated after load).
   List<UnpaidRow> _allRows  = [];
-  /// Subset after applying search + date filter.
   List<UnpaidRow> _filtered = [];
   bool _loading = true;
 
@@ -43,7 +41,6 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
 
   // ── Pagination ────────────────────────────────────────────────────────────────
   static const int _pageSize = 20;
-  /// Number of items currently visible in the list.
   int _visibleCount = _pageSize;
   final ScrollController _scrollCtrl = ScrollController();
 
@@ -70,7 +67,6 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
     if (!mounted) return;
     setState(() => _loading = true);
     final db = context.read<DatabaseService>();
-    // DB query already returns ONLY UNPAID / DEFERRED invoices.
     final rows = await db.getUnpaidInvoicesWithBalance();
     if (!mounted) return;
     setState(() {
@@ -86,7 +82,6 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
   void _applyFilters() {
     final query = _searchCtrl.text.trim().toLowerCase();
 
-    // Build date window (Start of day to End of day) - Same logic as SalesScreen
     DateTime? windowStart;
     DateTime? windowEnd;
     final now = DateTime.now();
@@ -97,7 +92,6 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
         windowEnd   = DateTime(now.year, now.month, now.day, 23, 59, 59);
         break;
       case _DateFilter.week:
-        // Last 7 days (today + 6 previous days)
         windowStart = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 6));
         windowEnd   = DateTime(now.year, now.month, now.day, 23, 59, 59);
         break;
@@ -120,37 +114,20 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
     }
 
     final result = _allRows.where((row) {
-      // ── Date filter ────────────────────────────────────────────────────────
       if (windowStart != null && windowEnd != null) {
         DateTime? dt;
         final inv = row.invoice;
-        
-        // Priority 1: Business Date (invoiceDate) — stored as UTC, convert to local
         if (inv.invoiceDate.isNotEmpty) {
-          try {
-            dt = TimestampFormatter.toLocalDateTime(inv.invoiceDate);
-          } catch (_) {}
+          try { dt = TimestampFormatter.toLocalDateTime(inv.invoiceDate); } catch (_) {}
         }
-        
-        // Priority 2: Created At — stored as UTC, convert to local
         if (dt == null) {
-          try {
-            dt = TimestampFormatter.toLocalDateTime(inv.createdAt);
-          } catch (_) {}
+          try { dt = TimestampFormatter.toLocalDateTime(inv.createdAt); } catch (_) {}
         }
-        
         if (dt == null) return false;
-        
-        // Normalize record date for comparison
         final recordDate = DateTime(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second);
-        
-        // Match logic: must be >= windowStart and <= windowEnd
-        if (recordDate.isBefore(windowStart!) || recordDate.isAfter(windowEnd!)) {
-          return false;
-        }
+        if (recordDate.isBefore(windowStart!) || recordDate.isAfter(windowEnd!)) return false;
       }
 
-      // ── Text search ────────────────────────────────────────────────────────
       if (query.isNotEmpty) {
         final inv = row.invoice;
         final haystack = [
@@ -170,7 +147,6 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
       return true;
     }).toList();
 
-    // Sort: highest positive balance first, then newest first
     result.sort((a, b) {
       final cmp = b.balance.compareTo(a.balance);
       if (cmp != 0) return cmp;
@@ -179,7 +155,7 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
 
     setState(() {
       _filtered     = result;
-      _visibleCount = _pageSize; // reset pagination on every filter change
+      _visibleCount = _pageSize;
     });
   }
 
@@ -187,14 +163,13 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
   void _onScroll() {
     if (!_scrollCtrl.hasClients) return;
     final pos = _scrollCtrl.position;
-    // Load next page when user is within 300px of the bottom
     if (pos.pixels >= pos.maxScrollExtent - 300) {
       _loadNextPage();
     }
   }
 
   void _loadNextPage() {
-    if (_visibleCount >= _filtered.length) return; // already showing all
+    if (_visibleCount >= _filtered.length) return;
     setState(() {
       _visibleCount = (_visibleCount + _pageSize).clamp(0, _filtered.length);
     });
@@ -245,10 +220,7 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
     }
   }
 
-  /// Formats a UTC timestamp string to a local date-only string (dd-MM-yyyy).
-  String _formatDate(String raw) {
-    return TimestampFormatter.formatDateOnly(raw);
-  }
+  String _formatDate(String raw) => TimestampFormatter.formatDateOnly(raw);
 
   // ── Summary totals ────────────────────────────────────────────────────────────
   double get _totalInvoiceAmount =>
@@ -264,7 +236,6 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
     final bg      = isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
     final cardBg  = isDark ? const Color(0xFF1E293B) : Colors.white;
 
-    // Slice of _filtered that is currently visible
     final visibleItems = _filtered.take(_visibleCount).toList();
     final hasMore      = _visibleCount < _filtered.length;
 
@@ -274,6 +245,9 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
         children: [
           _buildTopBar(isDark),
           _buildSummaryBar(isDark),
+          // ── Pagination indicator ──────────────────────────────────────────────
+          if (!_loading && _filtered.isNotEmpty)
+            _buildPaginationIndicator(isDark),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
@@ -284,15 +258,25 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
                         child: ListView.builder(
                           controller: _scrollCtrl,
                           physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 80),
-                          // +1 for the "load more" indicator at the bottom
+                          padding: const EdgeInsets.fromLTRB(14, 8, 14, 80),
                           itemCount: visibleItems.length + (hasMore ? 1 : 0),
                           itemBuilder: (context, index) {
-                            // Last item = loading indicator when more pages exist
                             if (index == visibleItems.length) {
-                              return const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 16),
-                                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 20),
+                                child: Column(
+                                  children: [
+                                    const CircularProgressIndicator(strokeWidth: 2),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'جاري تحميل المزيد...',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: isDark ? Colors.white54 : Colors.grey.shade500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               );
                             }
                             return _buildCard(visibleItems[index], index + 1, cardBg, isDark);
@@ -305,6 +289,67 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
     );
   }
 
+  // ── Pagination indicator ──────────────────────────────────────────────────────
+  Widget _buildPaginationIndicator(bool isDark) {
+    final showing = _visibleCount.clamp(0, _filtered.length);
+    final total   = _filtered.length;
+    final hasMore = showing < total;
+
+    return Container(
+      color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'عرض $showing من $total فاتورة',
+            style: TextStyle(
+              fontSize: 13,
+              color: isDark ? Colors.white60 : Colors.grey.shade600,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          if (hasMore)
+            GestureDetector(
+              onTap: _loadNextPage,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'تحميل المزيد',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Colors.blue,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.keyboard_arrow_down, size: 16, color: Colors.blue),
+                  ],
+                ),
+              ),
+            )
+          else
+            Text(
+              'تم عرض الكل ✓',
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.green.shade600,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   // ── Top bar ───────────────────────────────────────────────────────────────────
   Widget _buildTopBar(bool isDark) {
     final borderColor = isDark ? Colors.white12 : Colors.grey.shade300;
@@ -312,36 +357,37 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
 
     return Container(
       color: isDark ? const Color(0xFF1E293B) : Colors.white,
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       child: Row(
         children: [
-          // ── Search field ────────────────────────────────────────────────────
           Expanded(
             child: SizedBox(
-              height: 42,
+              height: 46,
               child: TextField(
                 controller: _searchCtrl,
                 textDirection: TextDirection.rtl,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
                 decoration: InputDecoration(
                   hintText: 'بحث باسم الزبون، المبلغ، الملاحظات...',
                   hintStyle: TextStyle(
-                      fontSize: 12,
+                      fontSize: 14,
                       color: isDark ? Colors.white38 : Colors.grey.shade400),
                   prefixIcon: Icon(Icons.search,
-                      size: 18,
+                      size: 20,
                       color: isDark ? Colors.white38 : Colors.grey),
                   suffixIcon: _searchCtrl.text.isNotEmpty
                       ? IconButton(
-                          icon: const Icon(Icons.clear, size: 16),
-                          onPressed: () {
-                            _searchCtrl.clear();
-                          },
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () => _searchCtrl.clear(),
                         )
                       : null,
                   filled: true,
                   fillColor: fillColor,
                   contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
                   border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                       borderSide: BorderSide(color: borderColor)),
@@ -355,39 +401,35 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          // ── Date filter dropdown ────────────────────────────────────────────
+          const SizedBox(width: 10),
           _buildDateDropdown(isDark, borderColor, fillColor),
         ],
       ),
     );
   }
 
-  Widget _buildDateDropdown(
-      bool isDark, Color borderColor, Color fillColor) {
+  Widget _buildDateDropdown(bool isDark, Color borderColor, Color fillColor) {
     final textColor = isDark ? Colors.white70 : Colors.grey.shade700;
     final isActive  = _dateFilter != _DateFilter.all;
 
     return Container(
-      height: 42,
+      height: 46,
       decoration: BoxDecoration(
         color: fillColor,
         border: Border.all(color: isActive ? Colors.blue : borderColor),
         borderRadius: BorderRadius.circular(10),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<_DateFilter>(
           value: _dateFilter,
-          icon: Icon(Icons.keyboard_arrow_down, size: 18, color: textColor),
+          icon: Icon(Icons.keyboard_arrow_down, size: 20, color: textColor),
           isDense: true,
-          style: TextStyle(
-              fontSize: 12, color: textColor, fontFamily: 'Cairo'),
+          style: TextStyle(fontSize: 14, color: textColor, fontFamily: 'Cairo'),
           items: _DateFilter.values.map((f) {
             return DropdownMenuItem(
               value: f,
-              child: Text(f.label,
-                  style: TextStyle(fontSize: 12, color: textColor)),
+              child: Text(f.label, style: TextStyle(fontSize: 14, color: textColor)),
             );
           }).toList(),
           onChanged: (val) async {
@@ -411,7 +453,7 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
   Widget _buildSummaryBar(bool isDark) {
     return Container(
       color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(
         children: [
           _summaryChip(
@@ -421,7 +463,7 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
             color: Colors.blue,
             isDark: isDark,
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 8),
           _summaryChip(
             icon: Icons.attach_money_rounded,
             label: 'إجمالي الفواتير',
@@ -429,7 +471,7 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
             color: Colors.red,
             isDark: isDark,
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 8),
           _summaryChip(
             icon: Icons.account_balance_wallet_rounded,
             label: 'إجمالي الديون',
@@ -451,7 +493,7 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
   }) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
           color: color.withOpacity(0.08),
           borderRadius: BorderRadius.circular(8),
@@ -462,20 +504,20 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
           children: [
             Row(
               children: [
-                Icon(icon, size: 11, color: color),
-                const SizedBox(width: 3),
+                Icon(icon, size: 13, color: color),
+                const SizedBox(width: 4),
                 Flexible(
                   child: Text(label,
-                      style: TextStyle(fontSize: 10, color: color),
+                      style: TextStyle(fontSize: 12, color: color),
                       overflow: TextOverflow.ellipsis),
                 ),
               ],
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: 3),
             Text(
               value,
               style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 14,
                   fontWeight: FontWeight.bold,
                   color: isDark ? Colors.white : Colors.black87),
               overflow: TextOverflow.ellipsis,
@@ -488,8 +530,8 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
 
   // ── Invoice card ──────────────────────────────────────────────────────────────
   Widget _buildCard(UnpaidRow row, int index, Color cardBg, bool isDark) {
-    final inv         = row.invoice;
-    final statusColor = _statusColor(inv.paymentStatus);
+    final inv          = row.invoice;
+    final statusColor  = _statusColor(inv.paymentStatus);
     final balanceColor = row.balance > 0
         ? Colors.red.shade700
         : row.balance < 0
@@ -497,32 +539,29 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
             : Colors.grey;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(12),
         border: Border(left: BorderSide(color: statusColor, width: 4)),
         boxShadow: [
           BoxShadow(
-            color: isDark
-                ? Colors.black26
-                : Colors.black.withOpacity(0.06),
+            color: isDark ? Colors.black26 : Colors.black.withOpacity(0.06),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Customer name + badges ────────────────────────────────────────
+            // ── Customer name + badge ─────────────────────────────────────────
             Row(
               children: [
-                // ── Sequential number ────────────────────────────────────────
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
                   decoration: BoxDecoration(
                     color: isDark ? Colors.white10 : Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(6),
@@ -530,7 +569,7 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
                   child: Text(
                     '$index',
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 13,
                       fontWeight: FontWeight.bold,
                       color: isDark ? Colors.white70 : Colors.grey.shade700,
                     ),
@@ -541,29 +580,26 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
                   child: Text(
                     row.customerName,
                     style: TextStyle(
-                        fontSize: 15,
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
                         color: isDark ? Colors.white : Colors.black87),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 _badge(_statusLabel(inv.paymentStatus), statusColor),
-                const SizedBox(width: 6),
-                // Removed _badge(_typeLabel(inv.type), Colors.blueGrey), as requested
               ],
             ),
-            if (row.customerNickname != null &&
-                row.customerNickname!.isNotEmpty) ...[
-              const SizedBox(height: 2),
+            if (row.customerNickname != null && row.customerNickname!.isNotEmpty) ...[
+              const SizedBox(height: 3),
               Text(
                 row.customerNickname!,
                 style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     color: isDark ? Colors.white38 : Colors.grey.shade500),
                 overflow: TextOverflow.ellipsis,
               ),
             ],
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             // ── Amount + balance ──────────────────────────────────────────────
             Row(
               children: [
@@ -576,7 +612,7 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
                     isDark: isDark,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 Expanded(
                   child: _infoTile(
                     icon: Icons.account_balance_wallet_outlined,
@@ -588,7 +624,7 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             // ── Invoice date + payment method ─────────────────────────────────
             Row(
               children: [
@@ -602,7 +638,7 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
                     isDark: isDark,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 Expanded(
                   child: _infoTile(
                     icon: Icons.payment_outlined,
@@ -615,21 +651,19 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
             ),
             // ── Notes ─────────────────────────────────────────────────────────
             if (inv.notes != null && inv.notes!.isNotEmpty) ...[
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               Row(
                 children: [
                   Icon(Icons.notes_outlined,
-                      size: 13,
+                      size: 14,
                       color: isDark ? Colors.white38 : Colors.grey.shade500),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 5),
                   Flexible(
                     child: Text(
                       inv.notes!,
                       style: TextStyle(
-                          fontSize: 11,
-                          color: isDark
-                              ? Colors.white54
-                              : Colors.grey.shade600),
+                          fontSize: 13,
+                          color: isDark ? Colors.white54 : Colors.grey.shade600),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 2,
                     ),
@@ -638,18 +672,18 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
               ),
             ],
             // ── Created-at timestamp ──────────────────────────────────────────
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 Icon(Icons.access_time,
-                    size: 11,
+                    size: 13,
                     color: isDark ? Colors.white24 : Colors.grey.shade400),
-                const SizedBox(width: 3),
+                const SizedBox(width: 4),
                 Text(
                   inv.createdAt.toLocalShort(),
                   style: TextStyle(
-                      fontSize: 10,
+                      fontSize: 12,
                       color: isDark ? Colors.white24 : Colors.grey.shade400),
                 ),
               ],
@@ -662,7 +696,7 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
 
   Widget _badge(String label, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
         color: color.withOpacity(0.12),
         borderRadius: BorderRadius.circular(6),
@@ -670,7 +704,7 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
       ),
       child: Text(label,
           style: TextStyle(
-              fontSize: 10, color: color, fontWeight: FontWeight.bold)),
+              fontSize: 12, color: color, fontWeight: FontWeight.bold)),
     );
   }
 
@@ -687,26 +721,25 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
         Row(
           children: [
             Icon(icon,
-                size: 11,
+                size: 13,
                 color: isDark ? Colors.white38 : Colors.grey.shade500),
-            const SizedBox(width: 3),
+            const SizedBox(width: 4),
             Flexible(
               child: Text(label,
                   style: TextStyle(
-                      fontSize: 10,
+                      fontSize: 12,
                       color: isDark ? Colors.white38 : Colors.grey.shade500),
                   overflow: TextOverflow.ellipsis),
             ),
           ],
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 3),
         Text(
           value,
           style: TextStyle(
-              fontSize: 13,
+              fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: valueColor ??
-                  (isDark ? Colors.white : Colors.black87)),
+              color: valueColor ?? (isDark ? Colors.white : Colors.black87)),
           overflow: TextOverflow.ellipsis,
         ),
       ],
@@ -725,16 +758,14 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
             isFiltered
                 ? Icons.search_off_rounded
                 : Icons.check_circle_outline_rounded,
-            size: 72,
+            size: 80,
             color: isFiltered ? Colors.grey : Colors.green.shade400,
           ),
           const SizedBox(height: 16),
           Text(
-            isFiltered
-                ? 'لا توجد نتائج'
-                : 'لا توجد فواتير غير مدفوعة',
+            isFiltered ? 'لا توجد نتائج' : 'لا توجد فواتير غير مدفوعة',
             style: TextStyle(
-                fontSize: 18,
+                fontSize: 20,
                 fontWeight: FontWeight.bold,
                 color: isDark ? Colors.white : Colors.black87),
           ),
@@ -743,7 +774,7 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
             isFiltered
                 ? 'لا توجد فواتير تطابق البحث أو الفلتر المحدد'
                 : 'جميع الفواتير مدفوعة ✓',
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
             textAlign: TextAlign.center,
           ),
         ],
