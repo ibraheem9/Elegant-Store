@@ -86,7 +86,7 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
   void _applyFilters() {
     final query = _searchCtrl.text.trim().toLowerCase();
 
-    // Build date window
+    // Build date window (Start of day to End of day) - Same logic as SalesScreen
     DateTime? windowStart;
     DateTime? windowEnd;
     final now = DateTime.now();
@@ -94,7 +94,7 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
     switch (_dateFilter) {
       case _DateFilter.today:
         windowStart = DateTime(now.year, now.month, now.day);
-        windowEnd   = windowStart.add(const Duration(days: 1));
+        windowEnd   = DateTime(now.year, now.month, now.day, 23, 59, 59);
         break;
       case _DateFilter.week:
         // Last 7 days (today + 6 previous days)
@@ -103,17 +103,16 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
         break;
       case _DateFilter.month:
         windowStart = DateTime(now.year, now.month, 1);
-        windowEnd   = DateTime(now.year, now.month + 1, 1);
+        windowEnd   = DateTime(now.year, now.month, now.day, 23, 59, 59);
         break;
       case _DateFilter.year:
         windowStart = DateTime(now.year, 1, 1);
-        windowEnd   = DateTime(now.year + 1, 1, 1);
+        windowEnd   = DateTime(now.year, now.month, now.day, 23, 59, 59);
         break;
       case _DateFilter.custom:
         if (_customDate != null) {
-          windowStart = DateTime(
-              _customDate!.year, _customDate!.month, _customDate!.day);
-          windowEnd = windowStart!.add(const Duration(days: 1));
+          windowStart = DateTime(_customDate!.year, _customDate!.month, _customDate!.day);
+          windowEnd   = DateTime(_customDate!.year, _customDate!.month, _customDate!.day, 23, 59, 59);
         }
         break;
       case _DateFilter.all:
@@ -122,14 +121,44 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
 
     final result = _allRows.where((row) {
       // ── Date filter ────────────────────────────────────────────────────────
-      if (windowStart != null) {
+      if (windowStart != null && windowEnd != null) {
         DateTime? dt;
-        try {
-          dt = DateTime.parse(row.invoice.createdAt);
-        } catch (_) {}
+        final inv = row.invoice;
+        
+        // Priority 1: Business Date (invoiceDate)
+        if (inv.invoiceDate.isNotEmpty) {
+          try {
+            dt = DateTime.tryParse(inv.invoiceDate);
+            // Handle common dash-separated formats
+            if (dt == null && inv.invoiceDate.contains('-')) {
+              final parts = inv.invoiceDate.split('-');
+              if (parts.length == 3) {
+                if (parts[0].length == 4) { // YYYY-MM-DD
+                   dt = DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+                } else if (parts[2].length == 4) { // DD-MM-YYYY
+                   dt = DateTime(int.parse(parts[2]), int.parse(parts[1]), int.parse(parts[0]));
+                }
+              }
+            }
+          } catch (_) {}
+        }
+        
+        // Priority 2: Created At
+        if (dt == null) {
+          try {
+            dt = DateTime.parse(inv.createdAt).toLocal();
+          } catch (_) {}
+        }
+        
         if (dt == null) return false;
-        if (dt.isBefore(windowStart)) return false;
-        if (windowEnd != null && !dt.isBefore(windowEnd)) return false;
+        
+        // Normalize record date for comparison
+        final recordDate = DateTime(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second);
+        
+        // Match logic: must be >= windowStart and <= windowEnd
+        if (recordDate.isBefore(windowStart!) || recordDate.isAfter(windowEnd!)) {
+          return false;
+        }
       }
 
       // ── Text search ────────────────────────────────────────────────────────
@@ -283,7 +312,7 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
                                 child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
                               );
                             }
-                            return _buildCard(visibleItems[index], cardBg, isDark);
+                            return _buildCard(visibleItems[index], index + 1, cardBg, isDark);
                           },
                         ),
                       ),
@@ -475,7 +504,7 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
   }
 
   // ── Invoice card ──────────────────────────────────────────────────────────────
-  Widget _buildCard(UnpaidRow row, Color cardBg, bool isDark) {
+  Widget _buildCard(UnpaidRow row, int index, Color cardBg, bool isDark) {
     final inv         = row.invoice;
     final statusColor = _statusColor(inv.paymentStatus);
     final balanceColor = row.balance > 0
@@ -508,6 +537,23 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
             // ── Customer name + badges ────────────────────────────────────────
             Row(
               children: [
+                // ── Sequential number ────────────────────────────────────────
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white10 : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '$index',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white70 : Colors.grey.shade700,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     row.customerName,
@@ -520,7 +566,7 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
                 ),
                 _badge(_statusLabel(inv.paymentStatus), statusColor),
                 const SizedBox(width: 6),
-                _badge(_typeLabel(inv.type), Colors.blueGrey),
+                // Removed _badge(_typeLabel(inv.type), Colors.blueGrey), as requested
               ],
             ),
             if (row.customerNickname != null &&

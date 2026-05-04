@@ -1013,6 +1013,7 @@ class DatabaseService {
       WHERE i.deleted_at IS NULL
         AND i.type = 'SALE'
         AND i.payment_status IN ('UNPAID', 'unpaid')
+        AND u.balance > 0
       ORDER BY i.created_at DESC
     ''');
     return rows.map((m) {
@@ -1191,11 +1192,10 @@ class DatabaseService {
     await db.transaction((txn) async {
       final effectiveDate = date ?? DateTime.now();
       final now = effectiveDate.toIso8601String();
-      final dateStr = DateFormat('yyyy-MM-dd HH:mm:ss').format(effectiveDate);
       final invId = await txn.insert('invoices', {
         'uuid': _uuid.v4(),
         'user_id': userId,
-        'invoice_date': dateStr,
+        'invoice_date': now,
         'amount': amount,
         'paid_amount': amount,
         'payment_status': 'PAID',
@@ -1427,11 +1427,10 @@ class DatabaseService {
     await db.transaction((txn) async {
       final effectiveDate = date ?? DateTime.now();
       final now = effectiveDate.toIso8601String();
-      final dateStr = DateFormat('yyyy-MM-dd HH:mm:ss').format(effectiveDate);
       await txn.insert('invoices', {
         'uuid': _uuid.v4(),
         'user_id': customer.id,
-        'invoice_date': dateStr,
+        'invoice_date': now,
         'amount': amount,
         'paid_amount': 0.0,
         'payment_status': 'UNPAID',

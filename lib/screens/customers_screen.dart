@@ -1116,16 +1116,14 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     
     // Build new createdAt from the selected date (apply past date rule)
     final adjustedDateTime = TimestampFormatter.applyPastDateRule(editSelectedDate);
-    final newCreatedAt = adjustedDateTime.toIso8601String();
-    // Update invoice_date text to match the new date
-    final newInvoiceDate = DateFormat('yyyy-MM-dd HH:mm:ss').format(adjustedDateTime);
+    final now = adjustedDateTime.toIso8601String();
 
     final newInv = Invoice(
       id: inv.id,
       uuid: inv.uuid,
       storeManagerId: inv.storeManagerId,
       userId: inv.userId,
-      invoiceDate: newInvoiceDate,
+      invoiceDate: now,
       amount: newAmount,
       paidAmount: inv.paidAmount,
       paymentMethodId: selectedMethod?.id,
@@ -1133,7 +1131,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       type: inv.type,
       notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
       version: inv.version,
-      createdAt: newCreatedAt,
+      createdAt: now,
       updatedAt: DateTime.now().toIso8601String(),
       isSynced: 0,
     );

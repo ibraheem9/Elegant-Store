@@ -385,7 +385,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
       final invoice = Invoice(
         userId: customer.id!,
-        invoiceDate: DateFormat('yyyy-MM-dd HH:mm:ss').format(combinedDateTime),
+        invoiceDate: combinedDateTime.toIso8601String(),
         amount: amount,
         paymentStatus: status,
         paymentMethodId: _selectedPaymentMethod?.id,
@@ -616,8 +616,8 @@ class _SalesScreenState extends State<SalesScreen> {
       // Build new createdAt from the selected date (apply past date rule)
       final adjustedDateTime = TimestampFormatter.applyPastDateRule(editSelectedDate);
       final newCreatedAt = adjustedDateTime.toIso8601String();
-      // Update invoice_date text to match the new date
-      final newInvoiceDate = DateFormat('yyyy-MM-dd HH:mm:ss').format(adjustedDateTime);
+      // Update invoice_date to match createdAt exactly (ISO8601)
+      final newInvoiceDate = adjustedDateTime.toIso8601String();
       final newInv = Invoice(
         id: inv.id,
         uuid: inv.uuid,
