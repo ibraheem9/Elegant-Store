@@ -635,7 +635,7 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // ── Progress bar (visible only during restore) ─────────────────
-            if (isRestoring) ..[
+            if (isRestoring) ...[
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
