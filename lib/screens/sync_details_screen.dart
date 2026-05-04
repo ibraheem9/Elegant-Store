@@ -345,7 +345,7 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
     String lastSyncDisplay = 'لم تتم مزامنة بعد';
     if (details != null && details.lastSyncTime.isNotEmpty) {
       try {
-        final dt = DateTime.parse(details.lastSyncTime);
+        final dt = DateTime.parse(details.lastSyncTime).toLocal();
         lastSyncDisplay = DateFormat('yyyy/MM/dd  hh:mm a', 'ar').format(dt);
       } catch (_) {
         lastSyncDisplay = details.lastSyncTime;
