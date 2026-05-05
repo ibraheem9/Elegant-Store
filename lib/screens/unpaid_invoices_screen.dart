@@ -625,29 +625,50 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
               ],
             ),
             const SizedBox(height: 10),
-            // ── Invoice date + payment method ─────────────────────────────────
-            Row(
-              children: [
-                Expanded(
-                  child: _infoTile(
-                    icon: Icons.calendar_today_outlined,
-                    label: 'تاريخ الفاتورة',
-                    value: inv.invoiceDate.isNotEmpty
-                        ? inv.invoiceDate.toLocalShort()
-                        : inv.createdAt.toLocalShort(),
-                    isDark: isDark,
+            // ── Invoice date (used for filtering) ─────────────────────────────
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: statusColor.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: statusColor.withOpacity(0.25)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.calendar_month_outlined,
+                      size: 16, color: statusColor),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'تاريخ الفاتورة',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark ? Colors.white54 : Colors.grey.shade600,
+                        ),
+                      ),
+                      Text(
+                        inv.invoiceDate.isNotEmpty
+                            ? inv.invoiceDate.toLocalShort()
+                            : inv.createdAt.toLocalShort(),
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _infoTile(
+                  const Spacer(),
+                  _infoTile(
                     icon: Icons.payment_outlined,
                     label: 'طريقة الدفع',
                     value: inv.methodName ?? '—',
                     isDark: isDark,
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
             // ── Notes ─────────────────────────────────────────────────────────
             if (inv.notes != null && inv.notes!.isNotEmpty) ...[
