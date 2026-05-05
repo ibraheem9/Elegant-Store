@@ -836,14 +836,6 @@ class _InvoiceCard extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
-                    // Row 3: invoice date (filtering date) + payment method
-                    _DateMethodRow(
-                      invoiceDateStr: invoiceDateStr,
-                      methodName:     inv.methodName,
-                      accentColor:    sColor,
-                      isDark:         isDark,
-                    ),
                     // Notes
                     if (inv.notes != null && inv.notes!.isNotEmpty) ...[
                       const SizedBox(height: 8),
@@ -871,30 +863,35 @@ class _InvoiceCard extends StatelessWidget {
                         ],
                       ),
                     ],
-                    // Created-at timestamp (small, bottom-right)
+                    // Bottom row: invoice date (left) + created-at (right)
                     const SizedBox(height: 6),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.access_time,
-                              size: 11,
-                              color: isDark
-                                  ? Colors.white24
-                                  : Colors.grey.shade400),
-                          const SizedBox(width: 3),
-                          Text(
-                            inv.createdAt.toLocalShort(),
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: isDark
-                                  ? Colors.white24
-                                  : Colors.grey.shade400,
-                            ),
+                    Row(
+                      children: [
+                        Icon(Icons.calendar_today_outlined,
+                            size: 11,
+                            color: isDark ? Colors.white38 : Colors.grey.shade500),
+                        const SizedBox(width: 3),
+                        Text(
+                          invoiceDateStr,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white54 : Colors.grey.shade600,
                           ),
-                        ],
-                      ),
+                        ),
+                        const Spacer(),
+                        Icon(Icons.access_time,
+                            size: 11,
+                            color: isDark ? Colors.white24 : Colors.grey.shade400),
+                        const SizedBox(width: 3),
+                        Text(
+                          inv.createdAt.toLocalShort(),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark ? Colors.white24 : Colors.grey.shade400,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
