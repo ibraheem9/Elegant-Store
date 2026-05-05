@@ -573,6 +573,7 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
             : Colors.grey;
 
     return Container(
+      width: double.infinity,
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: cardBg,
