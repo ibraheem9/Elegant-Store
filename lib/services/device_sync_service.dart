@@ -328,6 +328,10 @@ class DeviceSyncService {
 
       onSyncError?.call('Failed to complete sync');
       return false;
+    } on DioException catch (e) {
+      debugPrint('[DeviceSync] Complete sync error: $e');
+      onSyncError?.call(_mapSyncError(e, 'complete'));
+      return false;
     } catch (e) {
       debugPrint('[DeviceSync] Complete sync error: $e');
       onSyncError?.call('Complete sync failed: $e');
@@ -351,6 +355,11 @@ class DeviceSyncService {
         return true;
       }
 
+      return false;
+    } on DioException catch (e) {
+      debugPrint('[DeviceSync] Fail sync error: $e');
+      // 404 on failSync means the device is not registered yet — not critical
+      if (e.response?.statusCode == 404) return false;
       return false;
     } catch (e) {
       debugPrint('[DeviceSync] Fail sync error: $e');
@@ -460,7 +469,7 @@ class DeviceSyncService {
   /// Perform full sync cycle
   Future<bool> performFullSync(List<String> tables) async {
     try {
-      // Step 1: Initialize sync
+      // Step 1: Initialize sync (registers device on server if new)
       if (!await initSync()) {
         return false;
       }
@@ -471,7 +480,19 @@ class DeviceSyncService {
       }
 
       // Step 3: Get changed records
-      final changedRecords = await getChangedRecords(tables);
+      final changedRecords = await _getChangedRecordsInternal(tables);
+      if (changedRecords == null) {
+        // 404 during changed-records: device not registered — re-init and retry once
+        debugPrint('[DeviceSync] Device not found during changed-records, re-initializing...');
+        if (await initSync() && await startSync()) {
+          final retryRecords = await getChangedRecords(tables);
+          if (retryRecords.isNotEmpty) await _saveChangedRecords(retryRecords);
+          if (!await completeSync()) { await failSync(); return false; }
+          return true;
+        }
+        onSyncError?.call('جهازك غير مسجل على السيرفر. سيتم إعادة التسجيل تلقائياً في المحاولة التالية.');
+        return false;
+      }
 
       // Step 4: Save records to local database
       if (changedRecords.isNotEmpty) {
@@ -485,11 +506,86 @@ class DeviceSyncService {
       }
 
       return true;
+    } on DioException catch (e) {
+      debugPrint('[DeviceSync] Full sync DioException: $e');
+      await failSync();
+      onSyncError?.call(_mapSyncError(e, 'sync'));
+      return false;
     } catch (e) {
       await failSync();
       onSyncError?.call('Full sync failed: $e');
       return false;
     }
+  }
+
+  /// Internal version of getChangedRecords that returns null on 404
+  Future<Map<String, dynamic>?> _getChangedRecordsInternal(List<String> tables) async {
+    try {
+      final deviceId = await getDeviceId();
+      final response = await _dio.post(
+        'sync/device/changed-records',
+        data: {'device_id': deviceId, 'tables': tables},
+      );
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        final changedRecords = response.data['changed_records'] as Map?;
+        final recordCount = response.data['record_count'] as int? ?? 0;
+        onRecordsReceived?.call(recordCount);
+        return changedRecords?.cast<String, dynamic>() ?? {};
+      }
+      return {};
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null; // Signal re-init needed
+      rethrow;
+    }
+  }
+
+  /// Map a DioException to a user-friendly Arabic error message
+  String _mapSyncError(DioException e, String step) {
+    final status = e.response?.statusCode;
+    final serverMsg = e.response?.data is Map
+        ? (e.response!.data as Map)['error'] as String?
+        : null;
+
+    if (status == 404) {
+      return 'جهازك غير مسجل على السيرفر بعد. '
+          'سيتم التسجيل تلقائياً عند المحاولة التالية.';
+    }
+
+    if (status == 401) {
+      return 'انتهت صلاحية الجلسة. يرجى تسجيل الدخول مجدداً.';
+    }
+
+    if (status == 409) {
+      return 'جلسة مزامنة أخرى نشطة. سيتم إعادة المحاولة تلقائياً.';
+    }
+
+    if (status == 429) {
+      // Rate limited — try to extract retry-after header
+      final retryAfter = e.response?.headers.value('retry-after');
+      final seconds = int.tryParse(retryAfter ?? '');
+      if (seconds != null && seconds > 0) {
+        final minutes = (seconds / 60).ceil();
+        return 'تم تجاوز الحد المسموح من الطلبات. '
+            'يرجى الانتظار $minutes دقيقة قبل المزامنة.';
+      }
+      return 'تم تجاوز الحد المسموح من الطلبات. يرجى الانتظار قليلاً.';
+    }
+
+    if (status != null && status >= 500) {
+      return 'خطأ في السيرفر ($status). يرجى المحاولة لاحقاً.';
+    }
+
+    if (e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.receiveTimeout ||
+        e.type == DioExceptionType.sendTimeout) {
+      return 'انتهت مهلة الاتصال. تحقق من الإنترنت وأعد المحاولة.';
+    }
+
+    if (e.type == DioExceptionType.connectionError) {
+      return 'لا يوجد اتصال بالإنترنت. تحقق من الشبكة.';
+    }
+
+    return serverMsg ?? 'خطأ في المزامنة ($step). يرجى المحاولة لاحقاً.';
   }
 
   /// Save changed records to local database
