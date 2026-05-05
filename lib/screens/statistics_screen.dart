@@ -96,10 +96,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       case _FilterMode.year:
         return 'سنة ${_selectedDate.year}';
       case _FilterMode.custom:
-        if (_rangeStart != null && _rangeEnd != null) {
-          return '${DateFormat('dd/MM').format(_rangeStart!)} - ${DateFormat('dd/MM').format(_rangeEnd!)}';
-        }
-        return 'تاريخ محدد';
+        return DateFormat('dd/MM/yyyy').format(_selectedDate);
     }
   }
 
@@ -132,10 +129,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     // For single-day mode, also load saved cash box stats
     DailyStatistics? savedStats;
     if (_isSingleDay) {
-      final anchor = _filterMode == _FilterMode.custom && _rangeStart != null
-          ? _rangeStart!
-          : _selectedDate;
-      savedStats = await db.getTodayStatistics(date: anchor);
+      savedStats = await db.getTodayStatistics(date: _selectedDate);
     }
 
     setState(() {
@@ -158,18 +152,20 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   // ── Filter actions ─────────────────────────────────────────────────────────
   Future<void> _applyFilter(_FilterMode mode) async {
     if (mode == _FilterMode.custom) {
-      final range = await showDateRangePicker(
+      final picked = await showDatePicker(
         context: context,
+        initialDate: _filterMode == _FilterMode.custom ? _selectedDate : DateTime.now(),
         firstDate: DateTime(2020),
         lastDate: DateTime.now(),
         locale: const Locale('ar'),
       );
-      if (range == null) return;
+      if (picked == null) return;
       setState(() {
-        _filterMode  = _FilterMode.custom;
-        _rangeStart  = range.start;
-        _rangeEnd    = range.end;
-        _selectedDate = range.start;
+        _filterMode   = _FilterMode.custom;
+        _selectedDate = picked;
+        _rangeStart   = picked;
+        _rangeEnd     = picked;
+        _cashBoxDate  = picked;
       });
     } else {
       setState(() {
@@ -429,11 +425,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         dateText = 'سنة ${_selectedDate.year}';
         break;
       case _FilterMode.custom:
-        if (_rangeStart != null && _rangeEnd != null) {
-          dateText = 'من ${DateFormat("dd/MM/yyyy").format(_rangeStart!)} إلى ${DateFormat("dd/MM/yyyy").format(_rangeEnd!)}';
-        } else {
-          dateText = DateFormat('dd-MM-yyyy').format(_selectedDate);
-        }
+        dateText = DateFormat('dd-MM-yyyy EEEE', 'ar').format(_selectedDate);
         break;
     }
     return Row(
