@@ -863,9 +863,10 @@ class _InvoiceCard extends StatelessWidget {
                         ],
                       ),
                     ],
-                    // Bottom row: invoice date (left) + created-at (right)
+                    // Bottom: invoice date only
                     const SizedBox(height: 6),
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.calendar_today_outlined,
                             size: 11,
@@ -877,18 +878,6 @@ class _InvoiceCard extends StatelessWidget {
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
                             color: isDark ? Colors.white54 : Colors.grey.shade600,
-                          ),
-                        ),
-                        const Spacer(),
-                        Icon(Icons.access_time,
-                            size: 11,
-                            color: isDark ? Colors.white24 : Colors.grey.shade400),
-                        const SizedBox(width: 3),
-                        Text(
-                          inv.createdAt.toLocalShort(),
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: isDark ? Colors.white24 : Colors.grey.shade400,
                           ),
                         ),
                       ],
