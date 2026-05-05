@@ -15,10 +15,14 @@ val keyProperties = Properties().apply {
     }
 }
 
-val keystoreAlias    = keyProperties.getProperty("keyAlias",     "ibraheem abd elhadi")
-val keystorePassword = keyProperties.getProperty("keyPassword",  "kcPY%-mJ=b6;eqL9i9:A")
-val storeFileValue   = keyProperties.getProperty("storeFile",    "abd-elhadi-store.jks")
-val storePassValue   = keyProperties.getProperty("storePassword",".%502eJ!lr62z8/e}DhQ")
+val keystoreAlias     = keyProperties.getProperty("keyAlias",      "ibraheem abd elhadi")
+val keystorePassword  = keyProperties.getProperty("keyPassword",   "kcPY%-mJ=b6;eqL9i9:A")
+val storeFileRelative = keyProperties.getProperty("storeFile",     "abd-elhadi-store.jks")
+val storePassValue    = keyProperties.getProperty("storePassword", ".%502eJ!lr62z8/e}DhQ")
+
+// Resolve the keystore file relative to android/app/
+val keystoreFile = file(storeFileRelative)
+val hasKeystore  = keystoreFile.exists()
 
 android {
     namespace = "com.example.elegant_store"
@@ -41,23 +45,27 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-
         multiDexEnabled = true
     }
 
-    signingConfigs {
-        create("release") {
-            keyAlias      = keystoreAlias
-            keyPassword   = keystorePassword
-            storeFile     = file(storeFileValue)
-            storePassword = storePassValue
+    if (hasKeystore) {
+        signingConfigs {
+            create("release") {
+                keyAlias      = keystoreAlias
+                keyPassword   = keystorePassword
+                storeFile     = keystoreFile
+                storePassword = storePassValue
+            }
         }
     }
 
     buildTypes {
         getByName("release") {
-            signingConfig    = signingConfigs.getByName("release")
-            isMinifyEnabled  = false
+            signingConfig = if (hasKeystore)
+                signingConfigs.getByName("release")
+            else
+                signingConfigs.getByName("debug")
+            isMinifyEnabled   = false
             isShrinkResources = false
         }
     }
