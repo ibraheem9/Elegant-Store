@@ -290,6 +290,29 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
   }
 
   // ── Pagination indicator ──────────────────────────────────────────────────────
+  /// Returns a human-readable label for the active date filter.
+  String get _activeDateLabel {
+    final now = DateTime.now();
+    switch (_dateFilter) {
+      case _DateFilter.all:
+        return 'كل الفترات';
+      case _DateFilter.today:
+        return 'اليوم – ${now.day.toString().padLeft(2,'0')}-${now.month.toString().padLeft(2,'0')}-${now.year}';
+      case _DateFilter.week:
+        final start = now.subtract(const Duration(days: 6));
+        return '${start.day.toString().padLeft(2,'0')}-${start.month.toString().padLeft(2,'0')}-${start.year} → ${now.day.toString().padLeft(2,'0')}-${now.month.toString().padLeft(2,'0')}-${now.year}';
+      case _DateFilter.month:
+        return 'شهر ${now.month.toString().padLeft(2,'0')}-${now.year}';
+      case _DateFilter.year:
+        return 'سنة ${now.year}';
+      case _DateFilter.custom:
+        if (_customDate != null) {
+          return '${_customDate!.day.toString().padLeft(2,'0')}-${_customDate!.month.toString().padLeft(2,'0')}-${_customDate!.year}';
+        }
+        return 'تاريخ محدد';
+    }
+  }
+
   Widget _buildPaginationIndicator(bool isDark) {
     final showing = _visibleCount.clamp(0, _filtered.length);
     final total   = _filtered.length;
@@ -301,13 +324,29 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            'عرض $showing من $total فاتورة',
-            style: TextStyle(
-              fontSize: 13,
-              color: isDark ? Colors.white60 : Colors.grey.shade600,
-              fontWeight: FontWeight.w500,
-            ),
+          Row(
+            children: [
+              Icon(Icons.filter_list_rounded,
+                  size: 14,
+                  color: isDark ? Colors.white54 : Colors.grey.shade500),
+              const SizedBox(width: 5),
+              Text(
+                _activeDateLabel,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark ? Colors.white60 : Colors.grey.shade700,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '($total)',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? Colors.white38 : Colors.grey.shade500,
+                ),
+              ),
+            ],
           ),
           if (hasMore)
             GestureDetector(
@@ -638,29 +677,32 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
                   Icon(Icons.calendar_month_outlined,
                       size: 16, color: statusColor),
                   const SizedBox(width: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'تاريخ الفاتورة',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: isDark ? Colors.white54 : Colors.grey.shade600,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'تاريخ الفاتورة',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark ? Colors.white54 : Colors.grey.shade600,
+                          ),
                         ),
-                      ),
-                      Text(
-                        inv.invoiceDate.isNotEmpty
-                            ? inv.invoiceDate.toLocalShort()
-                            : inv.createdAt.toLocalShort(),
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : Colors.black87,
+                        Text(
+                          inv.invoiceDate.isNotEmpty
+                              ? inv.invoiceDate.toLocalShort()
+                              : inv.createdAt.toLocalShort(),
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : Colors.black87,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                  const Spacer(),
+                  const SizedBox(width: 12),
                   _infoTile(
                     icon: Icons.payment_outlined,
                     label: 'طريقة الدفع',
