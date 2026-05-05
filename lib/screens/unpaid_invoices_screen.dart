@@ -48,14 +48,12 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
   @override
   void initState() {
     super.initState();
-    _scrollCtrl.addListener(_onScroll);
     _searchCtrl.addListener(_onSearchChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
   }
 
   @override
   void dispose() {
-    _scrollCtrl.removeListener(_onScroll);
     _searchCtrl.removeListener(_onSearchChanged);
     _scrollCtrl.dispose();
     _searchCtrl.dispose();
@@ -159,15 +157,7 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
     });
   }
 
-  // ── Pagination ────────────────────────────────────────────────────────────────
-  void _onScroll() {
-    if (!_scrollCtrl.hasClients) return;
-    final pos = _scrollCtrl.position;
-    if (pos.pixels >= pos.maxScrollExtent - 300) {
-      _loadNextPage();
-    }
-  }
-
+  // ── Pagination ────────────────────────────────────────────
   void _loadNextPage() {
     if (_visibleCount >= _filtered.length) return;
     setState(() {
@@ -263,19 +253,24 @@ class _UnpaidInvoicesScreenState extends State<UnpaidInvoicesScreen> {
                           itemBuilder: (context, index) {
                             if (index == visibleItems.length) {
                               return Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 20),
-                                child: Column(
-                                  children: [
-                                    const CircularProgressIndicator(strokeWidth: 2),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      'جاري تحميل المزيد...',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: isDark ? Colors.white54 : Colors.grey.shade500,
+                                padding: const EdgeInsets.fromLTRB(0, 8, 0, 20),
+                                child: Center(
+                                  child: ElevatedButton.icon(
+                                    onPressed: _loadNextPage,
+                                    icon: const Icon(Icons.expand_more_rounded, size: 20),
+                                    label: Text(
+                                      'تحميل المزيد (${_filtered.length - visibleItems.length})',
+                                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.blue,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
                                       ),
                                     ),
-                                  ],
+                                  ),
                                 ),
                               );
                             }
