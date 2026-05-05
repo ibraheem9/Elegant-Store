@@ -7,12 +7,18 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// ── Load signing credentials from key.properties ──────────────────────────────
+// ── Load signing credentials ───────────────────────────────────────────────────
 val keyPropertiesFile = rootProject.file("key.properties")
-val keyProperties = Properties()
-if (keyPropertiesFile.exists()) {
-    keyProperties.load(FileInputStream(keyPropertiesFile))
+val keyProperties = Properties().apply {
+    if (keyPropertiesFile.exists()) {
+        load(FileInputStream(keyPropertiesFile))
+    }
 }
+
+val keystoreAlias    = keyProperties.getProperty("keyAlias",     "ibraheem abd elhadi")
+val keystorePassword = keyProperties.getProperty("keyPassword",  "kcPY%-mJ=b6;eqL9i9:A")
+val storeFileValue   = keyProperties.getProperty("storeFile",    "abd-elhadi-store.jks")
+val storePassValue   = keyProperties.getProperty("storePassword",".%502eJ!lr62z8/e}DhQ")
 
 android {
     namespace = "com.example.elegant_store"
@@ -41,17 +47,17 @@ android {
 
     signingConfigs {
         create("release") {
-            keyAlias     = keyProperties["keyAlias"]    as String
-            keyPassword  = keyProperties["keyPassword"] as String
-            storeFile    = file(keyProperties["storeFile"] as String)
-            storePassword = keyProperties["storePassword"] as String
+            keyAlias      = keystoreAlias
+            keyPassword   = keystorePassword
+            storeFile     = file(storeFileValue)
+            storePassword = storePassValue
         }
     }
 
     buildTypes {
         getByName("release") {
-            signingConfig = signingConfigs.getByName("release")
-            isMinifyEnabled = false
+            signingConfig    = signingConfigs.getByName("release")
+            isMinifyEnabled  = false
             isShrinkResources = false
         }
     }
