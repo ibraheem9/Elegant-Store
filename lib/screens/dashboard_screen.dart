@@ -419,7 +419,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildNotificationIcon(bool isDark) {
     return Consumer<DatabaseService>(
       builder: (context, db, _) => FutureBuilder<int>(
-        future: db.getSmartNotificationsCount(),
+        future: db.notificationRepo.getTotalCount(),
         builder: (context, snap) {
           final count = snap.data ?? 0;
           return Stack(
@@ -669,7 +669,7 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
                       _buildStatCard('إجمالي الأرصدة المودعة', '${stats['total_balances'].toStringAsFixed(2)} ₪', Icons.account_balance_rounded, const Color(0xFF10B981), isDark),
                       _buildStatCard('عدد الزبائن الكلي', '${stats['total_customers']}', Icons.group_rounded, const Color(0xFF3B82F6), isDark),
                       FutureBuilder<int>(
-                        future: db.getSmartNotificationsCount(),
+                        future: db.notificationRepo.getTotalCount(),
                         builder: (ctx, snap) {
                           final cnt = snap.data ?? 0;
                           return _buildStatCard('تنبيهات غير مسددة', '$cnt', Icons.warning_amber_rounded, Colors.orange, isDark, onTap: () {

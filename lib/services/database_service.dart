@@ -7,11 +7,16 @@ import 'package:uuid/uuid.dart';
 import '../models/models.dart';
 import '../utils/timestamp_formatter.dart';
 import 'dart:developer' as dev;
+import 'notification_repository.dart';
 
 class DatabaseService {
   static Database? _database;
   static const String dbName = 'elegant_store_v300.db'; // HQ Sync Version
   final _uuid = const Uuid();
+
+  /// Lazy singleton for the notifications repository.
+  /// Accessible from any code that holds a [DatabaseService] reference.
+  late final NotificationRepository notificationRepo = NotificationRepository(this);
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -36,7 +41,7 @@ class DatabaseService {
 
     final db = await openDatabase(
       path,
-      version: 8,
+      version: 9,
       onCreate: (db, version) async {
         await _createTables(db);
         await _createTriggers(db);
@@ -153,6 +158,13 @@ class DatabaseService {
             )
             WHERE role = 'CUSTOMER' AND deleted_at IS NULL
           ''');
+        }
+        if (oldVersion < 9) {
+          // v9: Add app_notifications table for persisted local notifications.
+          await db.execute(NotificationRepository.createTableSql);
+          await db.execute(NotificationRepository.createIndexSql);
+          // Backfill from current data state (Option 3 — post-upgrade rebuild)
+          await notificationRepo.rebuildAll();
         }
         if (oldVersion < 8) {
           // v8: Correct balance formula — payment_status now drives the balance.
@@ -348,6 +360,9 @@ class DatabaseService {
         deleted_at TEXT,
         is_synced INTEGER DEFAULT 0
       )''');
+    // v9: Local notifications table — one row per (customer_id, type)
+    await db.execute(NotificationRepository.createTableSql);
+    await db.execute(NotificationRepository.createIndexSql);
   }
 
   Future<void> _createTriggers(Database db) async {
@@ -716,6 +731,10 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [newUser.id],
     );
+    // Refresh ceiling warning in case credit_limit changed.
+    if (newUser.role == 'CUSTOMER') {
+      await notificationRepo.refreshCeilingForCustomer(newUser.id!);
+    }
   }
 
   /// Updates the plain-text password for a local user (ACCOUNTANT).
@@ -768,6 +787,8 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [id],
     );
+    // Clean up any persisted notifications for this user (may be a customer).
+    await notificationRepo.deleteAllForCustomer(id);
   }
 
   /// Converts English payment status enum to Arabic display label.
@@ -826,6 +847,10 @@ class DatabaseService {
       map['updated_at'] = map['created_at'];
       map['is_synced'] = 0;
       return await txn.insert('invoices', map);
+    }).then((invoiceId) async {
+      // Option 2: refresh notifications after the balance trigger has fired.
+      await notificationRepo.refreshAllForCustomer(inv.userId);
+      return invoiceId;
     });
   }
 
@@ -979,6 +1004,8 @@ class DatabaseService {
         whereArgs: [customerId],
       );
     });
+    // Hard-delete all notifications for this customer since they are now gone.
+    await notificationRepo.deleteAllForCustomer(customerId);
   }
 
   Future<List<Invoice>> getCustomerInvoices(
@@ -1063,6 +1090,8 @@ class DatabaseService {
     ''',
       [userId, now, userId],
     );
+    // Option 2: refresh persisted notifications for this customer immediately.
+    await notificationRepo.refreshAllForCustomer(userId);
   }
 
   /// Recalculates balances for ALL customers.
@@ -1090,6 +1119,8 @@ class DatabaseService {
       )
       WHERE role = 'CUSTOMER' AND deleted_at IS NULL
     ''');
+    // Option 3: rebuild all notifications after a bulk balance recalculation.
+    await notificationRepo.rebuildAll();
   }
 
   /// Returns global stats in a **single SQL query** instead of loading all customers into RAM.
@@ -1568,6 +1599,8 @@ class DatabaseService {
         }
       }
     });
+    // Option 2: refresh notifications after invoice update (amount/status may have changed).
+    await notificationRepo.refreshAllForCustomer(newInv.userId);
   }
 
   Future<List<Map<String, dynamic>>> getEditHistory(
@@ -2219,6 +2252,8 @@ class DatabaseService {
       await txn.rawDelete('DELETE FROM payment_methods');
       // Delete all users EXCEPT the currently logged-in user
       await txn.rawDelete('DELETE FROM users WHERE id != ?', [keepUserId]);
+      // Clear all notifications — rebuildAll() will be called after data is restored.
+      await txn.rawDelete('DELETE FROM app_notifications');
     });
     dev.log(
       'clearAllDataForRestore: all tables cleared except user id=$keepUserId.',
@@ -2241,6 +2276,7 @@ class DatabaseService {
       for (var table in tables) {
         await txn.delete(table);
       }
+      await txn.rawDelete('DELETE FROM app_notifications');
     });
     dev.log('All data cleared from mobile database.', name: 'DatabaseService');
   }
@@ -2262,6 +2298,7 @@ class DatabaseService {
       for (final table in tables) {
         await txn.rawDelete('DELETE FROM $table');
       }
+      await txn.rawDelete('DELETE FROM app_notifications');
       // Reset all AUTOINCREMENT counters
       await txn.rawDelete('DELETE FROM sqlite_sequence');
     });
