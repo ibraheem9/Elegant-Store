@@ -21,6 +21,7 @@ import 'accountants_screen.dart';
 import 'sync_details_screen.dart';
 import 'customer_balances_screen.dart';
 import 'unpaid_invoices_screen.dart';
+import 'contact_us_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -51,6 +52,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 10: return PurchasesMethodsScreen(key: _purchasesMethodsKey);
       case 11: return const RecycleBinScreen();
       case 12: return const SettingsScreen();
+      case 13: return const ContactUsScreen();
       default: return const DashboardHomeScreen();
     }
   }
@@ -70,6 +72,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 10: return 'طرق دفع المشتريات';
       case 11: return 'سلة المحذوفات';
       case 12: return 'الإعدادات والسمة';
+      case 13: return 'تواصل معنا';
       default: return 'Elegant Store';
     }
   }
@@ -141,6 +144,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _buildSidebarItem(10, 'طرق دفع المشتريات', Icons.account_balance_rounded),
                 _buildSidebarItem(11, 'سلة المحذوفات', Icons.delete_sweep_rounded),
                 _buildSidebarItem(12, 'الإعدادات والسمة', Icons.settings_rounded),
+                _buildSidebarItem(13, 'تواصل معنا', Icons.contact_support_rounded),
               ],
             ),
           ),
@@ -184,6 +188,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _buildSidebarItem(10, 'طرق دفع المشتريات', Icons.account_balance_rounded),
                 _buildSidebarItem(11, 'سلة المحذوفات', Icons.delete_sweep_rounded),
                 _buildSidebarItem(12, 'الإعدادات والسمة', Icons.settings_rounded),
+                _buildSidebarItem(13, 'تواصل معنا', Icons.contact_support_rounded),
               ],
             ),
           ),
