@@ -42,15 +42,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadFirstPage();
+    // Rebuild notifications from the live DB state every time the screen opens,
+    // then load the first page from the freshly-updated table.
+    _rebuildThenLoad();
   }
 
-  // ── Data loading ────────────────────────────────────────────────────────
+  // ── Data loading ──────────────────────────────────────────────────────────────────────────────
 
   NotificationRepository get _repo =>
       context.read<DatabaseService>().notificationRepo;
 
-  Future<void> _loadFirstPage() async {
+  /// Rebuilds the app_notifications table from live data, then loads page 1.
+  /// Called on screen open and on pull-to-refresh.
+  Future<void> _rebuildThenLoad() async {
     setState(() {
       _isLoading = true;
       _error = null;
@@ -59,6 +63,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       _hasMore = true;
     });
     try {
+      // Sync the persisted table with the current DB state before reading.
+      await _repo.rebuildAll();
+      await _readPage();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  /// Reads page 0 from the already-up-to-date app_notifications table.
+  Future<void> _readPage() async {
+    try {
       final typeFilter = _filter == 'all' ? null : _filter;
       final page = await _repo.getPage(
         page: 0,
@@ -66,6 +86,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         typeFilter: typeFilter,
       );
       final counts = await _repo.getCountByType();
+      if (!mounted) return;
       setState(() {
         _items.addAll(page);
         _currentPage = 1;
@@ -76,12 +97,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
     }
   }
+
+  Future<void> _loadFirstPage() => _rebuildThenLoad();
 
   Future<void> _loadNextPage() async {
     if (_isLoadingMore || !_hasMore) return;

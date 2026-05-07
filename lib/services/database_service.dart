@@ -18,8 +18,27 @@ class DatabaseService {
   /// Accessible from any code that holds a [DatabaseService] reference.
   late final NotificationRepository notificationRepo = NotificationRepository(this);
 
+  /// Set to true once the post-open notification seed has run for this session.
+  /// Prevents repeated full rebuilds on every hot-reload / widget rebuild.
+  bool _notificationsSeedDone = false;
+
   Future<Database> get database async {
-    if (_database != null) return _database!;
+    if (_database != null) {
+      // Seed notifications once per app session, AFTER the DB is fully open.
+      if (!_notificationsSeedDone) {
+        _notificationsSeedDone = true;
+        // Run in background — do NOT await here to avoid blocking callers.
+        Future.microtask(() async {
+          try {
+            await notificationRepo.rebuildAll();
+            dev.log('Notification seed completed.', name: 'DatabaseService');
+          } catch (e) {
+            dev.log('Notification seed error: $e', name: 'DatabaseService');
+          }
+        });
+      }
+      return _database!;
+    }
     _database = await initDatabase();
     return _database!;
   }
@@ -161,10 +180,11 @@ class DatabaseService {
         }
         if (oldVersion < 9) {
           // v9: Add app_notifications table for persisted local notifications.
+          // NOTE: rebuildAll() is intentionally NOT called here to avoid a
+          // deadlock (the DB connection is still locked during onUpgrade).
+          // The seed runs safely in the database getter after the DB is open.
           await db.execute(NotificationRepository.createTableSql);
           await db.execute(NotificationRepository.createIndexSql);
-          // Backfill from current data state (Option 3 — post-upgrade rebuild)
-          await notificationRepo.rebuildAll();
         }
         if (oldVersion < 8) {
           // v8: Correct balance formula — payment_status now drives the balance.
