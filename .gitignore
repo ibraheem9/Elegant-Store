@@ -69,3 +69,5 @@ app.*.map.json
 
 # Exceptions to above rules.
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
+# Allow iOS AppIcon PNG files to be tracked in version control
+!**/ios/**/AppIcon.appiconset/*.png

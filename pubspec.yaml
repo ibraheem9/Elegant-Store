@@ -44,11 +44,23 @@ dev_dependencies:
   flutter_lints: ^3.0.0
   flutter_launcher_icons: ^0.14.4
 
+# ─── App Icon Configuration ───────────────────────────────────────────────────
+# Uses app_icon.png (1248x1248, white background with rounded corners)
+# as the single source for all platform icons.
+# Android: generates ic_launcher.png for all mipmap density buckets
+# iOS:     generates all required AppIcon sizes including 1024x1024 App Store icon
+# Windows: generates app_icon.ico with embedded multi-size (16–256px)
 flutter_launcher_icons:
-  android: "launcher_icon"
+  android: "ic_launcher"
   ios: true
-  image_path: "assets/icon.png"
+  windows:
+    generate: true
+    image_path: "assets/app_icon.png"
+    icon_size: 48
+  image_path: "assets/app_icon.png"
   min_sdk_android: 21
+  remove_alpha_ios: true
+  background_color_ios: "#ffffff"
 
 flutter:
   uses-material-design: true
