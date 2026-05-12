@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/license_service.dart';
 import '../services/contact_service.dart';
+
+/// Cache key for the persisted WhatsApp number.
+const _kWhatsappCacheKey = 'cached_whatsapp_number';
 
 /// Shown when the app has no valid license.
 /// The user must enter a license code to proceed.
@@ -19,16 +23,16 @@ class LicenseGateScreen extends StatefulWidget {
 
 class _LicenseGateScreenState extends State<LicenseGateScreen> {
   final _codeController = TextEditingController();
-  bool _isLoading        = false;
+
+  bool _isLoading         = false;
   bool _isLoadingDeviceId = true;
   bool _isSendingWhatsApp = false;
-  String _deviceId       = '';
+  String _deviceId        = '';
   String? _errorMessage;
-  bool _showCode         = false;
+  bool _showCode          = false;
 
-  // WhatsApp number fetched from API
+  /// WhatsApp number — loaded from cache first, then refreshed from API.
   String? _whatsappNumber;
-  bool _isLoadingWhatsapp = true;
 
   @override
   void initState() {
@@ -43,6 +47,8 @@ class _LicenseGateScreenState extends State<LicenseGateScreen> {
     super.dispose();
   }
 
+  // ── Device ID ──────────────────────────────────────────────────────────────
+
   Future<void> _loadDeviceId() async {
     final id = await LicenseService.instance.getHardwareId();
     if (mounted) {
@@ -53,22 +59,36 @@ class _LicenseGateScreenState extends State<LicenseGateScreen> {
     }
   }
 
+  // ── WhatsApp number: cache-first, then refresh from API ───────────────────
+
   Future<void> _loadWhatsappNumber() async {
+    // 1. Load cached value immediately so the button is usable offline.
+    final prefs = await SharedPreferences.getInstance();
+    final cached = prefs.getString(_kWhatsappCacheKey);
+    if (mounted && cached != null && cached.isNotEmpty) {
+      setState(() => _whatsappNumber = cached);
+    }
+
+    // 2. Try to refresh from the API in the background.
     try {
+      final online = await _hasInternet();
+      if (!online) return;
+
       final contactService = ContactService();
       final info = await contactService.fetchContactInfo();
-      if (mounted) {
-        setState(() {
-          _whatsappNumber = info.whatsapp;
-          _isLoadingWhatsapp = false;
-        });
+      final fresh = info.whatsapp;
+
+      if (fresh != null && fresh.isNotEmpty) {
+        // Persist for future offline use.
+        await prefs.setString(_kWhatsappCacheKey, fresh);
+        if (mounted) setState(() => _whatsappNumber = fresh);
       }
     } catch (_) {
-      if (mounted) {
-        setState(() => _isLoadingWhatsapp = false);
-      }
+      // Silently ignore — cached value is still available.
     }
   }
+
+  // ── License activation ────────────────────────────────────────────────────
 
   Future<void> _activate() async {
     final code = _codeController.text.trim();
@@ -90,9 +110,7 @@ class _LicenseGateScreenState extends State<LicenseGateScreen> {
     if (result.isValid) {
       widget.onLicenseActivated();
     } else {
-      setState(() {
-        _errorMessage = _statusMessage(result.status);
-      });
+      setState(() => _errorMessage = _statusMessage(result.status));
     }
   }
 
@@ -109,20 +127,13 @@ class _LicenseGateScreenState extends State<LicenseGateScreen> {
     }
   }
 
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
   void _copyDeviceId() {
     Clipboard.setData(ClipboardData(text: _deviceId));
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(
-          content: Text('تم نسخ معرّف الجهاز'),
-          duration: Duration(seconds: 2),
-          backgroundColor: Colors.green,
-        ),
-      );
+    _showSnackBar('تم نسخ معرّف الجهاز', Colors.green);
   }
 
-  /// Checks internet connectivity.
   Future<bool> _hasInternet() async {
     final result = await Connectivity().checkConnectivity();
     return result.any((r) =>
@@ -131,66 +142,62 @@ class _LicenseGateScreenState extends State<LicenseGateScreen> {
         r == ConnectivityResult.ethernet);
   }
 
-  /// Shows a dialog asking for the user's name, then sends WhatsApp messages.
+  // ── WhatsApp send flow ────────────────────────────────────────────────────
+
   Future<void> _onSendWhatsApp() async {
     if (_isLoadingDeviceId || _deviceId.isEmpty) {
       _showSnackBar('جارٍ تحميل معرّف الجهاز، يرجى الانتظار...', Colors.orange);
       return;
     }
 
-    // Check internet
+    // Check internet connectivity.
     final online = await _hasInternet();
     if (!online) {
       _showSnackBar('لا يوجد اتصال بالإنترنت. يرجى التحقق من الاتصال.', Colors.red);
       return;
     }
 
-    // Ensure we have a WhatsApp number
+    // Ensure we have a WhatsApp number (cached or fresh).
     final number = _whatsappNumber;
     if (number == null || number.isEmpty) {
       _showSnackBar('تعذر الحصول على رقم الواتساب. يرجى المحاولة لاحقاً.', Colors.red);
       return;
     }
 
-    // Ask for user name
+    // Ask for user name before sending.
     final name = await _showNameDialog();
     if (name == null || name.trim().isEmpty) return;
 
     setState(() => _isSendingWhatsApp = true);
 
     try {
-      // Sanitize number: remove spaces, dashes, and leading zeros
+      // Sanitize: remove spaces, dashes, parentheses.
       final sanitized = number.replaceAll(RegExp(r'[\s\-\(\)]'), '');
 
-      // Message 1: User name
+      // Message 1: user name.
       final nameMsg = Uri.encodeComponent('الاسم: ${name.trim()}');
-      final nameUrl = 'https://wa.me/$sanitized?text=$nameMsg';
+      final nameUri = Uri.parse('https://wa.me/$sanitized?text=$nameMsg');
 
-      // Message 2: Device ID
+      // Message 2: device ID.
       final idMsg = Uri.encodeComponent('معرّف الجهاز: $_deviceId');
-      final idUrl = 'https://wa.me/$sanitized?text=$idMsg';
+      final idUri = Uri.parse('https://wa.me/$sanitized?text=$idMsg');
 
-      // Open name message first
-      final nameUri = Uri.parse(nameUrl);
       if (await canLaunchUrl(nameUri)) {
         await launchUrl(nameUri, mode: LaunchMode.externalApplication);
-        // Small delay then open device ID message
         await Future.delayed(const Duration(milliseconds: 1500));
-        final idUri = Uri.parse(idUrl);
         if (await canLaunchUrl(idUri)) {
           await launchUrl(idUri, mode: LaunchMode.externalApplication);
         }
       } else {
         _showSnackBar('تعذر فتح واتساب. تأكد من تثبيت التطبيق.', Colors.red);
       }
-    } catch (e) {
+    } catch (_) {
       _showSnackBar('حدث خطأ أثناء فتح واتساب.', Colors.red);
     } finally {
       if (mounted) setState(() => _isSendingWhatsApp = false);
     }
   }
 
-  /// Shows a dialog prompting the user to enter their name.
   Future<String?> _showNameDialog() async {
     final controller = TextEditingController();
     return showDialog<String>(
@@ -200,10 +207,12 @@ class _LicenseGateScreenState extends State<LicenseGateScreen> {
         final isDark = Theme.of(ctx).brightness == Brightness.dark;
         return AlertDialog(
           backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Row(
             children: [
-              const Icon(Icons.person_rounded, color: Color(0xFFD4A017), size: 24),
+              const Icon(Icons.person_rounded,
+                  color: Color(0xFFD4A017), size: 24),
               const SizedBox(width: 8),
               Text(
                 'أدخل اسمك',
@@ -231,13 +240,11 @@ class _LicenseGateScreenState extends State<LicenseGateScreen> {
                 autofocus: true,
                 textDirection: TextDirection.rtl,
                 style: TextStyle(
-                  color: isDark ? Colors.white : Colors.black87,
-                ),
+                    color: isDark ? Colors.white : Colors.black87),
                 decoration: InputDecoration(
                   hintText: 'الاسم الكامل...',
                   hintStyle: TextStyle(
-                    color: isDark ? Colors.white38 : Colors.black38,
-                  ),
+                      color: isDark ? Colors.white38 : Colors.black38),
                   filled: true,
                   fillColor: isDark
                       ? const Color(0xFF1E293B)
@@ -247,9 +254,7 @@ class _LicenseGateScreenState extends State<LicenseGateScreen> {
                     borderSide: BorderSide.none,
                   ),
                   contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
-                  ),
+                      horizontal: 16, vertical: 14),
                   prefixIcon: const Icon(Icons.person_outline_rounded,
                       color: Color(0xFFD4A017)),
                 ),
@@ -262,8 +267,7 @@ class _LicenseGateScreenState extends State<LicenseGateScreen> {
               child: Text(
                 'إلغاء',
                 style: TextStyle(
-                  color: isDark ? Colors.white54 : Colors.black54,
-                ),
+                    color: isDark ? Colors.white54 : Colors.black54),
               ),
             ),
             ElevatedButton.icon(
@@ -272,10 +276,12 @@ class _LicenseGateScreenState extends State<LicenseGateScreen> {
                 if (name.isEmpty) return;
                 Navigator.pop(ctx, name);
               },
-              icon: const Icon(Icons.send_rounded, size: 16, color: Colors.white),
+              icon: const Icon(Icons.send_rounded,
+                  size: 16, color: Colors.white),
               label: const Text(
                 'إرسال',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF25D366),
@@ -294,23 +300,24 @@ class _LicenseGateScreenState extends State<LicenseGateScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: color,
-          duration: const Duration(seconds: 3),
-        ),
-      );
+      ..showSnackBar(SnackBar(
+        content: Text(message),
+        backgroundColor: color,
+        duration: const Duration(seconds: 3),
+      ));
   }
+
+  // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final size = MediaQuery.of(context).size;
+    final size   = MediaQuery.of(context).size;
     final isSmall = size.width < 600;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF020817) : const Color(0xFFF1F5F9),
+      backgroundColor:
+          isDark ? const Color(0xFF020817) : const Color(0xFFF1F5F9),
       body: Center(
         child: SingleChildScrollView(
           padding: EdgeInsets.symmetric(
@@ -323,12 +330,16 @@ class _LicenseGateScreenState extends State<LicenseGateScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // ── Gold Logo ────────────────────────────────────────────────
+                // ── Logo with black background ───────────────────────────
                 Center(
                   child: Container(
-                    width: isSmall ? 160 : 200,
-                    height: isSmall ? 100 : 125,
-                    margin: const EdgeInsets.only(bottom: 28),
+                    width: isSmall ? 220 : 260,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.black,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
                     child: Image.asset(
                       'assets/logo.png',
                       fit: BoxFit.contain,
@@ -336,17 +347,9 @@ class _LicenseGateScreenState extends State<LicenseGateScreen> {
                   ),
                 ),
 
-                // ── Title ────────────────────────────────────────────────────
-                Text(
-                  'Abd Elhadi',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w900,
-                    color: isDark ? Colors.white : const Color(0xFF0F172A),
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
+
+                // ── Subtitle only (no title text) ────────────────────────
                 Text(
                   'يرجى إدخال كود الترخيص لتفعيل التطبيق',
                   style: TextStyle(
@@ -356,13 +359,14 @@ class _LicenseGateScreenState extends State<LicenseGateScreen> {
                   textAlign: TextAlign.center,
                 ),
 
-                const SizedBox(height: 36),
+                const SizedBox(height: 32),
 
-                // ── Device ID card ───────────────────────────────────────────
+                // ── Device ID card ───────────────────────────────────────
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                    color:
+                        isDark ? const Color(0xFF0F172A) : Colors.white,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: isDark
@@ -383,7 +387,9 @@ class _LicenseGateScreenState extends State<LicenseGateScreen> {
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.bold,
-                              color: isDark ? Colors.white70 : Colors.black87,
+                              color: isDark
+                                  ? Colors.white70
+                                  : Colors.black87,
                             ),
                           ),
                         ],
@@ -394,7 +400,8 @@ class _LicenseGateScreenState extends State<LicenseGateScreen> {
                           child: SizedBox(
                             width: 20,
                             height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2),
                           ),
                         )
                       else
@@ -446,11 +453,12 @@ class _LicenseGateScreenState extends State<LicenseGateScreen> {
 
                 const SizedBox(height: 12),
 
-                // ── WhatsApp Button ──────────────────────────────────────────
+                // ── WhatsApp Button ──────────────────────────────────────
                 ElevatedButton.icon(
-                  onPressed: (_isSendingWhatsApp || _isLoadingDeviceId)
-                      ? null
-                      : _onSendWhatsApp,
+                  onPressed:
+                      (_isSendingWhatsApp || _isLoadingDeviceId)
+                          ? null
+                          : _onSendWhatsApp,
                   icon: _isSendingWhatsApp
                       ? const SizedBox(
                           width: 18,
@@ -483,10 +491,11 @@ class _LicenseGateScreenState extends State<LicenseGateScreen> {
 
                 const SizedBox(height: 24),
 
-                // ── License code input ───────────────────────────────────────
+                // ── License code input ───────────────────────────────────
                 Container(
                   decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                    color:
+                        isDark ? const Color(0xFF0F172A) : Colors.white,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: _errorMessage != null
@@ -525,7 +534,7 @@ class _LicenseGateScreenState extends State<LicenseGateScreen> {
                   ),
                 ),
 
-                // ── Inline error ─────────────────────────────────────────────
+                // ── Inline error ─────────────────────────────────────────
                 if (_errorMessage != null) ...[
                   const SizedBox(height: 8),
                   Row(
@@ -548,7 +557,7 @@ class _LicenseGateScreenState extends State<LicenseGateScreen> {
 
                 const SizedBox(height: 20),
 
-                // ── Activate button ──────────────────────────────────────────
+                // ── Activate button ──────────────────────────────────────
                 ElevatedButton(
                   onPressed: _isLoading ? null : _activate,
                   style: ElevatedButton.styleFrom(
@@ -568,13 +577,14 @@ class _LicenseGateScreenState extends State<LicenseGateScreen> {
                       : const Text(
                           'تفعيل التطبيق',
                           style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold),
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold),
                         ),
                 ),
 
                 const SizedBox(height: 16),
 
-                // ── Contact hint ─────────────────────────────────────────────
+                // ── Contact hint ─────────────────────────────────────────
                 Text(
                   'للحصول على ترخيص، أرسل معرّف جهازك للمطور عبر واتساب',
                   style: TextStyle(
