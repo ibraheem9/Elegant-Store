@@ -174,20 +174,14 @@ class _LicenseGateScreenState extends State<LicenseGateScreen> {
       // Sanitize: remove spaces, dashes, parentheses.
       final sanitized = number.replaceAll(RegExp(r'[\s\-\(\)]'), '');
 
-      // Message 1: user name.
-      final nameMsg = Uri.encodeComponent('الاسم: ${name.trim()}');
-      final nameUri = Uri.parse('https://wa.me/$sanitized?text=$nameMsg');
+      // Single message with name on line 1 and device ID on line 2
+      // so the receiver can easily copy the device ID separately.
+      final combinedText = 'الاسم: ${name.trim()}\n${_deviceId}';
+      final encodedMsg = Uri.encodeComponent(combinedText);
+      final uri = Uri.parse('https://wa.me/$sanitized?text=$encodedMsg');
 
-      // Message 2: device ID.
-      final idMsg = Uri.encodeComponent('معرّف الجهاز: $_deviceId');
-      final idUri = Uri.parse('https://wa.me/$sanitized?text=$idMsg');
-
-      if (await canLaunchUrl(nameUri)) {
-        await launchUrl(nameUri, mode: LaunchMode.externalApplication);
-        await Future.delayed(const Duration(milliseconds: 1500));
-        if (await canLaunchUrl(idUri)) {
-          await launchUrl(idUri, mode: LaunchMode.externalApplication);
-        }
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
       } else {
         _showSnackBar('تعذر فتح واتساب. تأكد من تثبيت التطبيق.', Colors.red);
       }
