@@ -74,9 +74,13 @@ class ContactService {
   /// Fetches the contact settings (phone, email, etc.) from the server.
   Future<ContactInfo> fetchContactInfo() async {
     final response = await _dio.get('contact/settings');
-    final data = response.data;
-    if (data is Map<String, dynamic>) {
-      return ContactInfo.fromJson(data['data'] as Map<String, dynamic>? ?? data);
+    final body = response.data;
+    if (body is Map<String, dynamic>) {
+      // API returns: { "success": true, "settings": { "whatsapp": "...", ... } }
+      final payload = body['settings'] as Map<String, dynamic>?
+          ?? body['data'] as Map<String, dynamic>?
+          ?? body;
+      return ContactInfo.fromJson(payload);
     }
     return const ContactInfo();
   }
