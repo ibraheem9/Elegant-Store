@@ -1638,6 +1638,14 @@ class DatabaseService {
 
   /// [date] defaults to today if null.
   /// Returns all daily stats in **2 SQL queries** instead of 6 separate ones.
+  ///
+  /// Formulas applied:
+  ///   app_sales        = invoices WHERE type='SALE' AND status='PAID' AND pm.type='app'
+  ///   app_debt         = invoices WHERE type='SALE' AND status IN ('UNPAID','DEFERRED')
+  ///   cash_debt        = invoices WHERE type='WITHDRAWAL' AND status='UNPAID'
+  ///   cash_sales_deposit = invoices WHERE type='DEPOSIT' AND status='PAID' AND pm.type='cash'
+  ///   cash_purchases   = purchases WHERE payment_source='CASH' (excluding withdrawal-linked records)
+  ///   app_purchases    = purchases WHERE payment_source='APP'
   Future<Map<String, double>> getDetailedTodayStats({DateTime? date}) async {
     final today = DateFormat('yyyy-MM-dd').format(date ?? DateTime.now());
     final db = await database;
@@ -1646,25 +1654,44 @@ class DatabaseService {
     final invRows = await db.rawQuery(
       '''
       SELECT
-        -- app_sales = (SALE + PAID + app) + (DEPOSIT + app)
+        -- app_sales: SALE + PAID + payment_method type = app
         COALESCE(SUM(CASE
-          WHEN i.type = 'SALE' AND i.payment_status IN ('PAID','paid') AND pm.type = 'app'
-          THEN i.amount
-          WHEN i.type = 'DEPOSIT' AND pm.type = 'app'
-          THEN i.amount
-          ELSE 0 END), 0) AS app_sales,
-        -- app_debt = SALE + (UNPAID or DEFERRED), any payment method
+          WHEN i.type = 'SALE'
+            AND i.payment_status IN ('PAID','paid')
+            AND pm.type = 'app'
+          THEN i.amount ELSE 0 END), 0) AS app_sales,
+
+        -- app_debt: SALE + UNPAID or DEFERRED (any payment method)
         COALESCE(SUM(CASE
           WHEN i.type = 'SALE'
             AND i.payment_status IN ('UNPAID','DEFERRED','unpaid','deferred','pending')
           THEN i.amount ELSE 0 END), 0) AS app_debt,
-        -- cash_debt = all WITHDRAWAL invoices
+
+        -- cash_debt: WITHDRAWAL + UNPAID only
         COALESCE(SUM(CASE
           WHEN i.type = 'WITHDRAWAL'
+            AND i.payment_status IN ('UNPAID','unpaid')
           THEN i.amount ELSE 0 END), 0) AS cash_debt,
+
+        -- cash_sales_deposit: DEPOSIT + PAID + cash (deducted from cash sales)
         COALESCE(SUM(CASE
-          WHEN i.type = 'DEPOSIT' AND pm.type = 'cash'
-          THEN i.amount ELSE 0 END), 0) AS cash_debt_repayment
+          WHEN i.type = 'DEPOSIT'
+            AND i.payment_status IN ('PAID','paid')
+            AND pm.type = 'cash'
+          THEN i.amount ELSE 0 END), 0) AS cash_sales_deposit,
+
+        -- cash_sales_invoice: SALE + PAID + cash (direct cash sales invoices)
+        COALESCE(SUM(CASE
+          WHEN i.type = 'SALE'
+            AND i.payment_status IN ('PAID','paid')
+            AND pm.type = 'cash'
+          THEN i.amount ELSE 0 END), 0) AS cash_sales_invoice,
+
+        -- cash_withdrawal_total: WITHDRAWAL invoices (for cash sales formula)
+        COALESCE(SUM(CASE
+          WHEN i.type = 'WITHDRAWAL'
+          THEN i.amount ELSE 0 END), 0) AS cash_withdrawal_total
+
       FROM invoices i
       LEFT JOIN payment_methods pm ON i.payment_method_id = pm.id
       WHERE i.created_at LIKE ? AND i.deleted_at IS NULL
@@ -1672,12 +1699,18 @@ class DatabaseService {
       ['$today%'],
     );
 
-    // Single query to get all purchase-based stats for the day
+    // Purchases query: exclude withdrawal-linked records (merchant_name starts with 'سحب نقدي:')
+    // Withdrawal purchases are already accounted for via WITHDRAWAL invoices.
     final purRows = await db.rawQuery(
       '''
       SELECT
-        COALESCE(SUM(CASE WHEN payment_source = 'CASH' THEN amount ELSE 0 END), 0) AS cash_purchases,
-        COALESCE(SUM(CASE WHEN payment_source = 'APP'  THEN amount ELSE 0 END), 0) AS app_purchases
+        COALESCE(SUM(CASE
+          WHEN payment_source = 'CASH'
+            AND (merchant_name NOT LIKE 'سحب نقدي:%')
+          THEN amount ELSE 0 END), 0) AS cash_purchases,
+        COALESCE(SUM(CASE
+          WHEN payment_source = 'APP'
+          THEN amount ELSE 0 END), 0) AS app_purchases
       FROM purchases
       WHERE created_at LIKE ? AND deleted_at IS NULL
     ''',
@@ -1688,21 +1721,33 @@ class DatabaseService {
     final pur = purRows.first;
 
     return {
-      'app_sales': (inv['app_sales'] as num?)?.toDouble() ?? 0.0,
-      'app_debt': (inv['app_debt'] as num?)?.toDouble() ?? 0.0,
-      'cash_debt': (inv['cash_debt'] as num?)?.toDouble() ?? 0.0,
-      // keep legacy key for backward compatibility
-      'cash_withdrawals': (inv['cash_debt'] as num?)?.toDouble() ?? 0.0,
-      'cash_purchases': (pur['cash_purchases'] as num?)?.toDouble() ?? 0.0,
-      'app_purchases': (pur['app_purchases'] as num?)?.toDouble() ?? 0.0,
-      'cash_debt_repayment':
-          (inv['cash_debt_repayment'] as num?)?.toDouble() ?? 0.0,
-      'app_debt_repayment': (inv['app_sales'] as num?)?.toDouble() ?? 0.0,
+      'app_sales':             (inv['app_sales']             as num?)?.toDouble() ?? 0.0,
+      'app_debt':              (inv['app_debt']              as num?)?.toDouble() ?? 0.0,
+      'cash_debt':             (inv['cash_debt']             as num?)?.toDouble() ?? 0.0,
+      // legacy key — cash_debt (WITHDRAWAL+UNPAID)
+      'cash_withdrawals':      (inv['cash_debt']             as num?)?.toDouble() ?? 0.0,
+      'cash_sales_deposit':    (inv['cash_sales_deposit']    as num?)?.toDouble() ?? 0.0,
+      'cash_sales_invoice':    (inv['cash_sales_invoice']    as num?)?.toDouble() ?? 0.0,
+      'cash_withdrawal_total': (inv['cash_withdrawal_total'] as num?)?.toDouble() ?? 0.0,
+      'cash_purchases':        (pur['cash_purchases']        as num?)?.toDouble() ?? 0.0,
+      'app_purchases':         (pur['app_purchases']         as num?)?.toDouble() ?? 0.0,
+      // kept for backward compat — no longer used in stats screen
+      'cash_debt_repayment':   (inv['cash_sales_deposit']    as num?)?.toDouble() ?? 0.0,
     };
   }
 
   /// Returns aggregated stats for a date range [start]..[end].
   /// Queries invoices and purchases whose `created_at` falls within the range.
+  ///
+  /// Formulas applied:
+  ///   app_sales           = SALE + PAID + pm.type='app'
+  ///   app_debt            = SALE + UNPAID/DEFERRED (any method)
+  ///   cash_debt           = WITHDRAWAL + UNPAID
+  ///   cash_sales_deposit  = DEPOSIT + PAID + pm.type='cash' (deducted from cash sales)
+  ///   cash_sales_invoice  = SALE + PAID + pm.type='cash'
+  ///   cash_withdrawal_total = all WITHDRAWAL invoices (for cash sales formula)
+  ///   cash_purchases      = purchases CASH (excluding withdrawal-linked records)
+  ///   app_purchases       = purchases APP
   Future<Map<String, double>> getDetailedStatsByRange({
     required DateTime start,
     required DateTime end,
@@ -1710,58 +1755,88 @@ class DatabaseService {
     final db = await database;
     final startStr = TimestampFormatter.toUtcString(start);
     final endStr = TimestampFormatter.toUtcString(end);
+
     final invRows = await db.rawQuery(
       '''
       SELECT
-        -- app_sales = (SALE + PAID + app) + (DEPOSIT + app)
+        -- app_sales: SALE + PAID + payment_method type = app
         COALESCE(SUM(CASE
-          WHEN i.type = 'SALE' AND i.payment_status IN ('PAID','paid') AND pm.type = 'app'
-          THEN i.amount
-          WHEN i.type = 'DEPOSIT' AND pm.type = 'app'
-          THEN i.amount
-          ELSE 0 END), 0) AS app_sales,
-        -- app_debt = SALE + (UNPAID or DEFERRED), any payment method
+          WHEN i.type = 'SALE'
+            AND i.payment_status IN ('PAID','paid')
+            AND pm.type = 'app'
+          THEN i.amount ELSE 0 END), 0) AS app_sales,
+
+        -- app_debt: SALE + UNPAID or DEFERRED (any payment method)
         COALESCE(SUM(CASE
           WHEN i.type = 'SALE'
             AND i.payment_status IN ('UNPAID','DEFERRED','unpaid','deferred','pending')
           THEN i.amount ELSE 0 END), 0) AS app_debt,
-        -- cash_debt = all WITHDRAWAL invoices
+
+        -- cash_debt: WITHDRAWAL + UNPAID only
         COALESCE(SUM(CASE
           WHEN i.type = 'WITHDRAWAL'
+            AND i.payment_status IN ('UNPAID','unpaid')
           THEN i.amount ELSE 0 END), 0) AS cash_debt,
+
+        -- cash_sales_deposit: DEPOSIT + PAID + cash (deducted from cash sales)
         COALESCE(SUM(CASE
-          WHEN i.type = 'DEPOSIT' AND pm.type = 'cash'
-          THEN i.amount ELSE 0 END), 0) AS cash_debt_repayment
+          WHEN i.type = 'DEPOSIT'
+            AND i.payment_status IN ('PAID','paid')
+            AND pm.type = 'cash'
+          THEN i.amount ELSE 0 END), 0) AS cash_sales_deposit,
+
+        -- cash_sales_invoice: SALE + PAID + cash
+        COALESCE(SUM(CASE
+          WHEN i.type = 'SALE'
+            AND i.payment_status IN ('PAID','paid')
+            AND pm.type = 'cash'
+          THEN i.amount ELSE 0 END), 0) AS cash_sales_invoice,
+
+        -- cash_withdrawal_total: all WITHDRAWAL invoices (for cash sales formula)
+        COALESCE(SUM(CASE
+          WHEN i.type = 'WITHDRAWAL'
+          THEN i.amount ELSE 0 END), 0) AS cash_withdrawal_total
+
       FROM invoices i
       LEFT JOIN payment_methods pm ON i.payment_method_id = pm.id
       WHERE i.created_at >= ? AND i.created_at <= ? AND i.deleted_at IS NULL
     ''',
       [startStr, endStr],
     );
+
+    // Exclude withdrawal-linked purchase records (already counted via WITHDRAWAL invoices)
     final purRows = await db.rawQuery(
       '''
       SELECT
-        COALESCE(SUM(CASE WHEN payment_source = 'CASH' THEN amount ELSE 0 END), 0) AS cash_purchases,
-        COALESCE(SUM(CASE WHEN payment_source = 'APP'  THEN amount ELSE 0 END), 0) AS app_purchases
+        COALESCE(SUM(CASE
+          WHEN payment_source = 'CASH'
+            AND (merchant_name NOT LIKE 'سحب نقدي:%')
+          THEN amount ELSE 0 END), 0) AS cash_purchases,
+        COALESCE(SUM(CASE
+          WHEN payment_source = 'APP'
+          THEN amount ELSE 0 END), 0) AS app_purchases
       FROM purchases
       WHERE created_at >= ? AND created_at <= ? AND deleted_at IS NULL
     ''',
       [startStr, endStr],
     );
+
     final inv = invRows.first;
     final pur = purRows.first;
 
     return {
-      'app_sales': (inv['app_sales'] as num?)?.toDouble() ?? 0.0,
-      'app_debt': (inv['app_debt'] as num?)?.toDouble() ?? 0.0,
-      'cash_debt': (inv['cash_debt'] as num?)?.toDouble() ?? 0.0,
-      // keep legacy key for backward compatibility
-      'cash_withdrawals': (inv['cash_debt'] as num?)?.toDouble() ?? 0.0,
-      'cash_purchases': (pur['cash_purchases'] as num?)?.toDouble() ?? 0.0,
-      'app_purchases': (pur['app_purchases'] as num?)?.toDouble() ?? 0.0,
-      'cash_debt_repayment':
-          (inv['cash_debt_repayment'] as num?)?.toDouble() ?? 0.0,
-      'app_debt_repayment': (inv['app_sales'] as num?)?.toDouble() ?? 0.0,
+      'app_sales':             (inv['app_sales']             as num?)?.toDouble() ?? 0.0,
+      'app_debt':              (inv['app_debt']              as num?)?.toDouble() ?? 0.0,
+      'cash_debt':             (inv['cash_debt']             as num?)?.toDouble() ?? 0.0,
+      // legacy key — cash_debt (WITHDRAWAL+UNPAID)
+      'cash_withdrawals':      (inv['cash_debt']             as num?)?.toDouble() ?? 0.0,
+      'cash_sales_deposit':    (inv['cash_sales_deposit']    as num?)?.toDouble() ?? 0.0,
+      'cash_sales_invoice':    (inv['cash_sales_invoice']    as num?)?.toDouble() ?? 0.0,
+      'cash_withdrawal_total': (inv['cash_withdrawal_total'] as num?)?.toDouble() ?? 0.0,
+      'cash_purchases':        (pur['cash_purchases']        as num?)?.toDouble() ?? 0.0,
+      'app_purchases':         (pur['app_purchases']         as num?)?.toDouble() ?? 0.0,
+      // kept for backward compat
+      'cash_debt_repayment':   (inv['cash_sales_deposit']    as num?)?.toDouble() ?? 0.0,
     };
   }
 

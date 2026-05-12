@@ -29,14 +29,20 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   // ── Manual inputs ──────────────────────────────────────────────────────────
   final _todayCashController = TextEditingController();
 
-  // ── Auto-calculated ────────────────────────────────────────────────────────
-  double _appSales            = 0.0;
-  double _appDebt             = 0.0;
-  double _cashWithdrawals     = 0.0;
-  double _cashPurchases       = 0.0;
-  double _appPurchases        = 0.0;
+  // ── Auto-calculated from DB ───────────────────────────────────────────────
+  // Sales
+  double _appSales            = 0.0;  // SALE + PAID + pm.type='app'
+  double _cashSalesInvoice    = 0.0;  // SALE + PAID + pm.type='cash'
+  double _cashWithdrawalTotal = 0.0;  // all WITHDRAWAL invoices (for cash sales formula)
+  double _cashSalesDeposit    = 0.0;  // DEPOSIT + PAID + pm.type='cash' (deducted)
+  // Debts
+  double _appDebt             = 0.0;  // SALE + UNPAID/DEFERRED
+  double _cashDebt            = 0.0;  // WITHDRAWAL + UNPAID
+  // Purchases
+  double _cashPurchases       = 0.0;  // purchases CASH (excl. withdrawal-linked)
+  double _appPurchases        = 0.0;  // purchases APP
+  // Cash box
   double _yesterdayCash       = 0.0;
-  double _cashDebtRepayment   = 0.0;
   bool   _isLoading           = false;
   DailyStatistics? _savedStats;
   Map<String, double> _monthlyData = {};
@@ -133,14 +139,16 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     }
 
     setState(() {
-      _appSales          = detailedStats['app_sales']           ?? 0.0;
-      _appDebt           = detailedStats['app_debt']            ?? 0.0;
-      _cashWithdrawals   = detailedStats['cash_withdrawals']    ?? 0.0;
-      _cashPurchases     = detailedStats['cash_purchases']      ?? 0.0;
-      _appPurchases      = detailedStats['app_purchases']       ?? 0.0;
-      _cashDebtRepayment = detailedStats['cash_debt_repayment'] ?? 0.0;
-      _yesterdayCash     = yesterdayCash;
-      _monthlyData       = monthly;
+      _appSales            = detailedStats['app_sales']             ?? 0.0;
+      _cashSalesInvoice    = detailedStats['cash_sales_invoice']    ?? 0.0;
+      _cashWithdrawalTotal = detailedStats['cash_withdrawal_total'] ?? 0.0;
+      _cashSalesDeposit    = detailedStats['cash_sales_deposit']    ?? 0.0;
+      _appDebt             = detailedStats['app_debt']              ?? 0.0;
+      _cashDebt            = detailedStats['cash_debt']             ?? 0.0;
+      _cashPurchases       = detailedStats['cash_purchases']        ?? 0.0;
+      _appPurchases        = detailedStats['app_purchases']         ?? 0.0;
+      _yesterdayCash       = yesterdayCash;
+      _monthlyData         = monthly;
       if (savedStats != null) {
         _savedStats = savedStats;
         _todayCashController.text = savedStats.todayCashInBox.toStringAsFixed(2);
@@ -209,17 +217,48 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     }
   }
 
-  // ── Derived values ─────────────────────────────────────────────────────────
+   // ── Derived values ────────────────────────────────────────────────────────
   bool get _cashEntered => _todayCashController.text.trim().isNotEmpty;
 
+  /// total cash sales =
+  ///   today_cash_in_box
+  ///   + total_cash_withdrawal_invoices (all WITHDRAWAL, not just UNPAID)
+  ///   + total_cash_purchases
+  ///   − total_deposit_invoices_paid_cash  (DEPOSIT + PAID + cash)
+  ///   − yesterday_cash_in_box
   double get _cashSales {
     if (!_cashEntered) return 0.0;
-    final today = double.tryParse(_todayCashController.text) ?? 0.0;
-    return today + _cashWithdrawals + _cashPurchases - _yesterdayCash - _cashDebtRepayment;
+    final todayCash = double.tryParse(_todayCashController.text) ?? 0.0;
+    return todayCash
+        + _cashWithdrawalTotal
+        + _cashPurchases
+        - _cashSalesDeposit
+        - _yesterdayCash;
   }
 
+  /// total app sales = invoices WHERE type=SALE AND status=PAID AND pm.type=app
+  double get _totalAppSales => _appSales;
+
+  /// total sales = app sales + cash sales
+  double get _totalSales => _appSales + _cashSales;
+
+  /// total app debt = SALE + UNPAID/DEFERRED
+  double get _totalAppDebt => _appDebt;
+
+  /// total cash debt = WITHDRAWAL + UNPAID
+  double get _totalCashDebt => _cashDebt;
+
+  /// total debt = app debt + cash debt
+  double get _totalDebt => _appDebt + _cashDebt;
+
+  /// total app purchase = purchases APP
+  double get _totalAppPurchases => _appPurchases;
+
+  /// total cash purchase = purchases CASH (excl. withdrawal-linked)
+  double get _totalCashPurchases => _cashPurchases;
+
+  /// total purchase = app purchase + cash purchase
   double get _totalPurchases => _cashPurchases + _appPurchases;
-  double get _totalSales     => _appSales + _cashSales;
 
   // ── Save ───────────────────────────────────────────────────────────────────
   Future<void> _saveStats() async {
@@ -233,9 +272,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       statisticDate:          DateFormat('yyyy-MM-dd').format(_cashBoxDate),
       yesterdayCashInBox:     _yesterdayCash,
       todayCashInBox:         double.tryParse(_todayCashController.text) ?? 0.0,
-      totalCashDebtRepayment: 0.0,
+      totalCashDebtRepayment: _cashSalesDeposit,   // DEPOSIT+PAID+cash deducted from cash sales
       totalAppDebtRepayment:  _appDebt,
-      totalCashPurchases:     _cashPurchases + _cashWithdrawals,
+      totalCashPurchases:     _cashPurchases,       // real cash purchases only (excl. withdrawals)
       totalAppPurchases:      _appPurchases,
       totalSalesCash:         _cashSales,
       totalSalesCredit:       _appSales,
@@ -548,11 +587,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             _buildAutoDisplay('إجمالي المبيعات من التطبيق',    _appSales,          Icons.phonelink_ring_rounded,  Colors.blue,    isDark),
             _buildAutoDisplay('إجمالي المبيعات النقدية',       _cashSales,         Icons.local_atm_rounded,       Colors.green,   isDark),
             _buildAutoDisplay('إجمالي المبيعات',               _totalSales,        Icons.trending_up_rounded,     Colors.teal,    isDark),
-            _buildAutoDisplay('إجمالي الديون من التطبيق',      _appDebt,           Icons.account_balance_rounded, Colors.purple,  isDark),
-            _buildAutoDisplay('إجمالي الديون النقدية',         _cashWithdrawals,   Icons.money_off_rounded,       Colors.red,     isDark),
-            _buildAutoDisplay('إجمالي الديون',                 _appDebt + _cashWithdrawals, Icons.warning_rounded, Colors.orange, isDark),
-            _buildAutoDisplay('إجمالي المشتريات من التطبيق',   _appPurchases,      Icons.mobile_friendly_rounded, Colors.indigo,  isDark),
-            _buildAutoDisplay('إجمالي المشتريات النقدية',      _cashPurchases,     Icons.shopping_bag_rounded,    Colors.amber,   isDark),
+            _buildAutoDisplay('إجمالي الديون من التطبيق',      _totalAppDebt,      Icons.account_balance_rounded, Colors.purple,  isDark),
+            _buildAutoDisplay('إجمالي الديون النقدية',         _totalCashDebt,     Icons.money_off_rounded,       Colors.red,     isDark),
+            _buildAutoDisplay('إجمالي الديون',                 _totalDebt,         Icons.warning_rounded,         Colors.orange,  isDark),
+            _buildAutoDisplay('إجمالي المشتريات من التطبيق',   _totalAppPurchases, Icons.mobile_friendly_rounded, Colors.indigo,  isDark),
+            _buildAutoDisplay('إجمالي المشتريات النقدية',      _totalCashPurchases,Icons.shopping_bag_rounded,    Colors.amber,   isDark),
             _buildAutoDisplay('إجمالي المشتريات',              _totalPurchases,    Icons.shopping_cart_rounded,   Colors.cyan,    isDark),
           ],
         ),
@@ -576,7 +615,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           childAspectRatio: isSmall ? 2.8 : 3.5,
           children: [
             _buildDerivedCard('إجمالي المبيعات',      _totalSales,     Colors.blue,   isDark),
-            _buildDerivedCard('إجمالي الديون',        _appDebt + _cashWithdrawals, Colors.red, isDark),
+            _buildDerivedCard('إجمالي الديون',        _totalDebt,      Colors.red,    isDark),
             _buildDerivedCard('إجمالي المشتريات',     _totalPurchases, Colors.orange, isDark),
           ],
         ),
