@@ -164,20 +164,14 @@ class _LicenseGateScreenState extends State<LicenseGateScreen> {
       return;
     }
 
-    // Ask for user name before sending.
-    final name = await _showNameDialog();
-    if (name == null || name.trim().isEmpty) return;
-
     setState(() => _isSendingWhatsApp = true);
 
     try {
       // Sanitize: remove spaces, dashes, parentheses.
       final sanitized = number.replaceAll(RegExp(r'[\s\-\(\)]'), '');
 
-      // Single message with name on line 1 and device ID on line 2
-      // so the receiver can easily copy the device ID separately.
-      final combinedText = 'الاسم: ${name.trim()}\n${_deviceId}';
-      final encodedMsg = Uri.encodeComponent(combinedText);
+      // Send only the device ID so the receiver can copy it easily.
+      final encodedMsg = Uri.encodeComponent(_deviceId);
       final uri = Uri.parse('https://wa.me/$sanitized?text=$encodedMsg');
 
       if (await canLaunchUrl(uri)) {
