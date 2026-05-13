@@ -32,6 +32,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   // ── Auto-calculated from DB ───────────────────────────────────────────────
   // Sales
   double _appSales            = 0.0;  // SALE + PAID + pm.type='app'
+  double _appSalesDeposit     = 0.0;  // DEPOSIT + PAID + pm.type='app'
   double _cashSalesInvoice    = 0.0;  // SALE + PAID + pm.type='cash'
   double _cashWithdrawalTotal = 0.0;  // all WITHDRAWAL invoices (for cash sales formula)
   double _cashSalesDeposit    = 0.0;  // DEPOSIT + PAID + pm.type='cash' (deducted)
@@ -41,6 +42,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   // Purchases
   double _cashPurchases       = 0.0;  // purchases CASH (excl. withdrawal-linked)
   double _appPurchases        = 0.0;  // purchases APP
+  // Credits
+  double _totalCredits        = 0.0;  // global sum of abs(balance) for balance < 0
   // Cash box
   double _yesterdayCash       = 0.0;
   bool   _isLoading           = false;
@@ -140,6 +143,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
     setState(() {
       _appSales            = detailedStats['app_sales']             ?? 0.0;
+      _appSalesDeposit     = detailedStats['app_sales_deposit']     ?? 0.0;
       _cashSalesInvoice    = detailedStats['cash_sales_invoice']    ?? 0.0;
       _cashWithdrawalTotal = detailedStats['cash_withdrawal_total'] ?? 0.0;
       _cashSalesDeposit    = detailedStats['cash_sales_deposit']    ?? 0.0;
@@ -147,6 +151,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       _cashDebt            = detailedStats['cash_debt']             ?? 0.0;
       _cashPurchases       = detailedStats['cash_purchases']        ?? 0.0;
       _appPurchases        = detailedStats['app_purchases']         ?? 0.0;
+      _totalCredits        = detailedStats['total_credits']         ?? 0.0;
       _yesterdayCash       = yesterdayCash;
       _monthlyData         = monthly;
       if (savedStats != null) {
@@ -217,48 +222,74 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     }
   }
 
-   // ── Derived values ────────────────────────────────────────────────────────
+  // ── Derived values (User Formulas) ────────────────────────────────────────
   bool get _cashEntered => _todayCashController.text.trim().isNotEmpty;
 
-  /// total cash sales =
-  ///   today_cash_in_box
-  ///   + total_cash_withdrawal_invoices (all WITHDRAWAL, not just UNPAID)
-  ///   + total_cash_purchases
-  ///   − total_deposit_invoices_paid_cash  (DEPOSIT + PAID + cash)
-  ///   − yesterday_cash_in_box
-  double get _cashSales {
+  /// x = all invoice that have type deposit and payment status paid and payment method app
+  ///     - all invoice that have payment status unpaid or deferred and type sale
+  double get _x => _appSalesDeposit - _appDebt;
+
+  /// credit = all invoice that have payment status unpaid or deferred and type sale
+  ///          - all invoice that have type deposit and payment status paid and payment method app
+  /// (must be positive)
+  double get _credit {
+    final val = _appDebt - _appSalesDeposit;
+    return val > 0 ? val : 0.0;
+  }
+
+  /// Total app sales = total invoice that have payment status paid and type sale and payment method app + x
+  /// if x > 0: Total app sales = total invoice that have payment status paid and type sale and payment method app + x - credit
+  double get _totalAppSales {
+    if (_x <= 0) {
+      return _appSales + _x;
+    } else {
+      return _appSales + _x - _credit;
+    }
+  }
+
+  /// 1b. Total Deposit App = all invoice that have type deposit and payment status paid and payment method app
+  double get _totalDepositApp => _appSalesDeposit;
+
+  /// 1c. Total Deposit Cash = all invoice that have type deposit and payment status paid and payment method cash
+  double get _totalDepositCash => _cashSalesDeposit;
+
+  /// 2. total cash sales = total cash in box today
+  ///                      + total invoices that have payment status paid and type sale and payment method cash
+  ///                      + total cash dept
+  ///                      + total purchase in cash
+  ///                      – total invoice that have type deposit and payment status paid and payment method cash
+  ///                      – total cash in box yesterday
+  double get _totalCashSales {
     if (!_cashEntered) return 0.0;
     final todayCash = double.tryParse(_todayCashController.text) ?? 0.0;
     return todayCash
-        + _cashWithdrawalTotal
-        + _cashPurchases
+        + _cashSalesInvoice
+        + _totalCashDebt
+        + _totalCashPurchases
         - _cashSalesDeposit
         - _yesterdayCash;
   }
 
-  /// total app sales = invoices WHERE type=SALE AND status=PAID AND pm.type=app
-  double get _totalAppSales => _appSales;
+  /// 3. total sales = total app sales + total cash sales
+  double get _totalSales => _totalAppSales + _totalCashSales;
 
-  /// total sales = app sales + cash sales
-  double get _totalSales => _appSales + _cashSales;
-
-  /// total app debt = SALE + UNPAID/DEFERRED
+  /// 4. Total app dept = all invoice that have payment status unpaid or deferred and type sale
   double get _totalAppDebt => _appDebt;
 
-  /// total cash debt = WITHDRAWAL + UNPAID
+  /// 5. Total cash dept = all invoices that have type withdrawal and payment status unpaid
   double get _totalCashDebt => _cashDebt;
 
-  /// total debt = app debt + cash debt
-  double get _totalDebt => _appDebt + _cashDebt;
+  /// 6. Total dept = total app dept + total cash dept
+  double get _totalDebt => _totalAppDebt + _totalCashDebt;
 
-  /// total app purchase = purchases APP
+  /// 7. total app purchase = total purchase paid by app
   double get _totalAppPurchases => _appPurchases;
 
-  /// total cash purchase = purchases CASH (excl. withdrawal-linked)
+  /// 8. total cash purchase = total purchase in cash
   double get _totalCashPurchases => _cashPurchases;
 
-  /// total purchase = app purchase + cash purchase
-  double get _totalPurchases => _cashPurchases + _appPurchases;
+  /// 9. total purchase = total app purchase + cash purchase
+  double get _totalPurchases => _totalAppPurchases + _totalCashPurchases;
 
   // ── Save ───────────────────────────────────────────────────────────────────
   Future<void> _saveStats() async {
@@ -276,7 +307,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       totalAppDebtRepayment:  _appDebt,
       totalCashPurchases:     _cashPurchases,       // real cash purchases only (excl. withdrawals)
       totalAppPurchases:      _appPurchases,
-      totalSalesCash:         _cashSales,
+      totalSalesCash:         _totalCashSales,
       totalSalesCredit:       _appSales,
       createdAt:              TimestampFormatter.toUtcString(_cashBoxDate),
     );
@@ -347,9 +378,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   const SizedBox(height: 20),
                   _buildInputSection(isDark, isSmall),
                   const SizedBox(height: 24),
-                  _buildAutoSection(isDark, isSmall),
-                  const SizedBox(height: 32),
-                  _buildSummarySection(isDark, isSmall),
+                  _buildStatisticsGrid(isDark, isSmall),
                   const SizedBox(height: 32),
                   if (_isSingleDay) _buildSaveButton(),
                   if (!_isSingleDay)
@@ -372,12 +401,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                         ),
                       ]),
                     ),
-                  if (_savedStats != null) ...[
-                    const SizedBox(height: 48),
-                    const Divider(),
-                    const SizedBox(height: 24),
-                    _buildResultsSection(isDark, isSmall),
-                  ],
                 ],
               ),
             ),
@@ -490,29 +513,116 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
+  // ── Statistics Grid ────────────────────────────────────────────────────────
+  Widget _buildStatisticsGrid(bool isDark, bool isSmall) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionTitle('الإحصائيات المالية', Icons.analytics_rounded, Colors.blue, isDark),
+        const SizedBox(height: 16),
+        GridView.count(
+          crossAxisCount: isSmall ? 1 : 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+          childAspectRatio: isSmall ? 2.8 : 3.5,
+          children: [
+            _buildAutoDisplay('إجمالي مبيعات التطبيق', _totalAppSales, Icons.phonelink_ring_rounded, Colors.blue, isDark),
+            _buildAutoDisplay('إجمالي مبيعات الكاش', _totalCashSales, Icons.local_atm_rounded, Colors.green, isDark),
+            _buildAutoDisplay('إجمالي المبيعات', _totalSales, Icons.trending_up_rounded, Colors.teal, isDark),
+            _buildAutoDisplay('إجمالي ديون التطبيق', _totalAppDebt, Icons.account_balance_rounded, Colors.purple, isDark),
+            _buildAutoDisplay('إجمالي الديون النقدية', _totalCashDebt, Icons.money_off_rounded, Colors.red, isDark),
+            _buildAutoDisplay('إجمالي الديون', _totalDebt, Icons.warning_rounded, Colors.orange, isDark),
+            _buildAutoDisplay('إجمالي مشتريات التطبيق', _totalAppPurchases, Icons.mobile_friendly_rounded, Colors.indigo, isDark),
+            _buildAutoDisplay('إجمالي مشتريات الكاش', _totalCashPurchases, Icons.shopping_bag_rounded, Colors.amber, isDark),
+            _buildAutoDisplay('إجمالي المشتريات', _totalPurchases, Icons.shopping_cart_rounded, Colors.cyan, isDark),
+            _buildAutoDisplay('إجمالي سداد التطبيق', _totalDepositApp, Icons.install_mobile_rounded, Colors.blueGrey, isDark),
+            _buildAutoDisplay('إجمالي سداد الكاش', _totalDepositCash, Icons.payments_rounded, Colors.brown, isDark),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _buildDebtStatusInfo(isDark),
+      ],
+    );
+  }
+
+  Widget _buildDebtStatusInfo(bool isDark) {
+    String message;
+    Color color;
+    IconData icon;
+
+    if (_x == 0) {
+      message = 'جميع ديون التطبيق مسددة';
+      color = Colors.green;
+      icon = Icons.check_circle_outline;
+    } else if (_x > 0) {
+      message = 'يوجد رصيد دائن (رصيد إضافي)';
+      color = Colors.blue;
+      icon = Icons.info_outline;
+    } else {
+      message = 'لا تزال هناك ديون تطبيق غير مسددة';
+      color = Colors.red;
+      icon = Icons.warning_amber_rounded;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.4)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+          ),
+          if (_x != 0)
+            Text(
+              '${_x.abs().toStringAsFixed(2)}',
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w900,
+                fontSize: 16,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   // ── Manual input section ───────────────────────────────────────────────────
   Widget _buildInputSection(bool isDark, bool isSmall) {
     final canEdit = _isSingleDay;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle('إجمالي الصندوق', Icons.account_balance_rounded, Colors.green, isDark),
+        _sectionTitle('إدارة الصندوق', Icons.account_balance_rounded, Colors.green, isDark),
         const SizedBox(height: 16),
         _buildAutoDisplay(
-          'إجمالي الصندوق أمس (تلقائي)',
+          'صندوق الأمس',
           _yesterdayCash,
           Icons.history_rounded,
           Colors.blueGrey,
           isDark,
         ),
         const SizedBox(height: 16),
-        // صندوق اليوم — يدوي (disabled in range mode)
         Opacity(
           opacity: canEdit ? 1.0 : 0.5,
           child: IgnorePointer(
             ignoring: !canEdit,
             child: _buildManualInput(
-              'إجمالي الصندوق اليوم',
+              'صندوق اليوم',
               _todayCashController,
               Icons.account_balance_wallet_rounded,
               Colors.green,
@@ -523,7 +633,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         ),
         if (canEdit) ...[
           const SizedBox(height: 12),
-          // ── Cash box date field ──
           GestureDetector(
             onTap: _pickCashBoxDate,
             child: Container(
@@ -541,7 +650,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('تاريخ الصندوق',
+                        const Text('تاريخ الصندوق',
                             style: TextStyle(
                               color: Colors.green,
                               fontWeight: FontWeight.bold,
@@ -569,60 +678,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
-  // ── Auto-calculated section ────────────────────────────────────────────────
-  Widget _buildAutoSection(bool isDark, bool isSmall) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _sectionTitle('بيانات تلقائية من النظام', Icons.auto_graph_rounded, Colors.blue, isDark),
-        const SizedBox(height: 12),
-        GridView.count(
-          crossAxisCount: isSmall ? 1 : 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          childAspectRatio: isSmall ? 2.8 : 3.8,
-          children: [
-            _buildAutoDisplay('إجمالي المبيعات من التطبيق',    _appSales,          Icons.phonelink_ring_rounded,  Colors.blue,    isDark),
-            _buildAutoDisplay('إجمالي المبيعات النقدية',       _cashSales,         Icons.local_atm_rounded,       Colors.green,   isDark),
-            _buildAutoDisplay('إجمالي المبيعات',               _totalSales,        Icons.trending_up_rounded,     Colors.teal,    isDark),
-            _buildAutoDisplay('إجمالي الديون من التطبيق',      _totalAppDebt,      Icons.account_balance_rounded, Colors.purple,  isDark),
-            _buildAutoDisplay('إجمالي الديون النقدية',         _totalCashDebt,     Icons.money_off_rounded,       Colors.red,     isDark),
-            _buildAutoDisplay('إجمالي الديون',                 _totalDebt,         Icons.warning_rounded,         Colors.orange,  isDark),
-            _buildAutoDisplay('إجمالي المشتريات من التطبيق',   _totalAppPurchases, Icons.mobile_friendly_rounded, Colors.indigo,  isDark),
-            _buildAutoDisplay('إجمالي المشتريات النقدية',      _totalCashPurchases,Icons.shopping_bag_rounded,    Colors.amber,   isDark),
-            _buildAutoDisplay('إجمالي المشتريات',              _totalPurchases,    Icons.shopping_cart_rounded,   Colors.cyan,    isDark),
-          ],
-        ),
-      ],
-    );
-  }
-
-  // ── Summary section ────────────────────────────────────────────────────────
-  Widget _buildSummarySection(bool isDark, bool isSmall) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _sectionTitle('ملخص العمليات', Icons.summarize_rounded, Colors.teal, isDark),
-        const SizedBox(height: 16),
-        GridView.count(
-          crossAxisCount: isSmall ? 1 : 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          childAspectRatio: isSmall ? 2.8 : 3.5,
-          children: [
-            _buildDerivedCard('إجمالي المبيعات',      _totalSales,     Colors.blue,   isDark),
-            _buildDerivedCard('إجمالي الديون',        _totalDebt,      Colors.red,    isDark),
-            _buildDerivedCard('إجمالي المشتريات',     _totalPurchases, Colors.orange, isDark),
-          ],
-        ),
-      ],
-    );
-  }
-
   // ── Save button ────────────────────────────────────────────────────────────
   Widget _buildSaveButton() {
     return SizedBox(
@@ -640,97 +695,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         ),
       ),
-    );
-  }
-
-  // ── Chart (kept but not called in build) ──────────────────────────────────
-  Widget _buildChartSection(bool isDark, bool isSmall) {
-    if (_monthlyData.isEmpty) return const SizedBox.shrink();
-    final sortedKeys = _monthlyData.keys.toList()..sort();
-    final last7 = sortedKeys.length > 7 ? sortedKeys.sublist(sortedKeys.length - 7) : sortedKeys;
-    final barGroups = <BarChartGroupData>[];
-    for (int i = 0; i < last7.length; i++) {
-      barGroups.add(BarChartGroupData(
-        x: i,
-        barRods: [BarChartRodData(
-          toY: _monthlyData[last7[i]]!,
-          color: Colors.blue,
-          width: 16,
-          borderRadius: BorderRadius.circular(4),
-        )],
-      ));
-    }
-    return Container(
-      height: 350,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('نظرة عامة على المبيعات (آخر 7 أيام)',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : const Color(0xFF0F172A))),
-          const SizedBox(height: 32),
-          Expanded(
-            child: BarChart(BarChartData(
-              barGroups: barGroups,
-              borderData: FlBorderData(show: false),
-              gridData: FlGridData(show: false),
-              titlesData: FlTitlesData(
-                leftTitles:   AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 40)),
-                rightTitles:  AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                topTitles:    AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                bottomTitles: AxisTitles(sideTitles: SideTitles(
-                  showTitles: true,
-                  getTitlesWidget: (val, meta) {
-                    final idx = val.toInt();
-                    if (idx >= last7.length) return const Text('');
-                    return Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(last7[idx].split('-').last, style: const TextStyle(fontSize: 10)),
-                    );
-                  },
-                )),
-              ),
-            )),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Saved results section ──────────────────────────────────────────────────
-  Widget _buildResultsSection(bool isDark, bool isSmall) {
-    final s = _savedStats!;
-    final cashSalesStored    = s.todayCashInBox - s.yesterdayCashInBox;
-    final totalSalesStored   = s.totalSalesCredit + cashSalesStored;
-    final totalPurchasesStored = s.totalCashPurchases + s.totalAppPurchases;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('التقرير المالي الختامي المحفوظ',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900,
-                color: isDark ? Colors.white : const Color(0xFF1E293B))),
-        const SizedBox(height: 20),
-        GridView.count(
-          crossAxisCount: isSmall ? 1 : 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 20,
-          mainAxisSpacing: 20,
-          childAspectRatio: 3,
-          children: [
-            _buildResultCard('إجمالي البيع الكلي',    totalSalesStored,      Colors.blue,   isDark),
-            _buildResultCard('إجمالي البيع نقدي',      cashSalesStored,       Colors.green,  isDark),
-            _buildResultCard('إجمالي المبيعات تطبيق', s.totalSalesCredit,    Colors.purple, isDark),
-            _buildResultCard('إجمالي المشتريات',      totalPurchasesStored,  Colors.orange, isDark),
-          ],
-        ),
-      ],
     );
   }
 
@@ -822,52 +786,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         )),
         const Icon(Icons.lock_outline_rounded, color: Colors.grey, size: 16),
       ]),
-    );
-  }
-
-  Widget _buildDerivedCard(String title, double value, Color color, bool isDark, {String? subtitle}) {
-    final isNegative   = value < 0;
-    final displayColor = isNegative ? Colors.redAccent : color;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: displayColor.withOpacity(0.4), width: 2),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(title, style: TextStyle(color: displayColor, fontWeight: FontWeight.bold, fontSize: 13)),
-          if (subtitle != null)
-            Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 10)),
-          const SizedBox(height: 4),
-          Text('${value.toStringAsFixed(2)} ₪',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: displayColor)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildResultCard(String title, double value, Color color, bool isDark) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.3), width: 2),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(title, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 14)),
-          const SizedBox(height: 4),
-          Text('${value.toStringAsFixed(2)} ₪',
-              style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: color)),
-        ],
-      ),
     );
   }
 }

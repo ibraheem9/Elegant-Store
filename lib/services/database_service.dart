@@ -825,7 +825,7 @@ class DatabaseService {
     }
   }
 
-  Future<int> insertInvoice(Invoice inv) async {
+  Future<int> insertInvoice(Invoice inv, {int? performedById, String? performedByName}) async {
     final db = await database;
     return await db.transaction((txn) async {
       final now = TimestampFormatter.nowUtc();
@@ -866,7 +866,21 @@ class DatabaseService {
       // On insert, updated_at matches created_at (accountant's date).
       map['updated_at'] = map['created_at'];
       map['is_synced'] = 0;
-      return await txn.insert('invoices', map);
+      final invoiceId = await txn.insert('invoices', map);
+
+      // Log 'CREATE' activity inside the transaction to ensure correct attribution
+      await logActivityInTxn(
+        txn: txn,
+        targetId: invoiceId,
+        targetType: 'INVOICE',
+        action: 'CREATE',
+        summary: 'فاتورة جديدة للزبون ${inv.customerName ?? ""} بمبلغ ${inv.amount.toStringAsFixed(2)} NIS',
+        performedById: performedById,
+        performedByName: performedByName,
+        createdAt: map['created_at'],
+      );
+
+      return invoiceId;
     }).then((invoiceId) async {
       // Option 2: refresh notifications after the balance trigger has fired.
       await notificationRepo.refreshAllForCustomer(inv.userId);
@@ -905,7 +919,7 @@ class DatabaseService {
           WHERE eh.target_id = i.id
             AND eh.target_type = 'INVOICE'
             AND eh.edited_by_name IS NOT NULL
-          ORDER BY eh.created_at DESC
+          ORDER BY eh.created_at DESC, eh.id DESC
           LIMIT 1
         ) AS last_edited_by
       FROM invoices i
@@ -1239,6 +1253,8 @@ class DatabaseService {
     String? notes,
     required int paymentMethodId,
     DateTime? date,
+    int? performedById,
+    String? performedByName,
   }) async {
     final db = await database;
     await db.transaction((txn) async {
@@ -1259,6 +1275,19 @@ class DatabaseService {
         'updated_at': now,
         'is_synced': 0,
       });
+
+      // Log 'CREATE' activity inside the transaction
+      await logActivityInTxn(
+        txn: txn,
+        targetId: invId,
+        targetType: 'INVOICE',
+        action: 'CREATE',
+        summary: 'تسجيل دفعة سداد بمبلغ ${amount.toStringAsFixed(2)} NIS',
+        performedById: performedById,
+        performedByName: performedByName,
+        createdAt: now,
+      );
+
       await txn.insert('transactions', {
         'uuid': _uuid.v4(),
         'buyer_id': userId,
@@ -1474,12 +1503,14 @@ class DatabaseService {
     String? notes,
     int? paymentMethodId,
     DateTime? date,
+    int? performedById,
+    String? performedByName,
   }) async {
     final db = await database;
     await db.transaction((txn) async {
       final effectiveDate = date ?? DateTime.now();
       final now = TimestampFormatter.toUtcString(effectiveDate);
-      await txn.insert('invoices', {
+      final invId = await txn.insert('invoices', {
         'uuid': _uuid.v4(),
         'user_id': customer.id,
         'invoice_date': now,
@@ -1493,6 +1524,19 @@ class DatabaseService {
         'updated_at': now,
         'is_synced': 0,
       });
+
+      // Log 'CREATE' activity inside the transaction
+      await logActivityInTxn(
+        txn: txn,
+        targetId: invId,
+        targetType: 'INVOICE',
+        action: 'CREATE',
+        summary: 'سحب نقدي للزبون ${customer.name} بمبلغ ${amount.toStringAsFixed(2)} NIS',
+        performedById: performedById,
+        performedByName: performedByName,
+        createdAt: now,
+      );
+
       await txn.insert('purchases', {
         'uuid': _uuid.v4(),
         'merchant_name': 'سحب نقدي: ${customer.name}',
@@ -1641,11 +1685,13 @@ class DatabaseService {
   ///
   /// Formulas applied:
   ///   app_sales        = invoices WHERE type='SALE' AND status='PAID' AND pm.type='app'
+  ///   app_sales_deposit = invoices WHERE type='DEPOSIT' AND status='PAID' AND pm.type='app'
   ///   app_debt         = invoices WHERE type='SALE' AND status IN ('UNPAID','DEFERRED')
   ///   cash_debt        = invoices WHERE type='WITHDRAWAL' AND status='UNPAID'
   ///   cash_sales_deposit = invoices WHERE type='DEPOSIT' AND status='PAID' AND pm.type='cash'
   ///   cash_purchases   = purchases WHERE payment_source='CASH' (excluding withdrawal-linked records)
   ///   app_purchases    = purchases WHERE payment_source='APP'
+  ///   total_credits    = SUM(ABS(balance)) WHERE balance < 0
   Future<Map<String, double>> getDetailedTodayStats({DateTime? date}) async {
     final today = DateFormat('yyyy-MM-dd').format(date ?? DateTime.now());
     final db = await database;
@@ -1661,6 +1707,13 @@ class DatabaseService {
             AND pm.type = 'app'
           THEN i.amount ELSE 0 END), 0) AS app_sales,
 
+        -- app_sales_deposit: DEPOSIT + PAID + payment_method type = app
+        COALESCE(SUM(CASE
+          WHEN i.type = 'DEPOSIT'
+            AND i.payment_status IN ('PAID','paid')
+            AND pm.type = 'app'
+          THEN i.amount ELSE 0 END), 0) AS app_sales_deposit,
+
         -- app_debt: SALE + UNPAID or DEFERRED (any payment method)
         COALESCE(SUM(CASE
           WHEN i.type = 'SALE'
@@ -1673,7 +1726,7 @@ class DatabaseService {
             AND i.payment_status IN ('UNPAID','unpaid')
           THEN i.amount ELSE 0 END), 0) AS cash_debt,
 
-        -- cash_sales_deposit: DEPOSIT + PAID + cash (deducted from cash sales)
+        -- cash_sales_deposit: DEPOSIT + PAID + cash
         COALESCE(SUM(CASE
           WHEN i.type = 'DEPOSIT'
             AND i.payment_status IN ('PAID','paid')
@@ -1687,7 +1740,7 @@ class DatabaseService {
             AND pm.type = 'cash'
           THEN i.amount ELSE 0 END), 0) AS cash_sales_invoice,
 
-        -- cash_withdrawal_total: WITHDRAWAL invoices (for cash sales formula)
+        -- cash_withdrawal_total: WITHDRAWAL invoices
         COALESCE(SUM(CASE
           WHEN i.type = 'WITHDRAWAL'
           THEN i.amount ELSE 0 END), 0) AS cash_withdrawal_total
@@ -1699,8 +1752,7 @@ class DatabaseService {
       ['$today%'],
     );
 
-    // Purchases query: exclude withdrawal-linked records (merchant_name starts with 'سحب نقدي:')
-    // Withdrawal purchases are already accounted for via WITHDRAWAL invoices.
+    // Purchases query: exclude withdrawal-linked records
     final purRows = await db.rawQuery(
       '''
       SELECT
@@ -1717,21 +1769,31 @@ class DatabaseService {
       ['$today%'],
     );
 
+    // Get total credits (sum of absolute values of negative balances)
+    final creditsRows = await db.rawQuery(
+      '''
+      SELECT COALESCE(SUM(ABS(balance)), 0) AS total_credits
+      FROM users
+      WHERE role = 'CUSTOMER' AND deleted_at IS NULL AND balance < 0
+      '''
+    );
+
     final inv = invRows.first;
     final pur = purRows.first;
+    final cred = creditsRows.first;
 
     return {
       'app_sales':             (inv['app_sales']             as num?)?.toDouble() ?? 0.0,
+      'app_sales_deposit':     (inv['app_sales_deposit']     as num?)?.toDouble() ?? 0.0,
       'app_debt':              (inv['app_debt']              as num?)?.toDouble() ?? 0.0,
       'cash_debt':             (inv['cash_debt']             as num?)?.toDouble() ?? 0.0,
-      // legacy key — cash_debt (WITHDRAWAL+UNPAID)
       'cash_withdrawals':      (inv['cash_debt']             as num?)?.toDouble() ?? 0.0,
       'cash_sales_deposit':    (inv['cash_sales_deposit']    as num?)?.toDouble() ?? 0.0,
       'cash_sales_invoice':    (inv['cash_sales_invoice']    as num?)?.toDouble() ?? 0.0,
       'cash_withdrawal_total': (inv['cash_withdrawal_total'] as num?)?.toDouble() ?? 0.0,
       'cash_purchases':        (pur['cash_purchases']        as num?)?.toDouble() ?? 0.0,
       'app_purchases':         (pur['app_purchases']         as num?)?.toDouble() ?? 0.0,
-      // kept for backward compat — no longer used in stats screen
+      'total_credits':         (cred['total_credits']        as num?)?.toDouble() ?? 0.0,
       'cash_debt_repayment':   (inv['cash_sales_deposit']    as num?)?.toDouble() ?? 0.0,
     };
   }
@@ -1741,13 +1803,15 @@ class DatabaseService {
   ///
   /// Formulas applied:
   ///   app_sales           = SALE + PAID + pm.type='app'
+  ///   app_sales_deposit    = DEPOSIT + PAID + pm.type='app'
   ///   app_debt            = SALE + UNPAID/DEFERRED (any method)
   ///   cash_debt           = WITHDRAWAL + UNPAID
-  ///   cash_sales_deposit  = DEPOSIT + PAID + pm.type='cash' (deducted from cash sales)
+  ///   cash_sales_deposit  = DEPOSIT + PAID + pm.type='cash'
   ///   cash_sales_invoice  = SALE + PAID + pm.type='cash'
-  ///   cash_withdrawal_total = all WITHDRAWAL invoices (for cash sales formula)
+  ///   cash_withdrawal_total = all WITHDRAWAL invoices
   ///   cash_purchases      = purchases CASH (excluding withdrawal-linked records)
   ///   app_purchases       = purchases APP
+  ///   total_credits       = SUM(ABS(balance)) WHERE balance < 0
   Future<Map<String, double>> getDetailedStatsByRange({
     required DateTime start,
     required DateTime end,
@@ -1766,6 +1830,13 @@ class DatabaseService {
             AND pm.type = 'app'
           THEN i.amount ELSE 0 END), 0) AS app_sales,
 
+        -- app_sales_deposit: DEPOSIT + PAID + payment_method type = app
+        COALESCE(SUM(CASE
+          WHEN i.type = 'DEPOSIT'
+            AND i.payment_status IN ('PAID','paid')
+            AND pm.type = 'app'
+          THEN i.amount ELSE 0 END), 0) AS app_sales_deposit,
+
         -- app_debt: SALE + UNPAID or DEFERRED (any payment method)
         COALESCE(SUM(CASE
           WHEN i.type = 'SALE'
@@ -1778,7 +1849,7 @@ class DatabaseService {
             AND i.payment_status IN ('UNPAID','unpaid')
           THEN i.amount ELSE 0 END), 0) AS cash_debt,
 
-        -- cash_sales_deposit: DEPOSIT + PAID + cash (deducted from cash sales)
+        -- cash_sales_deposit: DEPOSIT + PAID + cash
         COALESCE(SUM(CASE
           WHEN i.type = 'DEPOSIT'
             AND i.payment_status IN ('PAID','paid')
@@ -1792,7 +1863,7 @@ class DatabaseService {
             AND pm.type = 'cash'
           THEN i.amount ELSE 0 END), 0) AS cash_sales_invoice,
 
-        -- cash_withdrawal_total: all WITHDRAWAL invoices (for cash sales formula)
+        -- cash_withdrawal_total: all WITHDRAWAL invoices
         COALESCE(SUM(CASE
           WHEN i.type = 'WITHDRAWAL'
           THEN i.amount ELSE 0 END), 0) AS cash_withdrawal_total
@@ -1804,7 +1875,7 @@ class DatabaseService {
       [startStr, endStr],
     );
 
-    // Exclude withdrawal-linked purchase records (already counted via WITHDRAWAL invoices)
+    // Exclude withdrawal-linked purchase records
     final purRows = await db.rawQuery(
       '''
       SELECT
@@ -1821,21 +1892,31 @@ class DatabaseService {
       [startStr, endStr],
     );
 
+    // Get total credits
+    final creditsRows = await db.rawQuery(
+      '''
+      SELECT COALESCE(SUM(ABS(balance)), 0) AS total_credits
+      FROM users
+      WHERE role = 'CUSTOMER' AND deleted_at IS NULL AND balance < 0
+      '''
+    );
+
     final inv = invRows.first;
     final pur = purRows.first;
+    final cred = creditsRows.first;
 
     return {
       'app_sales':             (inv['app_sales']             as num?)?.toDouble() ?? 0.0,
+      'app_sales_deposit':     (inv['app_sales_deposit']     as num?)?.toDouble() ?? 0.0,
       'app_debt':              (inv['app_debt']              as num?)?.toDouble() ?? 0.0,
       'cash_debt':             (inv['cash_debt']             as num?)?.toDouble() ?? 0.0,
-      // legacy key — cash_debt (WITHDRAWAL+UNPAID)
       'cash_withdrawals':      (inv['cash_debt']             as num?)?.toDouble() ?? 0.0,
       'cash_sales_deposit':    (inv['cash_sales_deposit']    as num?)?.toDouble() ?? 0.0,
       'cash_sales_invoice':    (inv['cash_sales_invoice']    as num?)?.toDouble() ?? 0.0,
       'cash_withdrawal_total': (inv['cash_withdrawal_total'] as num?)?.toDouble() ?? 0.0,
       'cash_purchases':        (pur['cash_purchases']        as num?)?.toDouble() ?? 0.0,
       'app_purchases':         (pur['app_purchases']         as num?)?.toDouble() ?? 0.0,
-      // kept for backward compat
+      'total_credits':         (cred['total_credits']        as num?)?.toDouble() ?? 0.0,
       'cash_debt_repayment':   (inv['cash_sales_deposit']    as num?)?.toDouble() ?? 0.0,
     };
   }
@@ -2204,10 +2285,44 @@ class DatabaseService {
     int? performedById,
     String? performedByName,
     int? storeManagerId,
+    String? createdAt,
   }) async {
     final db = await database;
-    final now = TimestampFormatter.nowUtc();
-    await db.insert('edit_history', {
+    await logActivityInTxn(
+      txn: db,
+      targetId: targetId,
+      targetType: targetType,
+      action: action,
+      fieldName: fieldName,
+      oldValue: oldValue,
+      newValue: newValue,
+      summary: summary,
+      reason: reason,
+      performedById: performedById,
+      performedByName: performedByName,
+      storeManagerId: storeManagerId,
+      createdAt: createdAt,
+    );
+  }
+
+  /// Internal helper to log activity within an existing transaction or using the database directly.
+  Future<void> logActivityInTxn({
+    required dynamic txn,
+    required int targetId,
+    required String targetType,
+    required String action,
+    String? fieldName,
+    String? oldValue,
+    String? newValue,
+    String? summary,
+    String? reason,
+    int? performedById,
+    String? performedByName,
+    int? storeManagerId,
+    String? createdAt,
+  }) async {
+    final now = createdAt ?? TimestampFormatter.nowUtc();
+    await txn.insert('edit_history', {
       'uuid': _uuid.v4(),
       'store_manager_id': storeManagerId,
       'edited_by_id': performedById,

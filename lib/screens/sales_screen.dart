@@ -406,19 +406,14 @@ class _SalesScreenState extends State<SalesScreen> {
         notes: _notesController.text,
       );
 
-      final invoiceId = await db.insertInvoice(invoice);
+      final _actUser = context.read<AuthService>().currentUser;
+      final invoiceId = await db.insertInvoice(
+        invoice,
+        performedById: _actUser?.id,
+        performedByName: _actUser?.username ?? _actUser?.name,
+      );
       // Always recalculate after insert to ensure balance reflects the new invoice correctly
       await db.recalculateUserBalance(invoice.userId);
-      final _actUser = context.read<AuthService>().currentUser;
-      db.logActivity(
-        targetId: invoiceId,
-        targetType: 'INVOICE',
-        action: 'CREATE',
-        summary: 'فاتورة جديدة للزبون ${customer.name} بمبلغ ${amount.toStringAsFixed(2)} NIS - الحالة: ${_translateHistoryValue('payment_status', status)}',
-        performedById: _actUser?.id,
-        performedByName: _actUser?.username ?? _actUser?.name, // Prefer username (e.g. i7) for identity
-        storeManagerId: _actUser?.parentId ?? _actUser?.id,
-      ).catchError((e) => debugPrint('logActivity failed: $e'));
       _clearFields();
       await _loadData();
       _showSnackBar('تم تسجيل الفاتورة بنجاح', Colors.green);
@@ -471,12 +466,15 @@ class _SalesScreenState extends State<SalesScreen> {
         final id = await db.insertUser(newUser, '123');
         customer = (await db.getCustomers()).firstWhere((c) => c.id == id);
       }
+      final _actUser = context.read<AuthService>().currentUser;
       await db.recordCashWithdrawal(
         customer: customer,
         amount: amount,
         notes: _notesController.text,
         paymentMethodId: _selectedPaymentMethod?.id,
         date: TimestampFormatter.applyPastDateRule(_selectedInvoiceDate),
+        performedById: _actUser?.id,
+        performedByName: _actUser?.username ?? _actUser?.name,
       );
       _clearFields();
       await _loadData();
@@ -519,6 +517,7 @@ class _SalesScreenState extends State<SalesScreen> {
     }
 
     final db = context.read<DatabaseService>();
+    final _actUser = context.read<AuthService>().currentUser;
     setState(() => _isLoading = true);
     try {
       final combinedDateTime = TimestampFormatter.applyPastDateRule(_selectedInvoiceDate);
@@ -528,6 +527,8 @@ class _SalesScreenState extends State<SalesScreen> {
         notes: _notesController.text,
         paymentMethodId: _selectedPaymentMethod!.id!,
         date: combinedDateTime,
+        performedById: _actUser?.id,
+        performedByName: _actUser?.username ?? _actUser?.name,
       );
       _clearFields();
       await _loadData();
