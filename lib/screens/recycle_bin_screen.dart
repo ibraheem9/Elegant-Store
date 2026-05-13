@@ -104,26 +104,10 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
     return Scaffold(
       backgroundColor: backgroundColor,
       appBar: AppBar(
-        title: Text('سلة المحذوفات (الفواتير)', style: TextStyle(fontWeight: FontWeight.bold, color: primaryTextColor)),
         centerTitle: true,
         elevation: 0,
         backgroundColor: Colors.transparent,
         automaticallyImplyLeading: false,
-        actions: [
-          if (_deletedInvoices.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(left: 16),
-              child: TextButton.icon(
-                onPressed: _emptyTrash,
-                icon: const Icon(Icons.delete_sweep, color: Colors.red),
-                label: const Text('إفراغ السلة', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                style: TextButton.styleFrom(
-                  backgroundColor: Colors.red.withOpacity(0.1),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
-            ),
-        ],
       ),
       body: Column(
         children: [
@@ -159,6 +143,13 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
         children: [
           Row(
             children: [
+              IconButton.filledTonal(
+                onPressed: _selectDateRange,
+                style: IconButton.styleFrom(backgroundColor: isDark ? Colors.blue.withOpacity(0.1) : Colors.blue.withOpacity(0.05)),
+                icon: Icon(Icons.calendar_today, color: _selectedDateRange != null ? Colors.blue : (isDark ? Colors.white70 : Colors.black54)),
+                tooltip: 'فلترة حسب التاريخ',
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: TextField(
                   controller: _searchController,
@@ -177,19 +168,29 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
                   onChanged: (_) => _applyFilters(),
                 ),
               ),
-              const SizedBox(width: 12),
-              IconButton.filledTonal(
-                onPressed: _selectDateRange,
-                style: IconButton.styleFrom(backgroundColor: isDark ? Colors.blue.withOpacity(0.1) : Colors.blue.withOpacity(0.05)),
-                icon: Icon(Icons.calendar_today, color: _selectedDateRange != null ? Colors.blue : (isDark ? Colors.white70 : Colors.black54)),
-                tooltip: 'فلترة حسب التاريخ',
-              ),
               if (_selectedDateRange != null || _searchController.text.isNotEmpty)
-                IconButton.filledTonal(
-                  onPressed: _clearFilters,
-                  style: IconButton.styleFrom(backgroundColor: Colors.red.withOpacity(0.1)),
-                  icon: const Icon(Icons.clear_all, color: Colors.red),
-                  tooltip: 'مسح الفلاتر',
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: IconButton.filledTonal(
+                    onPressed: _clearFilters,
+                    style: IconButton.styleFrom(backgroundColor: Colors.red.withOpacity(0.1)),
+                    icon: const Icon(Icons.clear_all, color: Colors.red),
+                    tooltip: 'مسح الفلاتر',
+                  ),
+                ),
+              if (_deletedInvoices.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: TextButton.icon(
+                    onPressed: _emptyTrash,
+                    icon: const Icon(Icons.delete_sweep, color: Colors.red, size: 20),
+                    label: const Text('إفراغ السلة', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.red.withOpacity(0.1),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
                 ),
             ],
           ),
