@@ -160,6 +160,61 @@ class _PurchasesRecycleBinScreenState
     if (confirmed == true) await _restore(p);
   }
 
+  Future<void> _emptyTrash() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.delete_sweep_rounded, color: Colors.red, size: 22),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text('إفراغ سلة المحذوفات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              ),
+            ],
+          ),
+          content: const Text(
+            'هل تريد حذف جميع المشتريات الموجودة في السلة نهائياً؟ لا يمكن التراجع عن هذا الإجراء.',
+            style: TextStyle(fontSize: 14, height: 1.5),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('إلغاء', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('إفراغ الآن', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      setState(() => _loading = true);
+      final db = context.read<DatabaseService>();
+      await db.emptyPurchasesTrash();
+      _snack('تم إفراغ سلة المحذوفات بنجاح', Colors.red);
+      await _loadFirstPage();
+    }
+  }
+
   void _snack(String msg, Color color) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
@@ -207,6 +262,19 @@ class _PurchasesRecycleBinScreenState
         foregroundColor: isDark ? Colors.white : Colors.black87,
         elevation: 0,
         actions: [
+          if (_items.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+              child: TextButton.icon(
+                onPressed: _emptyTrash,
+                icon: const Icon(Icons.delete_sweep_rounded, color: Colors.red, size: 20),
+                label: const Text('إفراغ السلة', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13)),
+                style: TextButton.styleFrom(
+                  backgroundColor: Colors.red.withOpacity(0.08),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             tooltip: 'تحديث',

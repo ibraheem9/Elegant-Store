@@ -109,6 +109,21 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
         elevation: 0,
         backgroundColor: Colors.transparent,
         automaticallyImplyLeading: false,
+        actions: [
+          if (_deletedInvoices.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 16),
+              child: TextButton.icon(
+                onPressed: _emptyTrash,
+                icon: const Icon(Icons.delete_sweep, color: Colors.red),
+                label: const Text('إفراغ السلة', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                style: TextButton.styleFrom(
+                  backgroundColor: Colors.red.withOpacity(0.1),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
+        ],
       ),
       body: Column(
         children: [
@@ -296,6 +311,36 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
     ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
       const SnackBar(content: Text('تم استعادة الفاتورة بنجاح'), backgroundColor: Colors.green),
     );
+  }
+
+  Future<void> _emptyTrash() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('إفراغ سلة المحذوفات'),
+        content: const Text('هل أنت متأكد من حذف جميع الفواتير في السلة نهائياً؟ لا يمكن التراجع عن هذا الإجراء.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('إفراغ الآن'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      setState(() => _isLoading = true);
+      final db = context.read<DatabaseService>();
+      await db.emptyInvoicesTrash();
+      await _loadDeletedInvoices();
+      if (mounted) {
+        ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
+          const SnackBar(content: Text('تم إفراغ سلة المحذوفات بنجاح'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   Future<void> _confirmDelete(Invoice inv) async {

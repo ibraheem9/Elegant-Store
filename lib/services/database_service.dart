@@ -998,6 +998,15 @@ class DatabaseService {
     if (userId != null) await recalculateUserBalance(userId);
   }
 
+  /// Locally deletes all soft-deleted invoices permanently.
+  Future<void> emptyInvoicesTrash() async {
+    final db = await database;
+    // Mark as unsynced so tombstones can be pushed if needed
+    await db.rawUpdate('UPDATE invoices SET is_synced = 0 WHERE deleted_at IS NOT NULL');
+    // Delete locally
+    await db.delete('invoices', where: 'deleted_at IS NOT NULL');
+  }
+
   /// Soft-deletes a customer together with all their invoices and transactions.
   /// Used when the user wants to delete a customer that still has financial records.
   Future<void> softDeleteCustomerWithInvoices(int customerId) async {
@@ -2102,6 +2111,13 @@ class DatabaseService {
       offset: offset,
     );
     return rows.map((m) => Purchase.fromMap(m)).toList();
+  }
+
+  /// Locally deletes all soft-deleted purchases permanently.
+  Future<void> emptyPurchasesTrash() async {
+    final db = await database;
+    await db.rawUpdate('UPDATE purchases SET is_synced = 0 WHERE deleted_at IS NOT NULL');
+    await db.delete('purchases', where: 'deleted_at IS NOT NULL');
   }
 
   /// Returns total count of soft-deleted purchases

@@ -852,7 +852,21 @@ class _SalesScreenState extends State<SalesScreen> {
         performedByName: _actUser?.username ?? _actUser?.name,
         storeManagerId: _actUser?.parentId ?? _actUser?.id,
       ).catchError((e) => debugPrint('logActivity failed: $e'));
-      await _loadData();
+
+      // Update local state instead of calling _loadData() to maintain scroll position
+      setState(() {
+        _invoices.removeWhere((i) => i.id == inv.id);
+        _filteredInvoices.removeWhere((i) => i.id == inv.id);
+        
+        // Update stats locally
+        if (inv.type == 'SALE') {
+           _todayStats['total_sales'] = (_todayStats['total_sales'] ?? 0.0) - inv.amount;
+           if (inv.paymentStatus != 'PAID') {
+             _todayStats['total_debt'] = (_todayStats['total_debt'] ?? 0.0) - inv.amount;
+           }
+        }
+      });
+
       _showSnackBar('تم نقل الفاتورة لسلة المحذوفات', Colors.redAccent);
     }
   }
