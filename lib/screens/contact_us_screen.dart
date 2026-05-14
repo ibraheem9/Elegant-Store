@@ -163,11 +163,6 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // WhatsApp Button (Replaces the old info banner)
-          const _WhatsAppButton(),
-
-          const SizedBox(height: 20),
-
           // Internet notice
           _InternetNotice(isDark: isDark),
 
@@ -200,32 +195,26 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
                     ),
                     const SizedBox(height: 12),
 
-                    // Email + Phone row
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _FormField(
-                            controller: _emailCtrl,
-                            label: 'البريد الإلكتروني',
-                            icon: Icons.email_outlined,
-                            keyboardType: TextInputType.emailAddress,
-                            validator: (v) {
-                              if (v == null || v.trim().isEmpty) return null;
-                              final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+');
-                              return emailRegex.hasMatch(v.trim()) ? null : 'بريد غير صحيح';
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _FormField(
-                            controller: _phoneCtrl,
-                            label: 'رقم الهاتف',
-                            icon: Icons.phone_outlined,
-                            keyboardType: TextInputType.phone,
-                          ),
-                        ),
-                      ],
+                    // Email
+                    _FormField(
+                      controller: _emailCtrl,
+                      label: 'البريد الإلكتروني',
+                      icon: Icons.email_outlined,
+                      keyboardType: TextInputType.emailAddress,
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) return null;
+                        final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+');
+                        return emailRegex.hasMatch(v.trim()) ? null : 'بريد غير صحيح';
+                      },
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Phone
+                    _FormField(
+                      controller: _phoneCtrl,
+                      label: 'رقم الهاتف',
+                      icon: Icons.phone_outlined,
+                      keyboardType: TextInputType.phone,
                     ),
 
                     const SizedBox(height: 24),
@@ -305,7 +294,12 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
             ),
           ),
 
-          const SizedBox(height: 32),
+          const SizedBox(height: 30),
+
+          // WhatsApp Button (Moved to bottom)
+          const _WhatsAppButton(),
+
+          const SizedBox(height: 50),
         ],
       ),
     );
