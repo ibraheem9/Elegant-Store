@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/contact_service.dart';
 
 /// Maximum number of images allowed per request.
@@ -162,11 +163,8 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Contact info banner
-          if (_loadingInfo)
-            const _InfoShimmer()
-          else if (_contactInfo != null && !_contactInfo!.isEmpty)
-            _ContactInfoBanner(info: _contactInfo!, isDark: isDark),
+          // WhatsApp Button (Replaces the old info banner)
+          const _WhatsAppButton(),
 
           const SizedBox(height: 20),
 
@@ -520,10 +518,16 @@ class _AddImageButton extends StatelessWidget {
   }
 }
 
-class _ContactInfoBanner extends StatelessWidget {
-  const _ContactInfoBanner({required this.info, required this.isDark});
-  final ContactInfo info;
-  final bool isDark;
+class _WhatsAppButton extends StatelessWidget {
+  const _WhatsAppButton();
+  final String phone = "970567228380";
+
+  Future<void> _launchWhatsApp() async {
+    final Uri url = Uri.parse("https://wa.me/$phone");
+    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+      debugPrint('Could not launch $url');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -531,58 +535,40 @@ class _ContactInfoBanner extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.blue.withOpacity(isDark ? 0.15 : 0.07),
+        color: const Color(0xFF25D366).withOpacity(0.07),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.blue.withOpacity(0.2)),
+        border: Border.all(color: const Color(0xFF25D366).withOpacity(0.2)),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
-            children: [
-              Icon(Icons.contact_support_rounded, color: Colors.blue, size: 18),
-              SizedBox(width: 8),
-              Text('معلومات التواصل',
-                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
-            ],
+          const Text(
+            'للحصول على دعم فني مباشر وسريع',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 16,
-            runSpacing: 8,
-            children: [
-              if (info.phone != null)
-                _InfoChip(icon: Icons.phone_rounded, text: info.phone!),
-              if (info.email != null)
-                _InfoChip(icon: Icons.email_rounded, text: info.email!),
-              if (info.whatsapp != null)
-                _InfoChip(icon: Icons.chat_rounded, text: 'WhatsApp: ${info.whatsapp!}'),
-              if (info.workingHours != null)
-                _InfoChip(icon: Icons.access_time_rounded, text: info.workingHours!),
-              if (info.address != null)
-                _InfoChip(icon: Icons.location_on_rounded, text: info.address!),
-            ],
+          SizedBox(
+            width: double.infinity,
+            height: 54,
+            child: ElevatedButton.icon(
+              onPressed: _launchWhatsApp,
+              icon: const Icon(Icons.chat_bubble_rounded, color: Colors.white, size: 22),
+              label: const Text(
+                'تواصل معنا عبر واتساب',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF25D366),
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
           ),
         ],
       ),
-    );
-  }
-}
-
-class _InfoChip extends StatelessWidget {
-  const _InfoChip({required this.icon, required this.text});
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 14, color: Colors.blue.shade700),
-        const SizedBox(width: 4),
-        Text(text, style: const TextStyle(fontSize: 13)),
-      ],
     );
   }
 }

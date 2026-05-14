@@ -26,6 +26,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _biometricEnabled = false;
   bool _canCheckBiometrics = false;
   bool _isExporting = false;
+  bool _isExportingExcel = false;
   bool _isImporting = false;
   TimeOfDay _notificationTime = const TimeOfDay(hour: 10, minute: 0);
 
@@ -140,6 +141,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } finally {
       if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  Future<void> _exportInvoicesToExcel() async {
+    setState(() => _isExportingExcel = true);
+    try {
+      final db = context.read<DatabaseService>();
+      final exportService = ExportService(db);
+      final String? filePath = await exportService.exportInvoicesToExcel();
+      if (!mounted) return;
+      if (filePath == null) return;
+      _showSnackBar('تم تصدير تقرير Excel بنجاح ✓', Colors.green);
+    } catch (e) {
+      if (mounted) {
+        _showSnackBar('فشل تصدير Excel: $e', Colors.red);
+      }
+    } finally {
+      if (mounted) setState(() => _isExportingExcel = false);
     }
   }
 
@@ -411,6 +430,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             // ── Data Export / Import ──────────────────────────────────
             _buildSection('النسخ الاحتياطي والاستعادة', isDark, [
+              ListTile(
+                leading: _isExportingExcel
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.green),
+                      )
+                    : const Icon(Icons.table_view_rounded,
+                        color: Colors.green, size: 28),
+                title: const Text(
+                  'تصدير كملف Excel',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: const Text(
+                  'تصدير الفواتير وأرصدة العملاء في ملف Excel منظم لسهولة المراجعة والطباعة.',
+                ),
+                onTap: _isExportingExcel ? null : _exportInvoicesToExcel,
+              ),
+              const Divider(height: 1, indent: 16, endIndent: 16),
               ListTile(
                 leading: _isExporting
                     ? const SizedBox(

@@ -1,11 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:excel/excel.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
+import '../utils/timestamp_formatter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'database_service.dart';
+import '../models/models.dart';
 
 /// Handles exporting the entire local SQLite database to a structured JSON file.
 ///
@@ -89,6 +92,230 @@ class ExportService {
   /// Exports all data and returns the raw JSON string (useful for testing or
   /// custom save flows).
   Future<String> exportToJsonString() => _buildExportJson();
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PUBLIC: EXCEL EXPORT
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Generates a well-organized Excel file containing:
+  /// 1. General Summary (Totals)
+  /// 2. Invoices Log
+  /// 3. Customer Balances
+  Future<String?> exportInvoicesToExcel() async {
+    final excel = Excel.createExcel();
+
+    // 1. Rename default Sheet1 to "الملخص العام"
+    const String summarySheetName = 'الملخص العام';
+    excel.rename(excel.getDefaultSheet()!, summarySheetName);
+
+    // Fetch data
+    final List<Invoice> invoices = await _dbService.getInvoices();
+    final List<User> customers = await _dbService.getCustomers();
+
+    // -- Sheet 1: الملخص العام --
+    _buildSummarySheet(excel.sheets[summarySheetName]!, invoices, customers);
+
+    // -- Sheet 2: سجل الفواتير --
+    const String invoicesSheetName = 'سجل الفواتير';
+    excel.updateCell(invoicesSheetName, CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0), TextCellValue('Temporary')); // force creation
+    _buildInvoicesSheet(excel.sheets[invoicesSheetName]!, invoices);
+
+    // -- Sheet 3: أرصدة العملاء --
+    const String customersSheetName = 'أرصدة العملاء';
+    excel.updateCell(customersSheetName, CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0), TextCellValue('Temporary')); // force creation
+    _buildCustomersSheet(excel.sheets[customersSheetName]!, customers);
+
+    // Save
+    final List<int>? fileBytes = excel.save();
+    if (fileBytes == null) return null;
+
+    final String timestamp = DateFormat('yyyy-MM-dd_HH-mm-ss').format(DateTime.now());
+    final String fileName = 'elegant_store_report_$timestamp.xlsx';
+
+    if (Platform.isWindows) {
+      return _saveExcelWindows(fileBytes, fileName);
+    }
+
+    final String filePath = await _writeBytesToFile(fileBytes, fileName);
+    await _shareExcelFile(filePath);
+    return filePath;
+  }
+
+  void _buildSummarySheet(Sheet sheet, List<Invoice> invoices, List<User> customers) {
+    double totalSales = 0;
+    double totalCollected = 0;
+    double totalDebt = 0;
+
+    for (final inv in invoices) {
+      if (inv.type == 'SALE') {
+        totalSales += inv.amount;
+        totalCollected += inv.paidAmount;
+      } else if (inv.type == 'DEPOSIT') {
+        totalCollected += inv.amount;
+      }
+    }
+
+    for (final c in customers) {
+      if (c.balance > 0) totalDebt += c.balance;
+    }
+
+    // Styles
+    final CellStyle headerStyle = CellStyle(
+      bold: true,
+      horizontalAlign: HorizontalAlign.Center,
+      backgroundColorHex: ExcelColor.fromHexString('#E2E8F0'),
+      fontColorHex: ExcelColor.fromHexString('#0F172A'),
+    );
+
+    // Headers
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0))
+      ..value = TextCellValue('الإحصائية')
+      ..cellStyle = headerStyle;
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: 0))
+      ..value = TextCellValue('القيمة')
+      ..cellStyle = headerStyle;
+
+    // Data
+    final List<List<dynamic>> data = [
+      ['إجمالي المبيعات', totalSales],
+      ['إجمالي المبالغ المحصلة', totalCollected],
+      ['إجمالي الديون المستحقة', totalDebt],
+      ['عدد الفواتير', invoices.length],
+      ['عدد العملاء', customers.length],
+      ['تاريخ التصدير', DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())],
+    ];
+
+    for (int i = 0; i < data.length; i++) {
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: i + 1)).value = _wrapCellValue(data[i][0]);
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: i + 1)).value = _wrapCellValue(data[i][1]);
+    }
+
+    sheet.setColumnWidth(0, 30);
+    sheet.setColumnWidth(1, 20);
+  }
+
+  void _buildInvoicesSheet(Sheet sheet, List<Invoice> invoices) {
+    final CellStyle headerStyle = CellStyle(
+      bold: true,
+      horizontalAlign: HorizontalAlign.Center,
+      backgroundColorHex: ExcelColor.fromHexString('#0B74FF'),
+      fontColorHex: ExcelColor.fromHexString('#FFFFFF'),
+    );
+
+    final headers = ['التاريخ', 'العميل', 'النوع', 'المبلغ الإجمالي', 'المبلغ المدفوع', 'الحالة', 'ملاحظات'];
+    for (int i = 0; i < headers.length; i++) {
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0))
+        ..value = TextCellValue(headers[i])
+        ..cellStyle = headerStyle;
+    }
+
+    for (int i = 0; i < invoices.length; i++) {
+      final inv = invoices[i];
+      final rowIdx = i + 1;
+      
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: rowIdx)).value = TextCellValue(inv.invoiceDate.toLocalShort());
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: rowIdx)).value = TextCellValue(inv.customerName ?? '-');
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: rowIdx)).value = TextCellValue(inv.type == 'SALE' ? 'بيع' : (inv.type == 'DEPOSIT' ? 'دفعة/إيداع' : inv.type));
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: rowIdx)).value = DoubleCellValue(inv.amount);
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: rowIdx)).value = DoubleCellValue(inv.paidAmount);
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: rowIdx)).value = TextCellValue(_translateStatus(inv.paymentStatus));
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: rowIdx)).value = TextCellValue(inv.notes ?? '');
+    }
+
+    sheet.setColumnWidth(0, 20);
+    sheet.setColumnWidth(1, 25);
+    sheet.setColumnWidth(2, 15);
+    sheet.setColumnWidth(3, 15);
+    sheet.setColumnWidth(4, 15);
+    sheet.setColumnWidth(5, 15);
+    sheet.setColumnWidth(6, 40);
+  }
+
+  void _buildCustomersSheet(Sheet sheet, List<User> customers) {
+    final CellStyle headerStyle = CellStyle(
+      bold: true,
+      horizontalAlign: HorizontalAlign.Center,
+      backgroundColorHex: ExcelColor.fromHexString('#10B981'),
+      fontColorHex: ExcelColor.fromHexString('#FFFFFF'),
+    );
+
+    final headers = ['اسم العميل', 'رقم الهاتف', 'الرصيد الحالي', 'ملاحظات'];
+    for (int i = 0; i < headers.length; i++) {
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0))
+        ..value = TextCellValue(headers[i])
+        ..cellStyle = headerStyle;
+    }
+
+    // Sort customers by balance (highest debt first)
+    final sortedCustomers = List<User>.from(customers)
+      ..sort((a, b) => b.balance.compareTo(a.balance));
+
+    for (int i = 0; i < sortedCustomers.length; i++) {
+      final c = sortedCustomers[i];
+      final rowIdx = i + 1;
+
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: rowIdx)).value = TextCellValue(c.name);
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: rowIdx)).value = TextCellValue(c.phone ?? '');
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: rowIdx)).value = DoubleCellValue(c.balance);
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: rowIdx)).value = TextCellValue(c.notes ?? '');
+    }
+
+    sheet.setColumnWidth(0, 30);
+    sheet.setColumnWidth(1, 20);
+    sheet.setColumnWidth(2, 20);
+    sheet.setColumnWidth(3, 40);
+  }
+
+  CellValue _wrapCellValue(dynamic val) {
+    if (val == null) return TextCellValue('');
+    if (val is String) return TextCellValue(val);
+    if (val is int) return IntCellValue(val);
+    if (val is double) return DoubleCellValue(val);
+    if (val is bool) return BoolCellValue(val);
+    return TextCellValue(val.toString());
+  }
+
+  String _translateStatus(String status) {
+    switch (status.toUpperCase()) {
+      case 'PAID': return 'مدفوع';
+      case 'UNPAID': return 'غير مدفوع';
+      case 'DEFERRED': return 'آجل';
+      case 'PARTIAL': return 'جزئي';
+      default: return status;
+    }
+  }
+
+  Future<String?> _saveExcelWindows(List<int> bytes, String fileName) async {
+    final String? savePath = await FilePicker.platform.saveFile(
+      dialogTitle: 'حفظ تقرير Excel',
+      fileName: fileName,
+      type: FileType.custom,
+      allowedExtensions: ['xlsx'],
+    );
+
+    if (savePath == null) return null;
+
+    final String finalPath = savePath.endsWith('.xlsx') ? savePath : '$savePath.xlsx';
+    final File file = File(finalPath);
+    await file.writeAsBytes(bytes, flush: true);
+    return file.path;
+  }
+
+  Future<String> _writeBytesToFile(List<int> bytes, String fileName) async {
+    final Directory dir = await _getExportDirectory();
+    final File file = File('${dir.path}/$fileName');
+    await file.writeAsBytes(bytes, flush: true);
+    return file.path;
+  }
+
+  Future<void> _shareExcelFile(String filePath) async {
+    final XFile xFile = XFile(filePath, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    await Share.shareXFiles(
+      [xFile],
+      subject: 'Elegant Store — Excel Report',
+      text: 'تقرير فواتير وأرصدة عملاء متجر Elegant Store',
+    );
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // PRIVATE: WINDOWS — Save-As dialog
