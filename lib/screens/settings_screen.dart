@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/database_service.dart';
@@ -21,6 +22,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _usernameController = TextEditingController();
   final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
+
+  bool _obscureCurrentPassword = true;
+  bool _obscureNewPassword = true;
 
   bool _notificationsEnabled = true;
   bool _biometricEnabled = false;
@@ -75,13 +79,78 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _showSnackBar('كلمة المرور قصيرة جداً', Colors.red);
       return;
     }
+    final String newPassword = _newPasswordController.text;
     final auth = context.read<AuthService>();
     final success = await auth.changePassword(
-        _currentPasswordController.text, _newPasswordController.text);
+        _currentPasswordController.text, newPassword);
     if (success) {
       _currentPasswordController.clear();
       _newPasswordController.clear();
       _showSnackBar('تم تغيير كلمة المرور بنجاح', Colors.green);
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text('تنبيه هام',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                SizedBox(width: 8),
+                Icon(Icons.security_rounded, color: Colors.orange),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                const Text(
+                  'تم تغيير كلمة المرور بنجاح. يرجى التأكد من حفظ كلمة المرور الجديدة في مكان آمن للوصول إليها لاحقاً.',
+                  textAlign: TextAlign.right,
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.copy_rounded,
+                            color: Colors.orange),
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: newPassword));
+                          _showSnackBar('تم نسخ كلمة المرور', Colors.blue);
+                        },
+                        tooltip: 'نسخ',
+                      ),
+                      Text(
+                        newPassword,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 18),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('حسناً، لقد حفظتها'),
+              ),
+            ],
+          ),
+        );
+      }
     } else {
       _showSnackBar(
           'فشل تغيير كلمة المرور. تأكد من كلمة المرور الحالية والاتصال.',
@@ -347,12 +416,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // ── Change Password ───────────────────────────────────────────
             _buildSection('تغيير كلمة المرور', isDark, [
               _buildResponsiveInputs(isMobile, isDark, [
-                _buildTextField('كلمة المرور الحالية',
-                    _currentPasswordController, Icons.lock_outline, isDark,
-                    obscure: true),
-                _buildTextField('كلمة المرور الجديدة',
-                    _newPasswordController, Icons.lock_reset, isDark,
-                    obscure: true),
+                _buildTextField(
+                  'كلمة المرور الحالية',
+                  _currentPasswordController,
+                  Icons.lock_outline,
+                  isDark,
+                  obscure: _obscureCurrentPassword,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscureCurrentPassword
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                      color: Colors.grey,
+                      size: 20,
+                    ),
+                    onPressed: () => setState(() =>
+                        _obscureCurrentPassword = !_obscureCurrentPassword),
+                  ),
+                ),
+                _buildTextField(
+                  'كلمة المرور الجديدة',
+                  _newPasswordController,
+                  Icons.lock_reset,
+                  isDark,
+                  obscure: _obscureNewPassword,
+                  suffixIcon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.copy_rounded,
+                            color: Color(0xFF0B74FF), size: 20),
+                        onPressed: () {
+                          if (_newPasswordController.text.isNotEmpty) {
+                            Clipboard.setData(ClipboardData(
+                                text: _newPasswordController.text));
+                            _showSnackBar('تم نسخ كلمة المرور', Colors.blue);
+                          }
+                        },
+                        tooltip: 'نسخ كلمة المرور',
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          _obscureNewPassword
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                          color: Colors.grey,
+                          size: 20,
+                        ),
+                        onPressed: () => setState(
+                            () => _obscureNewPassword = !_obscureNewPassword),
+                      ),
+                    ],
+                  ),
+                ),
               ]),
               const SizedBox(height: 24),
               SizedBox(
@@ -581,7 +697,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildTextField(String label, TextEditingController controller,
       IconData icon, bool isDark,
-      {bool obscure = false}) {
+      {bool obscure = false, Widget? suffixIcon}) {
     return TextField(
       controller: controller,
       obscureText: obscure,
@@ -591,6 +707,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         labelStyle:
             TextStyle(color: isDark ? Colors.grey : Colors.black54),
         prefixIcon: Icon(icon, color: const Color(0xFF0B74FF)),
+        suffixIcon: suffixIcon,
         filled: true,
         fillColor:
             isDark ? const Color(0xFF071028) : Colors.transparent,

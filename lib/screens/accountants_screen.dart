@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
@@ -421,14 +422,86 @@ class _EditAccountantSheetState extends State<_EditAccountantSheet> {
       ).catchError((e) => debugPrint('logActivity failed: $e'));
 
       if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
-          const SnackBar(
-            content: Text('تم تحديث بيانات الموظف بنجاح'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        widget.onSaved();
+        // If password was changed, show alert
+        if (password.isNotEmpty) {
+          await showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20)),
+              title: const Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text('تحديث كلمة المرور',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  SizedBox(width: 8),
+                  Icon(Icons.security_rounded, color: Colors.orange),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'تم تحديث كلمة مرور الموظف "${widget.accountant.name}" بنجاح.\nيرجى التأكد من إبلاغه بكلمة المرور الجديدة:',
+                    textAlign: TextAlign.right,
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.copy_rounded,
+                              color: Colors.orange),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: password));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text('تم نسخ كلمة المرور')),
+                            );
+                          },
+                          tooltip: 'نسخ',
+                        ),
+                        Text(
+                          password,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 18),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('حسناً'),
+                ),
+              ],
+            ),
+          );
+        }
+
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context)
+            ..hideCurrentSnackBar()
+            ..showSnackBar(
+              const SnackBar(
+                content: Text('تم تحديث بيانات الموظف بنجاح'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          widget.onSaved();
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -556,21 +629,45 @@ class _EditAccountantSheetState extends State<_EditAccountantSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('كلمة المرور الجديدة', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+        const Text('كلمة المرور الجديدة',
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
         const SizedBox(height: 6),
         TextField(
           controller: _passwordController,
           obscureText: _obscurePassword,
           style: TextStyle(color: isDark ? Colors.white : Colors.black),
           decoration: InputDecoration(
-            prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFF3B82F6), size: 20),
-            suffixIcon: IconButton(
-              icon: Icon(
-                _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                color: Colors.grey,
-                size: 20,
-              ),
-              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+            prefixIcon: const Icon(Icons.lock_outline,
+                color: Color(0xFF3B82F6), size: 20),
+            suffixIcon: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.copy_rounded,
+                      color: Color(0xFF3B82F6), size: 20),
+                  onPressed: () {
+                    if (_passwordController.text.isNotEmpty) {
+                      Clipboard.setData(
+                          ClipboardData(text: _passwordController.text));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('تم نسخ كلمة المرور')),
+                      );
+                    }
+                  },
+                  tooltip: 'نسخ',
+                ),
+                IconButton(
+                  icon: Icon(
+                    _obscurePassword
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                    color: Colors.grey,
+                    size: 20,
+                  ),
+                  onPressed: () =>
+                      setState(() => _obscurePassword = !_obscurePassword),
+                ),
+              ],
             ),
             filled: true,
             fillColor: isDark ? const Color(0xFF0F172A) : Colors.grey[50],
@@ -578,7 +675,8 @@ class _EditAccountantSheetState extends State<_EditAccountantSheet> {
               borderRadius: BorderRadius.circular(14),
               borderSide: BorderSide.none,
             ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             hintText: '••••••••',
           ),
         ),

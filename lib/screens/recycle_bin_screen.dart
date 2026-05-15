@@ -103,12 +103,6 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
 
     return Scaffold(
       backgroundColor: backgroundColor,
-      appBar: AppBar(
-        centerTitle: true,
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        automaticallyImplyLeading: false,
-      ),
       body: Column(
         children: [
           _buildFilterBar(isDark, cardColor),
@@ -127,7 +121,7 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
   Widget _buildFilterBar(bool isDark, Color cardColor) {
     return Container(
       padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(16),

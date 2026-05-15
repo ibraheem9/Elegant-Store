@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import '../utils/timestamp_formatter.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -17,6 +18,7 @@ class _AddAccountantScreenState extends State<AddAccountantScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _obscurePassword = true;
 
   Future<void> _saveAccountant() async {
     if (_nameController.text.isEmpty || _usernameController.text.isEmpty || _passwordController.text.isEmpty) {
@@ -54,10 +56,81 @@ class _AddAccountantScreenState extends State<AddAccountantScreen> {
       ).catchError((e) => debugPrint('logActivity failed: \$e'));
 
       if (mounted) {
-        ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
-          const SnackBar(content: Text('تمت إضافة الموظف بنجاح'), backgroundColor: Colors.green),
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+                content: Text('تمت إضافة الموظف بنجاح'),
+                backgroundColor: Colors.green),
+          );
+
+        // Show security alert before popping
+        await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text('حفظ بيانات الدخول',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                SizedBox(width: 8),
+                Icon(Icons.security_rounded, color: Colors.orange),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  'تم إنشاء حساب الموظف "${accountant.name}" بنجاح.\nيرجى تسليمه كلمة المرور التالية وحثه على حفظها:',
+                  textAlign: TextAlign.right,
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.copy_rounded,
+                            color: Colors.orange),
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(
+                              text: _passwordController.text));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('تم نسخ كلمة المرور')),
+                          );
+                        },
+                        tooltip: 'نسخ',
+                      ),
+                      Text(
+                        _passwordController.text,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 18),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('حسناً'),
+              ),
+            ],
+          ),
         );
-        Navigator.pop(context, true);
+
+        if (mounted) Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
@@ -118,7 +191,40 @@ class _AddAccountantScreenState extends State<AddAccountantScreen> {
                 const SizedBox(height: 20),
                 _buildField('اسم المستخدم للدخول', _usernameController, Icons.alternate_email, isDark),
                 const SizedBox(height: 20),
-                _buildField('كلمة المرور', _passwordController, Icons.lock, isDark, obscure: true),
+                _buildField(
+                    'كلمة المرور', _passwordController, Icons.lock, isDark,
+                    obscure: _obscurePassword,
+                    suffixIcon: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.copy_rounded,
+                              color: Color(0xFF3B82F6), size: 20),
+                          onPressed: () {
+                            if (_passwordController.text.isNotEmpty) {
+                              Clipboard.setData(ClipboardData(
+                                  text: _passwordController.text));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content: Text('تم نسخ كلمة المرور')),
+                              );
+                            }
+                          },
+                          tooltip: 'نسخ',
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                            color: Colors.grey,
+                            size: 20,
+                          ),
+                          onPressed: () => setState(
+                              () => _obscurePassword = !_obscurePassword),
+                        ),
+                      ],
+                    )),
                 const SizedBox(height: 40),
                 SizedBox(
                   width: double.infinity,
@@ -143,11 +249,14 @@ class _AddAccountantScreenState extends State<AddAccountantScreen> {
     );
   }
 
-  Widget _buildField(String label, TextEditingController controller, IconData icon, bool isDark, {bool obscure = false}) {
+  Widget _buildField(String label, TextEditingController controller,
+      IconData icon, bool isDark,
+      {bool obscure = false, Widget? suffixIcon}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        Text(label,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
         const SizedBox(height: 8),
         TextField(
           controller: controller,
@@ -155,9 +264,12 @@ class _AddAccountantScreenState extends State<AddAccountantScreen> {
           style: TextStyle(color: isDark ? Colors.white : Colors.black),
           decoration: InputDecoration(
             prefixIcon: Icon(icon, color: const Color(0xFF3B82F6)),
+            suffixIcon: suffixIcon,
             filled: true,
             fillColor: isDark ? const Color(0xFF0F172A) : Colors.grey[50],
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none),
             hintText: 'أدخل $label',
           ),
         ),
