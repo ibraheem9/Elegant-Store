@@ -160,6 +160,66 @@ class _PurchasesRecycleBinScreenState
     if (confirmed == true) await _restore(p);
   }
 
+  Future<void> _confirmPermanentDelete(Purchase p) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.delete_forever_rounded,
+                    color: Colors.red, size: 22),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text('حذف نهائي',
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              ),
+            ],
+          ),
+          content: Text(
+            'هل أنت متأكد من حذف "${p.merchantName}" (${p.amount.toStringAsFixed(2)} ₪) بشكل نهائي؟\nلا يمكن التراجع عن هذا الإجراء.',
+            style: const TextStyle(fontSize: 14, height: 1.5),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('إلغاء', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('حذف للأبد',
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed == true) {
+      final db = context.read<DatabaseService>();
+      await db.permanentDeletePurchase(p.id!);
+      _snack('تم حذف الفاتورة نهائياً', Colors.red);
+      await _loadFirstPage();
+    }
+  }
+
   Future<void> _emptyTrash() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -355,9 +415,15 @@ class _PurchasesRecycleBinScreenState
         ? DateFormat('yyyy/MM/dd  hh:mm a', 'ar')
             .format(DateTime.tryParse(p.deletedAt!) ?? DateTime.now())
         : '—';
-    final createdAt = p.createdAt.isNotEmpty
-        ? p.createdAt.toLocalShort()
-        : '—';
+    final createdAt = p.createdAt.isNotEmpty ? p.createdAt.toLocalShort() : '—';
+
+    // Translate payment source
+    String paymentSourceAr = p.paymentSource;
+    if (p.paymentSource.toUpperCase() == 'CASH') {
+      paymentSourceAr = 'نقدي';
+    } else if (p.paymentSource.toUpperCase() == 'APP') {
+      paymentSourceAr = 'تطبيق';
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -384,41 +450,6 @@ class _PurchasesRecycleBinScreenState
             // ── Header row ────────────────────────────────────────────────
             Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.delete_outline_rounded,
-                      color: Colors.red, size: 18),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        p.merchantName,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                          color: isDark ? Colors.white : Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        p.paymentSource,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDark
-                              ? Colors.white.withOpacity(0.5)
-                              : Colors.black.withOpacity(0.4),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
                 // Amount badge
                 Container(
                   padding:
@@ -437,6 +468,65 @@ class _PurchasesRecycleBinScreenState
                     ),
                   ),
                 ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        p.merchantName,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        paymentSourceAr,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark
+                              ? Colors.white.withOpacity(0.5)
+                              : Colors.black.withOpacity(0.4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // ── Individual Actions ──
+                if (isManager)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Restore Button
+                      IconButton(
+                        onPressed: () => _confirmRestore(p),
+                        icon: const Icon(Icons.restore_page_rounded,
+                            color: Colors.green),
+                        tooltip: 'استعادة الفاتورة',
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.green.withOpacity(0.1),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Permanent Delete Button
+                      IconButton(
+                        onPressed: () => _confirmPermanentDelete(p),
+                        icon: const Icon(Icons.delete_forever_rounded,
+                            color: Colors.red),
+                        tooltip: 'حذف نهائي',
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.red.withOpacity(0.1),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ],
+                  ),
               ],
             ),
             const SizedBox(height: 12),
@@ -464,29 +554,6 @@ class _PurchasesRecycleBinScreenState
                 'ملاحظات',
                 p.notes!,
                 isDark,
-              ),
-            ],
-            // ── Restore button (manager/developer only) ───────────────────
-            if (isManager) ...[
-              const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () => _confirmRestore(p),
-                  icon: const Icon(Icons.restore_rounded,
-                      size: 18, color: Colors.green),
-                  label: const Text(
-                    'استعادة',
-                    style: TextStyle(
-                        color: Colors.green, fontWeight: FontWeight.bold),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Colors.green, width: 1.5),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
               ),
             ],
           ],

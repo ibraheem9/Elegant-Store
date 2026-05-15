@@ -2086,6 +2086,12 @@ class DatabaseService {
     );
   }
 
+  /// Permanently delete a purchase from the local database
+  Future<void> permanentDeletePurchase(int purchaseId) async {
+    final db = await database;
+    await db.delete('purchases', where: 'id = ?', whereArgs: [purchaseId]);
+  }
+
   /// Returns all soft-deleted purchases ordered by deletion date desc
   Future<List<Purchase>> getDeletedPurchases() async {
     final db = await database;
