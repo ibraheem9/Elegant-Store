@@ -556,19 +556,15 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     isDark ? const Color(0xFF1E293B) : Colors.grey[50]),
                 columns: [
                   DataColumn(
-                    label: const Text('الزبون',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    label: const Text('الزبون'),
                     onSort: (_, __) => _onSort('name'),
                   ),
                   DataColumn(
-                    label: const Text('الرصيد',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    label: const Text('الرصيد'),
                     onSort: (_, __) => _onSort('balance'),
                   ),
                   if (canEdit)
-                    const DataColumn(
-                        label: Text('إجراء',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                    const DataColumn(label: Text('إجراء')),
                 ],
                 rows: displayed.map((c) {
                   final isVerified = c.creditLimit == -1;
@@ -589,8 +585,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
                               Row(mainAxisSize: MainAxisSize.min, children: [
                                 Flexible(
                                   child: Text(c.name,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold, fontSize: 13),
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold, 
+                                          fontSize: 13,
+                                          color: isDark ? Colors.white : Colors.black87),
                                       overflow: TextOverflow.ellipsis),
                                 ),
                                 if (isVerified) ...[

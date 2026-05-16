@@ -85,6 +85,19 @@ class AppThemes {
         borderSide: const BorderSide(color: AppColors.lightPrimary, width: 2),
       ),
     ),
+    dataTableTheme: DataTableThemeData(
+      headingTextStyle: const TextStyle(
+        color: AppColors.lightOnBackground,
+        fontWeight: FontWeight.bold,
+        fontSize: 14,
+        fontFamily: 'Cairo',
+      ),
+      dataTextStyle: const TextStyle(
+        color: AppColors.lightOnBackground,
+        fontSize: 14,
+        fontFamily: 'Cairo',
+      ),
+    ),
   );
 
   static final ThemeData darkTheme = ThemeData(
@@ -168,6 +181,19 @@ class AppThemes {
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: AppColors.darkPrimary, width: 2),
+      ),
+    ),
+    dataTableTheme: DataTableThemeData(
+      headingTextStyle: const TextStyle(
+        color: AppColors.darkOnBackground,
+        fontWeight: FontWeight.bold,
+        fontSize: 14,
+        fontFamily: 'Cairo',
+      ),
+      dataTextStyle: const TextStyle(
+        color: AppColors.darkOnBackground,
+        fontSize: 14,
+        fontFamily: 'Cairo',
       ),
     ),
   );
