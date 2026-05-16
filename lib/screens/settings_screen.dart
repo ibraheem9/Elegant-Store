@@ -8,6 +8,7 @@ import '../services/export_service.dart';
 import '../services/import_service.dart';
 import '../services/theme_service.dart';
 import '../services/notification_service.dart';
+import '../services/telemetry_service.dart';
 import '../models/models.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -22,6 +23,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _usernameController = TextEditingController();
   final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
+
+  final _storeNameController = TextEditingController();
+  final _storeOwnerNameController = TextEditingController();
+  final _storeAddressController = TextEditingController();
+  final _storeCityController = TextEditingController();
+  final _storePhoneController = TextEditingController();
+  final _storeWhatsappController = TextEditingController();
 
   bool _obscureCurrentPassword = true;
   bool _obscureNewPassword = true;
@@ -44,6 +52,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final auth = context.read<AuthService>();
     _nameController.text = auth.currentUser?.name ?? '';
     _usernameController.text = auth.currentUser?.username ?? '';
+
+    final db = context.read<DatabaseService>();
+    final storeProfile = await db.getOwnerProfile();
+    if (storeProfile != null) {
+      _storeNameController.text = storeProfile.storeName;
+      _storeOwnerNameController.text = storeProfile.ownerName;
+      _storeAddressController.text = storeProfile.address;
+      _storeCityController.text = storeProfile.city;
+      _storePhoneController.text = storeProfile.phoneNumber;
+      _storeWhatsappController.text = storeProfile.whatsappNumber;
+    }
 
     final prefs = await SharedPreferences.getInstance();
     final canBio = await auth.canCheckBiometrics();
@@ -71,6 +90,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } else {
       _showSnackBar(
           'فشل تحديث الملف الشخصي. تأكد من الاتصال بالإنترنت.', Colors.red);
+    }
+  }
+
+  Future<void> _updateStoreProfile() async {
+    try {
+      final telemetry = context.read<TelemetryService>();
+      await telemetry.updateAndUploadProfile(
+        storeName: _storeNameController.text.trim(),
+        ownerName: _storeOwnerNameController.text.trim(),
+        address: _storeAddressController.text.trim(),
+        city: _storeCityController.text.trim(),
+        phoneNumber: _storePhoneController.text.trim(),
+        whatsappNumber: _storeWhatsappController.text.trim(),
+      );
+      _showSnackBar('تم تحديث بيانات المتجر بنجاح', Colors.green);
+    } catch (e) {
+      _showSnackBar('خطأ في تحديث بيانات المتجر: $e', Colors.red);
     }
   }
 
@@ -384,6 +420,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 32),
 
+            // ── Store Profile ─────────────────────────────────────────────
+            _buildSection('بيانات المتجر والمالك', isDark, [
+              _buildResponsiveInputs(isMobile, isDark, [
+                _buildTextField('اسم المتجر', _storeNameController,
+                    Icons.shop_two_rounded, isDark),
+                _buildTextField('اسم صاحب المتجر', _storeOwnerNameController,
+                    Icons.person_pin_rounded, isDark),
+              ]),
+              const SizedBox(height: 16),
+              _buildResponsiveInputs(isMobile, isDark, [
+                _buildTextField('المدينة', _storeCityController,
+                    Icons.location_city_rounded, isDark),
+                _buildTextField('العنوان', _storeAddressController,
+                    Icons.map_rounded, isDark),
+              ]),
+              const SizedBox(height: 16),
+              _buildResponsiveInputs(isMobile, isDark, [
+                _buildTextField('رقم الهاتف', _storePhoneController,
+                    Icons.phone_android_rounded, isDark),
+                _buildTextField('رقم الواتساب', _storeWhatsappController,
+                    Icons.chat_rounded, isDark),
+              ]),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _updateStoreProfile,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('تحديث بيانات المتجر',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ]),
+
+            const SizedBox(height: 32),
+
             // ── Profile ───────────────────────────────────────────────────
             _buildSection('الملف الشخصي', isDark, [
               _buildResponsiveInputs(isMobile, isDark, [
@@ -608,6 +687,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             if (auth.isDeveloper()) ...[
               const SizedBox(height: 32),
               _buildSection('إدارة متقدمة (للمطور)', isDark, [
+                /*
                 ListTile(
                   title: const Text('إعادة ضبط حالة المزامنة',
                       style: TextStyle(fontWeight: FontWeight.bold)),
@@ -621,6 +701,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         'تمت إعادة ضبط المزامنة', Colors.blue);
                   },
                 ),
+                */
               ]),
             ],
 

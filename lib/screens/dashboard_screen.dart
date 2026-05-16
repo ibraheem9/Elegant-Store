@@ -21,6 +21,7 @@ import 'accountants_screen.dart';
 import 'sync_details_screen.dart';
 import 'customer_balances_screen.dart';
 import 'unpaid_invoices_screen.dart';
+import 'store_profile_screen.dart';
 import 'contact_us_screen.dart';
 import 'about_us_screen.dart';
 
@@ -53,8 +54,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 10: return PurchasesMethodsScreen(key: _purchasesMethodsKey);
       case 11: return const RecycleBinScreen();
       case 12: return const SettingsScreen();
-      case 13: return const ContactUsScreen();
-      case 14: return const AboutUsScreen();
+      case 13: return const StoreProfileScreen();
+      case 14: return const ContactUsScreen();
+      case 15: return const AboutUsScreen();
       default: return const DashboardHomeScreen();
     }
   }
@@ -74,8 +76,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 10: return 'طرق دفع المشتريات';
       case 11: return 'سلة المحذوفات';
       case 12: return 'الإعدادات والسمة';
-      case 13: return 'تواصل معنا';
-      case 14: return 'عن المطور';
+      case 13: return 'ملف المتجر';
+      case 14: return 'تواصل معنا';
+      case 15: return 'عن المطور';
       default: return 'Elegant Store';
     }
   }
@@ -147,8 +150,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _buildSidebarItem(10, 'طرق دفع المشتريات', Icons.account_balance_rounded),
                 _buildSidebarItem(11, 'سلة المحذوفات', Icons.delete_sweep_rounded),
                 _buildSidebarItem(12, 'الإعدادات والسمة', Icons.settings_rounded),
-                _buildSidebarItem(13, 'تواصل معنا', Icons.contact_support_rounded),
-                _buildSidebarItem(14, 'عن المطور', Icons.info_outline_rounded),
+                _buildSidebarItem(13, 'ملف المتجر', Icons.store_rounded),
+                _buildSidebarItem(14, 'تواصل معنا', Icons.contact_support_rounded),
+                _buildSidebarItem(15, 'عن المطور', Icons.info_outline_rounded),
               ],
             ),
           ),
@@ -192,8 +196,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _buildSidebarItem(10, 'طرق دفع المشتريات', Icons.account_balance_rounded),
                 _buildSidebarItem(11, 'سلة المحذوفات', Icons.delete_sweep_rounded),
                 _buildSidebarItem(12, 'الإعدادات والسمة', Icons.settings_rounded),
-                _buildSidebarItem(13, 'تواصل معنا', Icons.contact_support_rounded),
-                _buildSidebarItem(14, 'عن المطور', Icons.info_outline_rounded),
+                _buildSidebarItem(13, 'ملف المتجر', Icons.store_rounded),
+                _buildSidebarItem(14, 'تواصل معنا', Icons.contact_support_rounded),
+                _buildSidebarItem(15, 'عن المطور', Icons.info_outline_rounded),
               ],
             ),
           ),
@@ -225,6 +230,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         const NavigationRailDestination(icon: Icon(Icons.payment_rounded, color: Colors.white60), selectedIcon: Icon(Icons.payment_rounded, color: Colors.blue), label: Text('طرق الدفع')),
         const NavigationRailDestination(icon: Icon(Icons.delete_sweep_rounded, color: Colors.white60), selectedIcon: Icon(Icons.delete_sweep_rounded, color: Colors.blue), label: Text('المحذوفات')),
         const NavigationRailDestination(icon: Icon(Icons.settings_rounded, color: Colors.white60), selectedIcon: Icon(Icons.settings_rounded, color: Colors.blue), label: Text('الإعدادات')),
+        const NavigationRailDestination(icon: Icon(Icons.store_rounded, color: Colors.white60), selectedIcon: Icon(Icons.store_rounded, color: Colors.blue), label: Text('ملف المتجر')),
       ],
     );
   }
@@ -517,9 +523,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
 
-    if (confirmed != true || !mounted) return;
+    // if (confirmed != true || !mounted) return;
 
     // Show a non-dismissible sync progress dialog
+    /*
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -550,13 +557,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ),
     );
+    */
 
     // Run sync then logout (non-blocking if offline)
     final auth = context.read<AuthService>();
     await auth.logout();
 
     // Close the progress dialog if still open
-    if (mounted) Navigator.of(context, rootNavigator: true).pop();
+    // if (mounted) Navigator.of(context, rootNavigator: true).pop();
   }
 }
 
@@ -569,23 +577,25 @@ class DashboardHomeScreen extends StatefulWidget {
 
 class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
   String _syncStatus = "جاهز للمزامنة";
-  SyncService? _syncService;
+  // SyncService? _syncService;
 
   @override
   void initState() {
     super.initState();
     
+    /*
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _syncService = context.read<SyncService>();
         _syncService!.addListener(_onSyncStatusChanged);
       }
     });
+    */
   }
 
   @override
   void dispose() {
-    _syncService?.removeListener(_onSyncStatusChanged);
+    // _syncService?.removeListener(_onSyncStatusChanged);
     super.dispose();
   }
 
@@ -594,6 +604,7 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
   }
 
   Future<void> _handleSync() async {
+    /*
     final syncService = context.read<SyncService>();
     final syncManager = context.read<SyncManager>();
 
@@ -626,6 +637,7 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
         });
       }
     }
+    */
   }
 
   void _openSyncDetails() {
@@ -644,27 +656,27 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
     int crossAxisCount = (size.width > 1400) ? 4 : 2;
     final db = context.read<DatabaseService>();
 
-    return Consumer<SyncService>(
-      builder: (context, syncService, _) {
-        return SingleChildScrollView(
-          padding: EdgeInsets.all(isMobile ? 16 : 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(isMobile ? 16 : 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          /*
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  _buildSyncButton(isDark, syncService.isSyncing || context.read<SyncManager>().isSyncing),
-                ],
-              ),
-              if (syncService.isSyncing || context.read<SyncManager>().isSyncing || _syncStatus.contains('فشلت') || _syncStatus.contains('نجاح')) ...[
-                const SizedBox(height: 16),
-                _buildSyncProgress(isDark, syncService.isSyncing || context.read<SyncManager>().isSyncing),
-              ],
-              const SizedBox(height: 24),
-              _buildLastSyncDetails(isDark, isMobile),
-              const SizedBox(height: 32),
-              FutureBuilder<Map<String, dynamic>>(
+              _buildSyncButton(isDark, syncService.isSyncing || context.read<SyncManager>().isSyncing),
+            ],
+          ),
+          if (syncService.isSyncing || context.read<SyncManager>().isSyncing || _syncStatus.contains('فشلت') || _syncStatus.contains('نجاح')) ...[
+            const SizedBox(height: 16),
+            _buildSyncProgress(isDark, syncService.isSyncing || context.read<SyncManager>().isSyncing),
+          ],
+          const SizedBox(height: 24),
+          _buildLastSyncDetails(isDark, isMobile),
+          const SizedBox(height: 32),
+          */
+          FutureBuilder<Map<String, dynamic>>(
                 future: db.getGlobalStats(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) return const LinearProgressIndicator();
@@ -706,8 +718,6 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
             ],
           ),
         );
-      }
-    );
   }
 
   Widget _buildSyncButton(bool isDark, bool isSyncing) {

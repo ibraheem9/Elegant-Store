@@ -23,7 +23,7 @@ enum LoginResult {
 
 class AuthService extends ChangeNotifier {
   final DatabaseService _dbService;
-  final SyncService _syncService;
+  final SyncService? _syncService;
   final LocalAuthentication _localAuth = LocalAuthentication();
   final Dio _dio = Dio(BaseOptions(
     baseUrl: ApiConfig.baseUrl,
@@ -88,14 +88,15 @@ class AuthService extends ChangeNotifier {
         _isLoggedIn = true;
         notifyListeners();
         // Start background auto-sync every 10 minutes (session resume)
-        _syncService.startAutoSync();
+        // _syncService?.startAutoSync();
         // Fire-and-forget sync — never block startup
+        /*
         Future.microtask(() async {
           try {
-            final isOnline = await _syncService.checkConnectivity()
+            final isOnline = await _syncService!.checkConnectivity()
                 .timeout(const Duration(seconds: 3), onTimeout: () => false);
             if (isOnline) {
-              _syncService.performFullSync().catchError((e) {
+              _syncService!.performFullSync().catchError((e) {
                 dev.log('Session init sync failed: $e', name: 'AuthService');
               });
             } else {
@@ -105,6 +106,7 @@ class AuthService extends ChangeNotifier {
             dev.log('Connectivity check failed: $e', name: 'AuthService');
           }
         });
+        */
       }
     }
   }
@@ -216,7 +218,7 @@ class AuthService extends ChangeNotifier {
 
         notifyListeners();
         // Start background auto-sync every 10 minutes
-        _syncService.startAutoSync();
+        // _syncService?.startAutoSync();
         // Initial sync is triggered by LoginScreen on first login so the UI
         // can display a loading message. Subsequent logins use session init sync.
         return LoginResult.success;
@@ -270,7 +272,7 @@ class AuthService extends ChangeNotifier {
 
   Future<void> logout() async {
     // 1. Sync any unsynced data before signing out (non-blocking if offline)
-    await _syncService.syncBeforeLogout();
+    // await _syncService?.syncBeforeLogout();
 
     // 2. Invalidate server token
     try {
@@ -321,6 +323,7 @@ class AuthService extends ChangeNotifier {
       notifyListeners();
 
       // Attempt remote sync in the background — failure is silent.
+      /*
       if (_token != null) {
         _dio.put(
           'me',
@@ -334,6 +337,7 @@ class AuthService extends ChangeNotifier {
           dev.log('Profile remote sync failed (offline): $e', name: 'AuthService');
         });
       }
+      */
       return true;
     } catch (e) {
       dev.log('updateProfile error: $e', name: 'AuthService');

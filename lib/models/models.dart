@@ -569,3 +569,88 @@ class UnpaidRow {
     required this.balance,
   });
 }
+
+// App Owner Profile Model (Telemetry)
+class AppOwnerProfile {
+  final int? id;
+  final String deviceId;
+  final String storeName;
+  final String ownerName;
+  final String address;
+  final String city;
+  final String phoneNumber;
+  final String whatsappNumber;
+  final String deviceModel;
+  final String deviceOs;
+  final double? latitude;
+  final double? longitude;
+  final int totalCustomers;
+  final int totalInvoices;
+  final String lastActiveAt;
+  final int isUploaded;
+  final String updatedAt;
+
+  AppOwnerProfile({
+    this.id,
+    required this.deviceId,
+    required this.storeName,
+    required this.ownerName,
+    required this.address,
+    required this.city,
+    required this.phoneNumber,
+    required this.whatsappNumber,
+    required this.deviceModel,
+    required this.deviceOs,
+    this.latitude,
+    this.longitude,
+    this.totalCustomers = 0,
+    this.totalInvoices = 0,
+    required this.lastActiveAt,
+    this.isUploaded = 0,
+    String? updatedAt,
+  }) : this.updatedAt = updatedAt ?? TimestampFormatter.nowUtc();
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'device_id': deviceId,
+      'store_name': storeName,
+      'owner_name': ownerName,
+      'address': address,
+      'city': city,
+      'phone_number': phoneNumber,
+      'whatsapp_number': whatsappNumber,
+      'device_model': deviceModel,
+      'device_os': deviceOs,
+      'latitude': latitude,
+      'longitude': longitude,
+      'total_customers': totalCustomers,
+      'total_invoices': totalInvoices,
+      'last_active_at': lastActiveAt,
+      'is_uploaded': isUploaded,
+      'updated_at': updatedAt,
+    };
+  }
+
+  factory AppOwnerProfile.fromMap(Map<String, dynamic> map) {
+    return AppOwnerProfile(
+      id: map['id'],
+      deviceId: map['device_id'] ?? '',
+      storeName: map['store_name'] ?? '',
+      ownerName: map['owner_name'] ?? '',
+      address: map['address'] ?? '',
+      city: map['city'] ?? '',
+      phoneNumber: map['phone_number'] ?? '',
+      whatsappNumber: map['whatsapp_number'] ?? '',
+      deviceModel: map['device_model'] ?? '',
+      deviceOs: map['device_os'] ?? '',
+      latitude: map['latitude'] != null ? (map['latitude'] as num).toDouble() : null,
+      longitude: map['longitude'] != null ? (map['longitude'] as num).toDouble() : null,
+      totalCustomers: map['total_customers'] ?? 0,
+      totalInvoices: map['total_invoices'] ?? 0,
+      lastActiveAt: map['last_active_at'] ?? '',
+      isUploaded: map['is_uploaded'] ?? 0,
+      updatedAt: map['updated_at'] ?? '',
+    );
+  }
+}

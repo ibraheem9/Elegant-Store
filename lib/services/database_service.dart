@@ -60,7 +60,7 @@ class DatabaseService {
 
     final db = await openDatabase(
       path,
-      version: 9,
+      version: 10,
       onCreate: (db, version) async {
         await _createTables(db);
         await _createTriggers(db);
@@ -218,6 +218,28 @@ class DatabaseService {
             )
             WHERE role = 'CUSTOMER' AND deleted_at IS NULL
           ''');
+        }
+        if (oldVersion < 10) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS app_owner_profile (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              device_id TEXT UNIQUE NOT NULL,
+              store_name TEXT,
+              owner_name TEXT,
+              address TEXT,
+              city TEXT,
+              phone_number TEXT,
+              whatsapp_number TEXT,
+              device_model TEXT,
+              device_os TEXT,
+              latitude REAL,
+              longitude REAL,
+              total_customers INTEGER DEFAULT 0,
+              total_invoices INTEGER DEFAULT 0,
+              last_active_at TEXT,
+              is_uploaded INTEGER DEFAULT 0,
+              updated_at TEXT NOT NULL
+            )''');
         }
       },
     );
@@ -383,6 +405,27 @@ class DatabaseService {
     // v9: Local notifications table — one row per (customer_id, type)
     await db.execute(NotificationRepository.createTableSql);
     await db.execute(NotificationRepository.createIndexSql);
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS app_owner_profile (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_id TEXT UNIQUE NOT NULL,
+        store_name TEXT,
+        owner_name TEXT,
+        address TEXT,
+        city TEXT,
+        phone_number TEXT,
+        whatsapp_number TEXT,
+        device_model TEXT,
+        device_os TEXT,
+        latitude REAL,
+        longitude REAL,
+        total_customers INTEGER DEFAULT 0,
+        total_invoices INTEGER DEFAULT 0,
+        last_active_at TEXT,
+        is_uploaded INTEGER DEFAULT 0,
+        updated_at TEXT NOT NULL
+      )''');
   }
 
   Future<void> _createTriggers(Database db) async {
@@ -2880,5 +2923,33 @@ class DatabaseService {
     );
     final statsCount = (statsResult.first['cnt'] as int?) ?? 0;
     return statsCount > 0;
+  }
+
+  // ── App Owner Profile (Telemetry) ───────────────────────────────────────────
+
+  Future<AppOwnerProfile?> getOwnerProfile() async {
+    final db = await database;
+    final r = await db.query('app_owner_profile', limit: 1);
+    if (r.isNotEmpty) return AppOwnerProfile.fromMap(r.first);
+    return null;
+  }
+
+  Future<void> upsertOwnerProfile(AppOwnerProfile profile) async {
+    final db = await database;
+    await db.insert(
+      'app_owner_profile',
+      profile.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<Map<String, int>> getTelemetryStats() async {
+    final db = await database;
+    final customers = Sqflite.firstIntValue(await db.rawQuery("SELECT COUNT(*) FROM users WHERE role = 'CUSTOMER' AND deleted_at IS NULL")) ?? 0;
+    final invoices = Sqflite.firstIntValue(await db.rawQuery("SELECT COUNT(*) FROM invoices WHERE deleted_at IS NULL")) ?? 0;
+    return {
+      'total_customers': customers,
+      'total_invoices': invoices,
+    };
   }
 }

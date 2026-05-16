@@ -8,6 +8,9 @@ import 'package:workmanager/workmanager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
 
+import 'services/telemetry_service.dart';
+import 'screens/profile_setup_screen.dart';
+import 'models/models.dart';
 import 'services/database_service.dart';
 import 'services/auth_service.dart';
 import 'services/theme_service.dart';
@@ -24,49 +27,19 @@ import 'core/config/api_config.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-const String syncTaskName = "com.elegantstore.sync_task";
+const String telemetryTaskName = "com.elegantstore.telemetry_task";
 
   @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
     try {
-      if (Platform.isWindows) return Future.value(true);
-
       final dbService = DatabaseService();
-      final prefs = await SharedPreferences.getInstance();
+      final telemetryService = TelemetryService(dbService);
       
-      // Use new device sync service with proper baseUrl
-      final dio = Dio(
-        BaseOptions(
-          baseUrl: ApiConfig.baseUrl,
-          connectTimeout: const Duration(seconds: 30),
-          receiveTimeout: const Duration(seconds: 30),
-        ),
-      );
-      final token = prefs.getString('auth_token');
-      if (token != null) {
-        dio.options.headers['Authorization'] = 'Bearer $token';
-      }
-      
-      final syncService = SyncService(dbService, prefs);
-      final deviceSyncService = DeviceSyncService(
-        dio: dio,
-        authService: AuthService(dbService, syncService),
-        databaseService: dbService,
-      );
-      
-      // Push local changes first
-      try {
-        await syncService.performFullSync();
-      } catch (e) {
-        debugPrint('Background sync (push) failed: $e');
-      }
-
-      // Then pull updates
-      await deviceSyncService.performFullSyncDefault();
+      await telemetryService.syncInBackground();
       return Future.value(true);
     } catch (e) {
-      debugPrint('Background sync failed: $e');
+      debugPrint('Background telemetry failed: $e');
       return Future.value(false);
     }
   });
@@ -147,7 +120,9 @@ void main() async {
         ChangeNotifierProvider<SyncService>(create: (_) => syncService),
         ChangeNotifierProvider<AuthService>(create: (_) => authService),
         ChangeNotifierProvider<ThemeNotifier>(create: (_) => ThemeNotifier()),
+        ChangeNotifierProvider<TelemetryService>(create: (_) => TelemetryService(dbService)),
         // Add DeviceSyncService provider
+        /* 
         ProxyProvider<AuthService, DeviceSyncService>(
           update: (_, authService, __) {
             final dio = Dio(
@@ -168,7 +143,9 @@ void main() async {
             );
           },
         ),
+        */
         // Add SyncManager provider
+        /*
         ProxyProvider3<DeviceSyncService, DatabaseService, SyncService, SyncManager>(
           update: (_, deviceSyncService, databaseService, syncService, __) {
             return SyncManager(
@@ -180,6 +157,7 @@ void main() async {
             );
           },
         ),
+        */
       ],
       child: ElegantStoreApp(isLicensed: licenseResult.isValid),
     ),
@@ -198,9 +176,9 @@ void _initWorkmanager() {
       });
 
       await Workmanager().registerPeriodicTask(
-        "1",
-        syncTaskName,
-        frequency: const Duration(hours: 1),
+        "telemetry-1",
+        telemetryTaskName,
+        frequency: const Duration(hours: 4),
         constraints: Constraints(
           networkType: NetworkType.connected,
         ),
@@ -291,7 +269,18 @@ class _AppHomeState extends State<_AppHome> with WidgetsBindingObserver {
 
     _postLoginSyncTriggered = true;
 
-    // Trigger device sync
+    // Trigger telemetry background sync on start
+    Future.microtask(() async {
+      try {
+        final telemetry = context.read<TelemetryService>();
+        await telemetry.syncInBackground();
+      } catch (e) {
+        debugPrint('Initial telemetry sync failed: $e');
+      }
+    });
+
+    // Trigger device sync - Commented out for product branch
+    /*
     Future.microtask(() async {
       try {
         final syncManager = context.read<SyncManager>();
@@ -303,6 +292,7 @@ class _AppHomeState extends State<_AppHome> with WidgetsBindingObserver {
         debugPrint('Post-login sync failed: $e');
       }
     });
+    */
   }
 
   @override
@@ -310,6 +300,7 @@ class _AppHomeState extends State<_AppHome> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       final authService = context.read<AuthService>();
       if (authService.isLoggedIn) {
+        /*
         Future.microtask(() async {
           try {
             final syncManager = context.read<SyncManager>();
@@ -323,15 +314,32 @@ class _AppHomeState extends State<_AppHome> with WidgetsBindingObserver {
             debugPrint('App resume sync failed: $e');
           }
         });
+        */
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Listen to telemetry service changes
+    context.watch<TelemetryService>();
+    
     return Consumer<AuthService>(
       builder: (context, authService, _) {
-        return authService.isLoggedIn ? const DashboardScreen() : const LoginScreen();
+        if (!authService.isLoggedIn) return const LoginScreen();
+        
+        return FutureBuilder<AppOwnerProfile?>(
+          future: context.read<DatabaseService>().getOwnerProfile(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData && snapshot.connectionState == ConnectionState.waiting) {
+               return const Scaffold(body: Center(child: CircularProgressIndicator()));
+            }
+            final profile = snapshot.data;
+            return profile == null 
+                ? const ProfileSetupScreen() 
+                : const DashboardScreen();
+          },
+        );
       },
     );
   }

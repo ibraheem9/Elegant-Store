@@ -98,33 +98,33 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
         );
       },
     );
-    if (confirmed != true) return;
-    setState(() => _isRestoring = true);
-    try {
-      final syncService = context.read<SyncService>();
-      await syncService.performFullRestore();
-      await _loadStats();
-      if (mounted) {
-        ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
-          const SnackBar(
-            content: Text('تمت الاستعادة الكاملة من السيرفر بنجاح ✓'),
-            backgroundColor: Colors.teal,
-            duration: Duration(seconds: 4),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
-          SnackBar(
-            content: Text('فشلت الاستعادة: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isRestoring = false);
-    }
+    // if (confirmed != true) return;
+    // setState(() => _isRestoring = true);
+    // try {
+    //   final syncService = context.read<SyncService>();
+    //   await syncService.performFullRestore();
+    //   await _loadStats();
+    //   if (mounted) {
+    //     ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
+    //       const SnackBar(
+    //         content: Text('تمت الاستعادة الكاملة من السيرفر بنجاح ✓'),
+    //         backgroundColor: Colors.teal,
+    //         duration: Duration(seconds: 4),
+    //       ),
+    //     );
+    //   }
+    // } catch (e) {
+    //   if (mounted) {
+    //     ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
+    //       SnackBar(
+    //         content: Text('فشلت الاستعادة: $e'),
+    //         backgroundColor: Colors.red,
+    //       ),
+    //     );
+    //   }
+    // } finally {
+    //   if (mounted) setState(() => _isRestoring = false);
+    // }
   }
 
   Future<void> _confirmAndReset() async {
@@ -627,10 +627,12 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
   Widget _buildActionButtons(bool isDark) {
     return Consumer<SyncService>(
       builder: (context, syncService, _) {
-        final isRestoring = _isRestoring || (syncService.isSyncing && syncService.restoreProgress > 0);
-        final progress = syncService.restoreProgress;
-        final statusText = syncService.restoreStatus;
+        // final isRestoring = _isRestoring || (syncService.isSyncing && syncService.restoreProgress > 0);
+        // final progress = syncService.restoreProgress;
+        // final statusText = syncService.restoreStatus;
 
+        return const SizedBox.shrink();
+        /*
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -714,6 +716,7 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
             const SizedBox(height: 12),
           ],
         );
+        */
       },
     );
   }

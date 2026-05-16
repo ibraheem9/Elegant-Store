@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
-import '../services/sync_service.dart';
+// import '../services/sync_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -71,7 +71,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
-      final syncService = Provider.of<SyncService>(context, listen: false);
+      // final syncService = Provider.of<SyncService>(context, listen: false);
 
       // Step 1: Online API authentication
       // NOTE: _isFirstLogin() is intentionally checked AFTER authService.login()
@@ -108,6 +108,7 @@ class _LoginScreenState extends State<LoginScreen> {
       final bool firstLogin = await _isFirstLogin();
 
       // Step 3: On first login (or after user/store switch), run full sync
+      /*
       if (firstLogin && mounted) {
         setState(() => _syncStatusMessage = 'جاري تحميل بيانات المتجر...');
         try {
@@ -122,6 +123,7 @@ class _LoginScreenState extends State<LoginScreen> {
           debugPrint('Initial sync failed on first login: $e');
         }
       }
+      */
 
       // Navigation is handled automatically by Consumer<AuthService> in main.dart
     } catch (e) {
