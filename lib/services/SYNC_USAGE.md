@@ -48,7 +48,7 @@ void main() async {
   final syncManager = SyncManager(
     deviceSyncService: deviceSyncService,
     databaseService: databaseService,
-    syncInterval: Duration(minutes: 15),
+    syncInterval: Duration(hours: 1),
     maxRetries: 3,
   );
   

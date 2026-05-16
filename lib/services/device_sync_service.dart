@@ -291,14 +291,14 @@ class DeviceSyncService {
       );
 
       if (response.statusCode == 200 && response.data['success'] == true) {
-        final changedRecords = response.data['changed_records'] as Map?;
+        final changedRecords = _safeMap(response.data['changed_records']);
         final recordCount = response.data['record_count'] as int? ?? 0;
 
         debugPrint(
             '[DeviceSync] Got $recordCount changed records from ${tables.length} tables');
         onRecordsReceived?.call(recordCount);
 
-        return changedRecords?.cast<String, dynamic>() ?? {};
+        return changedRecords;
       }
 
       return {};
@@ -393,8 +393,8 @@ class DeviceSyncService {
       final response = await _dio.get('sync/device/list');
 
       if (response.statusCode == 200 && response.data['success'] == true) {
-        final devices = response.data['devices'] as List?;
-        return devices?.cast<Map<String, dynamic>>() ?? [];
+        final devices = _safeList(response.data['devices']);
+        return devices.cast<Map<String, dynamic>>();
       }
 
       return [];
@@ -466,6 +466,26 @@ class DeviceSyncService {
     return 'UTC';
   }
 
+  // ── SAFE TYPE HELPERS ───────────────────────────────────────────────────
+
+  Map<String, dynamic> _safeMap(dynamic value) {
+    if (value == null) return {};
+    if (value is Map) return Map<String, dynamic>.from(value);
+    // Laravel/PHP converts empty associative arrays to [] in JSON
+    if (value is List && value.isEmpty) return {};
+    return {};
+  }
+
+  List<dynamic> _safeList(dynamic value) {
+    if (value == null) return [];
+    if (value is List) return value;
+    // Conversely, handle empty objects if they should be lists
+    if (value is Map && value.isEmpty) return [];
+    return [];
+  }
+
+  // ────────────────────────────────────────────────────────────────────────
+
   /// Perform full sync cycle
   Future<bool> performFullSync(List<String> tables) async {
     try {
@@ -527,10 +547,10 @@ class DeviceSyncService {
         data: {'device_id': deviceId, 'tables': tables},
       );
       if (response.statusCode == 200 && response.data['success'] == true) {
-        final changedRecords = response.data['changed_records'] as Map?;
+        final changedRecords = _safeMap(response.data['changed_records']);
         final recordCount = response.data['record_count'] as int? ?? 0;
         onRecordsReceived?.call(recordCount);
-        return changedRecords?.cast<String, dynamic>() ?? {};
+        return changedRecords;
       }
       return {};
     } on DioException catch (e) {
@@ -595,9 +615,9 @@ class DeviceSyncService {
 
       for (final entry in changedRecords.entries) {
         final tableName = entry.key;
-        final records = entry.value as List?;
+        final records = _safeList(entry.value);
 
-        if (records == null || records.isEmpty) continue;
+        if (records.isEmpty) continue;
 
         // Save each record to local SQLite database
         for (final record in records) {

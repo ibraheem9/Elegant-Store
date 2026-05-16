@@ -48,12 +48,21 @@ void callbackDispatcher() {
         dio.options.headers['Authorization'] = 'Bearer $token';
       }
       
+      final syncService = SyncService(dbService, prefs);
       final deviceSyncService = DeviceSyncService(
         dio: dio,
-        authService: AuthService(dbService, SyncService(dbService, prefs)),
+        authService: AuthService(dbService, syncService),
         databaseService: dbService,
       );
       
+      // Push local changes first
+      try {
+        await syncService.performFullSync();
+      } catch (e) {
+        debugPrint('Background sync (push) failed: $e');
+      }
+
+      // Then pull updates
       await deviceSyncService.performFullSyncDefault();
       return Future.value(true);
     } catch (e) {
@@ -160,12 +169,13 @@ void main() async {
           },
         ),
         // Add SyncManager provider
-        ProxyProvider2<DeviceSyncService, DatabaseService, SyncManager>(
-          update: (_, deviceSyncService, databaseService, __) {
+        ProxyProvider3<DeviceSyncService, DatabaseService, SyncService, SyncManager>(
+          update: (_, deviceSyncService, databaseService, syncService, __) {
             return SyncManager(
               deviceSyncService: deviceSyncService,
               databaseService: databaseService,
-              syncInterval: const Duration(minutes: 15),
+              syncService: syncService,
+              syncInterval: const Duration(hours: 1),
               maxRetries: 3,
             );
           },
@@ -190,7 +200,7 @@ void _initWorkmanager() {
       await Workmanager().registerPeriodicTask(
         "1",
         syncTaskName,
-        frequency: const Duration(minutes: 15),
+        frequency: const Duration(hours: 1),
         constraints: Constraints(
           networkType: NetworkType.connected,
         ),

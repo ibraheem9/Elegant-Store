@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'device_sync_service.dart';
 import 'database_service.dart';
+import 'sync_service.dart';
 
 /// SyncManager
 ///
@@ -9,7 +10,7 @@ import 'database_service.dart';
 /// and conflict resolution.
 class SyncManager {
   final DeviceSyncService _deviceSyncService;
-  final DatabaseService _databaseService;
+  final SyncService _syncService;
 
   // Configuration
   final Duration _syncInterval;
@@ -41,11 +42,12 @@ class SyncManager {
   SyncManager({
     required DeviceSyncService deviceSyncService,
     required DatabaseService databaseService,
-    Duration syncInterval = const Duration(minutes: 15),
+    required SyncService syncService,
+    Duration syncInterval = const Duration(hours: 1),
     int maxRetries = 3,
     Duration retryDelay = const Duration(seconds: 5),
   })  : _deviceSyncService = deviceSyncService,
-        _databaseService = databaseService,
+        _syncService = syncService,
         _syncInterval = syncInterval,
         _maxRetries = maxRetries,
         _retryDelay = retryDelay {
@@ -97,12 +99,26 @@ class SyncManager {
   /// Perform sync with automatic retry
   Future<bool> performSync() async {
     try {
-      debugPrint('SyncManager: Starting sync (attempt ${_retryCount + 1}/$_maxRetries)');
+      debugPrint('SyncManager: Starting unified sync (attempt ${_retryCount + 1}/$_maxRetries)');
 
+      // Step 1: Push local changes to server using SyncService
+      // This is necessary because DeviceSyncService is currently pull-only.
+      debugPrint('SyncManager: [1/2] Pushing local changes via SyncService...');
+      try {
+        await _syncService.performFullSync();
+      } catch (e) {
+        debugPrint('SyncManager: SyncService (push) failed: $e');
+        // We continue to DeviceSyncService even if SyncService fails,
+        // as we still want to pull remote changes if possible.
+        // However, we'll return failure if the main pull also fails.
+      }
+
+      // Step 2: Pull remote changes using DeviceSyncService
+      debugPrint('SyncManager: [2/2] Pulling remote changes via DeviceSyncService...');
       final success = await _deviceSyncService.performFullSync(_syncTables);
 
       if (success) {
-        debugPrint('SyncManager: Sync completed successfully');
+        debugPrint('SyncManager: Unified sync completed successfully');
         return true;
       } else {
         return await _handleSyncFailure();
@@ -132,8 +148,8 @@ class SyncManager {
   /// Force immediate sync (ignoring interval)
   Future<bool> forceSyncNow() async {
     if (_deviceSyncService.isSyncing) {
-      onSyncError?.call('Sync already in progress');
-      return false;
+      debugPrint('SyncManager: Sync already in progress, skipping forceSyncNow');
+      return true; // Consider it a success if a sync is already happening
     }
 
     _retryCount = 0;

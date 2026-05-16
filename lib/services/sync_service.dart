@@ -79,7 +79,7 @@ class SyncService extends ChangeNotifier {
 
   // ── Auto-sync timer ──────────────────────────────────────────────────────
   Timer? _autoSyncTimer;
-  static const Duration _autoSyncInterval = Duration(minutes: 3);
+  static const Duration _autoSyncInterval = Duration(hours: 1);
 
   /// Tables that contain parent records (no FK dependencies on other tables).
   /// These must be written FIRST so child tables can resolve their FKs.
@@ -203,11 +203,20 @@ class SyncService extends ChangeNotifier {
   // SAFE TYPE HELPERS
   // ─────────────────────────────────────────────────────────────────────────
 
-  Map<String, dynamic>? _safeMap(dynamic value) {
-    if (value == null) return null;
+  Map<String, dynamic> _safeMap(dynamic value) {
+    if (value == null) return {};
     if (value is Map) return Map<String, dynamic>.from(value);
+    // Laravel/PHP converts empty associative arrays to [] in JSON
     if (value is List && value.isEmpty) return {};
-    return null;
+    return {};
+  }
+
+  List<dynamic> _safeList(dynamic value) {
+    if (value == null) return [];
+    if (value is List) return value;
+    // Conversely, handle empty objects if they should be lists
+    if (value is Map && value.isEmpty) return [];
+    return [];
   }
 
   String? _safeString(dynamic value) {
@@ -277,16 +286,15 @@ class SyncService extends ChangeNotifier {
       if (response.statusCode == 200 && isSuccess) {
         final pullData = _safeMap(responseData['pull_data']);
         final String? serverTimestamp =
-            _safeString(responseData['timestamp']) ??
-            _safeString(responseData['server_time']);
+            _safeString(responseData['timestamp'] ?? responseData['server_time']);
         final remappedUuids = _safeMap(responseData['remapped_uuids']);
 
-        if (pullData == null || serverTimestamp == null) {
+        if (pullData.isEmpty && serverTimestamp == null) {
           throw Exception('استجابة غير صالحة من السيرفر: بيانات المزامنة ناقصة');
         }
 
-        final int custDown = (pullData['users'] as List?)?.length ?? 0;
-        final int invDown  = (pullData['invoices'] as List?)?.length ?? 0;
+        final int custDown = _safeList(pullData['users']).length;
+        final int invDown  = _safeList(pullData['invoices']).length;
         final List<String> mergedNames = [];
 
         // Apply UUID remappings first (outside transaction for safety)
@@ -340,7 +348,9 @@ class SyncService extends ChangeNotifier {
 
         await _dbService.recalculateAllBalances();
         final localTimestamp = TimestampFormatter.nowUtc();
-        await _prefs.setString('last_sync_time', serverTimestamp); // keep server version for next sync request
+        if (serverTimestamp != null) {
+          await _prefs.setString('last_sync_time', serverTimestamp); // keep server version for next sync request
+        }
         await _prefs.setString('last_sync_time_local', localTimestamp); // local version for display
 
         await _saveSyncDetails(SyncDetails(
@@ -613,12 +623,36 @@ class SyncService extends ChangeNotifier {
         case 'edit_history':
           final editorIds = unsynced.map((r) => r['edited_by_id'] as int?).whereType<int>().toSet().toList();
           uuidCache['users'] = await buildCache('users', editorIds);
+          
+          // Also cache UUIDs for targets of edits (invoices or users)
+          final invoiceTargets = unsynced
+              .where((r) => r['target_type'] == 'INVOICE')
+              .map((r) => r['target_id'] as int?)
+              .whereType<int>()
+              .toSet()
+              .toList();
+          final userTargets = unsynced
+              .where((r) => r['target_type'] == 'USER')
+              .map((r) => r['target_id'] as int?)
+              .whereType<int>()
+              .toSet()
+              .toList();
+          
+          uuidCache['invoices'] = await buildCache('invoices', invoiceTargets);
+          // Combine existing users with target users
+          final existingUsers = uuidCache['users'] ?? {};
+          final targetUsers = await buildCache('users', userTargets);
+          uuidCache['users'] = {...existingUsers, ...targetUsers};
           break;
       }
 
       payload[table] = unsynced.map((rawItem) {
         final item = Map<String, dynamic>.from(rawItem);
+        // CRITICAL: Remove all local-only/integer ID fields
         item.remove('id');
+        item.remove('is_synced');
+        item.remove('store_manager_id');
+        
         switch (table) {
           case 'invoices':
             item['user_uuid']           = uuidCache['users']?[item['user_id'] as int?];
@@ -655,6 +689,15 @@ class SyncService extends ChangeNotifier {
           case 'edit_history':
             item['edited_by_uuid'] = uuidCache['users']?[item['edited_by_id'] as int?];
             item.remove('edited_by_id');
+            
+            // Resolve target_id to target_uuid
+            final targetType = item['target_type'] as String?;
+            if (targetType == 'INVOICE') {
+              item['target_uuid'] = uuidCache['invoices']?[item['target_id'] as int?];
+            } else if (targetType == 'USER') {
+              item['target_uuid'] = uuidCache['users']?[item['target_id'] as int?];
+            }
+            item.remove('target_id');
             break;
         }
         return item;

@@ -594,12 +594,19 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
   }
 
   Future<void> _handleSync() async {
+    final syncService = context.read<SyncService>();
+    final syncManager = context.read<SyncManager>();
+
+    if (syncService.isSyncing || syncManager.isSyncing) {
+      setState(() => _syncStatus = "المزامنة جارية بالفعل...");
+      return;
+    }
+
     setState(() {
       _syncStatus = "جاري الاتصال بالسيرفر...";
     });
 
     try {
-      final syncManager = context.read<SyncManager>();
       final success = await syncManager.forceSyncNow();
       if (mounted) {
         setState(() => _syncStatus = success ? "تمت المزامنة بنجاح" : "فشلت المزامنة");
@@ -647,12 +654,12 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  _buildSyncButton(isDark, syncService.isSyncing),
+                  _buildSyncButton(isDark, syncService.isSyncing || context.read<SyncManager>().isSyncing),
                 ],
               ),
-              if (syncService.isSyncing || _syncStatus.contains('فشلت') || _syncStatus.contains('نجاح')) ...[
+              if (syncService.isSyncing || context.read<SyncManager>().isSyncing || _syncStatus.contains('فشلت') || _syncStatus.contains('نجاح')) ...[
                 const SizedBox(height: 16),
-                _buildSyncProgress(isDark, syncService.isSyncing),
+                _buildSyncProgress(isDark, syncService.isSyncing || context.read<SyncManager>().isSyncing),
               ],
               const SizedBox(height: 24),
               _buildLastSyncDetails(isDark, isMobile),
