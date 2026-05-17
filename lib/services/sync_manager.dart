@@ -8,7 +8,7 @@ import 'sync_service.dart';
 ///
 /// Orchestrates the sync process with automatic retry, background sync,
 /// and conflict resolution.
-class SyncManager {
+class SyncManager extends ChangeNotifier {
   final DeviceSyncService _deviceSyncService;
   final SyncService _syncService;
 
@@ -54,15 +54,18 @@ class SyncManager {
     // Set up callbacks
     _deviceSyncService.onSyncStart = () {
       onSyncStart?.call();
+      notifyListeners();
     };
 
     _deviceSyncService.onSyncComplete = () {
       _retryCount = 0;
       onSyncSuccess?.call();
+      notifyListeners();
     };
 
     _deviceSyncService.onSyncError = (error) {
       onSyncError?.call(error);
+      notifyListeners();
     };
 
     _deviceSyncService.onRecordsReceived = (count) {
@@ -77,6 +80,7 @@ class SyncManager {
     _isEnabled = true;
     _startSyncTimer();
     debugPrint('SyncManager: Enabled');
+    notifyListeners();
   }
 
   /// Disable automatic sync
@@ -84,6 +88,7 @@ class SyncManager {
     _isEnabled = false;
     _syncTimer?.cancel();
     debugPrint('SyncManager: Disabled');
+    notifyListeners();
   }
 
   /// Start sync timer for periodic syncing
@@ -102,15 +107,16 @@ class SyncManager {
       debugPrint('SyncManager: Starting unified sync (attempt ${_retryCount + 1}/$_maxRetries)');
 
       // Step 1: Push local changes to server using SyncService
-      // This is necessary because DeviceSyncService is currently pull-only.
+      // We pass isInitialSync: true to SyncService.performFullSync so it doesn't
+      // pull data using the old last_sync_time protocol, which would be redundant
+      // with DeviceSyncService's pull.
       debugPrint('SyncManager: [1/2] Pushing local changes via SyncService...');
       try {
-        await _syncService.performFullSync();
+        await _syncService.performFullSync(isInitialSync: true);
       } catch (e) {
         debugPrint('SyncManager: SyncService (push) failed: $e');
         // We continue to DeviceSyncService even if SyncService fails,
         // as we still want to pull remote changes if possible.
-        // However, we'll return failure if the main pull also fails.
       }
 
       // Step 2: Pull remote changes using DeviceSyncService

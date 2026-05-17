@@ -438,7 +438,7 @@ class SyncService extends ChangeNotifier {
               }
             }
 
-            final resolved = await _resolveRelationsInTxn(table, item, txn);
+            final resolved = await _dbService.resolveRelationsInTxn(table, item, txn);
 
             // Detect unresolved critical FK (user_id for invoices/transactions)
             if (_hasCriticalNullFk(table, resolved)) {
@@ -486,7 +486,7 @@ class SyncService extends ChangeNotifier {
         for (final item in items) {
           await db.transaction((txn) async {
             try {
-              final resolved = await _resolveRelationsInTxn(table, item, txn);
+              final resolved = await _dbService.resolveRelationsInTxn(table, item, txn);
               await _dbService.upsertFromSyncInTxn(
                 table,
                 resolved,
@@ -707,55 +707,7 @@ class SyncService extends ChangeNotifier {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // FK RESOLUTION (PULL)
-  // ─────────────────────────────────────────────────────────────────────────
-
-  Future<Map<String, dynamic>> _resolveRelationsInTxn(
-      String table, Map<String, dynamic> data, dynamic txn) async {
-    final map = Map<String, dynamic>.from(data);
-
-    final Map<String, List<String>> relations = {
-      'user_uuid':           ['users',           'user_id'],
-      'buyer_uuid':          ['users',           'buyer_id'],
-      'invoice_uuid':        ['invoices',        'invoice_id'],
-      'payment_method_uuid': ['payment_methods', 'payment_method_id'],
-      'parent_uuid':         ['users',           'parent_id'],
-      'edited_by_uuid':      ['users',           'edited_by_id'],
-    };
-
-    for (final entry in relations.entries) {
-      final uuidKey = entry.key;
-      if (!map.containsKey(uuidKey)) continue;
-
-      final targetUuid  = map[uuidKey];
-      final targetTable = entry.value[0];
-      final idKey       = entry.value[1];
-
-      if (targetUuid != null) {
-        final rows = await txn.rawQuery(
-          'SELECT id FROM $targetTable WHERE uuid = ? LIMIT 1',
-          [targetUuid],
-        );
-        map[idKey] = rows.isNotEmpty ? rows.first['id'] as int : null;
-
-        if (rows.isEmpty) {
-          dev.log(
-            'Cannot resolve $uuidKey ($targetUuid) in $table — parent not yet in local DB.',
-            name: 'SyncService',
-          );
-        }
-      } else {
-        map[idKey] = null;
-      }
-
-      map.remove(uuidKey);
-    }
-
-    return map;
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // FULL RESTORE  (POST sync/restore)
+  // PUSH PAYLOAD PREPARATION
   // ─────────────────────────────────────────────────────────────────────────
   /// Downloads ALL active store data from the server and writes it to the local DB.
   ///

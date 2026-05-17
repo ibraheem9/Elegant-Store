@@ -2693,20 +2693,23 @@ class DatabaseService {
     } else {
       // 2. For users: also try matching by username to handle UUID changes
       if (table == 'users') {
-        final byUsername = await txn.rawQuery(
-          'SELECT * FROM $table WHERE username = ? LIMIT 1',
-          [sanitizedData['username']],
-        );
-        if (byUsername.isNotEmpty) {
-          final existingId = byUsername.first['id'] as int;
-          sanitizedData.remove('password');
-          await txn.update(
-            table,
-            sanitizedData,
-            where: 'id = ?',
-            whereArgs: [existingId],
+        final username = sanitizedData['username'];
+        if (username != null) {
+          final byUsername = await txn.rawQuery(
+            'SELECT * FROM $table WHERE username = ? LIMIT 1',
+            [username],
           );
-          return existingId;
+          if (byUsername.isNotEmpty) {
+            final existingId = byUsername.first['id'] as int;
+            sanitizedData.remove('password');
+            await txn.update(
+              table,
+              sanitizedData,
+              where: 'id = ?',
+              whereArgs: [existingId],
+            );
+            return existingId;
+          }
         }
       }
 
@@ -2760,6 +2763,57 @@ class DatabaseService {
       }
       return await txn.insert(table, sanitizedData);
     }
+  }
+
+  /// Resolves UUID relationships to local integer IDs within a transaction.
+  /// Used by sync processes to map 'user_uuid' to 'user_id', etc.
+  Future<Map<String, dynamic>> resolveRelationsInTxn(
+      String table, Map<String, dynamic> data, dynamic txn) async {
+    final map = Map<String, dynamic>.from(data);
+
+    // Map of UUID column name -> [Target Table, Local ID column name]
+    const Map<String, List<String>> relations = {
+      'user_uuid':           ['users',           'user_id'],
+      'buyer_uuid':          ['users',           'buyer_id'],
+      'invoice_uuid':        ['invoices',        'invoice_id'],
+      'payment_method_uuid': ['payment_methods', 'payment_method_id'],
+      'parent_uuid':         ['users',           'parent_id'],
+      'edited_by_uuid':      ['users',           'edited_by_id'],
+      'target_uuid':         ['users',           'target_id'], // Default to users, logic below handles INVOICE target_type
+    };
+
+    for (final entry in relations.entries) {
+      final uuidKey = entry.key;
+      if (!map.containsKey(uuidKey)) continue;
+
+      final targetUuid  = map[uuidKey];
+      var targetTable = entry.value[0];
+      final idKey       = entry.value[1];
+
+      // Special handling for edit_history polymorphic target_id
+      if (table == 'edit_history' && uuidKey == 'target_uuid') {
+        final targetType = map['target_type'] as String?;
+        if (targetType == 'INVOICE') {
+          targetTable = 'invoices';
+        } else if (targetType == 'USER') {
+          targetTable = 'users';
+        }
+      }
+
+      if (targetUuid != null && targetUuid.toString().isNotEmpty) {
+        final rows = await txn.rawQuery(
+          'SELECT id FROM $targetTable WHERE uuid = ? LIMIT 1',
+          [targetUuid],
+        );
+        map[idKey] = rows.isNotEmpty ? rows.first['id'] as int : null;
+      } else {
+        map[idKey] = null;
+      }
+
+      map.remove(uuidKey);
+    }
+
+    return map;
   }
 
   // Smart Notifications

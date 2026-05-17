@@ -613,40 +613,47 @@ class DeviceSyncService {
     try {
       final db = await _databaseService.database;
 
-      for (final entry in changedRecords.entries) {
-        final tableName = entry.key;
-        final records = _safeList(entry.value);
+      // Define table order to respect foreign keys (parents first)
+      const List<String> parentTables = ['payment_methods', 'users'];
+      const List<String> childTables = [
+        'invoices',
+        'transactions',
+        'purchases',
+        'daily_statistics',
+        'edit_history',
+      ];
 
-        if (records.isEmpty) continue;
-
-        // Save each record to local SQLite database
-        for (final record in records) {
-          try {
-            // Convert record to proper Map<String, Object?> type
-            final recordMap = <String, Object?>{};
-            if (record is Map) {
-              for (final entry in (record as Map).entries) {
-                recordMap[entry.key.toString()] = entry.value;
-              }
-            }
-
-            // Use raw insert or replace to save records
-            if (recordMap.isNotEmpty) {
-              await db.insert(
-                tableName,
-                recordMap,
-                conflictAlgorithm: ConflictAlgorithm.replace,
-              );
-            }
-          } catch (e) {
-            debugPrint('[DeviceSync] Failed to save record from $tableName: $e');
+      // Use a single transaction for all tables to ensure atomicity and speed
+      await db.transaction((txn) async {
+        // Pass 1: Parents
+        for (final tableName in parentTables) {
+          final records = _safeList(changedRecords[tableName]);
+          for (final record in records) {
+            if (record is! Map) continue;
+            final item = Map<String, dynamic>.from(record);
+            await _databaseService.upsertFromSyncInTxn(tableName, item, txn);
           }
         }
 
-        debugPrint('[DeviceSync] Saved ${records.length} records from table: $tableName');
-      }
+        // Pass 2: Children
+        for (final tableName in childTables) {
+          final records = _safeList(changedRecords[tableName]);
+          for (final record in records) {
+            if (record is! Map) continue;
+            final item = Map<String, dynamic>.from(record);
+            
+            // Resolve UUID relations to local IDs (CRITICAL for fixing ID jump and FK mismatch)
+            final resolved = await _databaseService.resolveRelationsInTxn(tableName, item, txn);
+            
+            await _databaseService.upsertFromSyncInTxn(tableName, resolved, txn);
+          }
+        }
+      });
+
+      debugPrint('[DeviceSync] Saved all changed records successfully');
     } catch (e) {
       debugPrint('[DeviceSync] Error saving changed records: $e');
+      rethrow;
     }
   }
 

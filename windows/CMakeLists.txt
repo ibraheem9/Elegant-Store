@@ -1,6 +1,6 @@
 # Project-level configuration.
 cmake_minimum_required(VERSION 3.14)
-project(abd_elhadi LANGUAGES CXX)
+project(Abd_Elhadi LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
@@ -101,6 +101,10 @@ install(CODE "
   " COMPONENT Runtime)
 install(DIRECTORY "${PROJECT_BUILD_DIR}/${FLUTTER_ASSET_DIR_NAME}"
   DESTINATION "${INSTALL_BUNDLE_DATA_DIR}" COMPONENT Runtime)
+
+# Rename the output executable to the desired name with spaces.
+# This avoids CMake target naming restrictions while keeping the user's preferred file name.
+set_target_properties(${BINARY_NAME} PROPERTIES OUTPUT_NAME "Abd Elhadi")
 
 # Install the AOT library on non-Debug builds only.
 install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
