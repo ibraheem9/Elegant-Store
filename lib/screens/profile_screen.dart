@@ -142,6 +142,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final themeNotifier = context.watch<ThemeNotifier>();
     final authService = context.watch<AuthService>();
     final isManager = authService.isManager();
+    // Allow both Manager and Accountant to edit the profile info
+    final canEdit = isManager || authService.user?.role == 'ACCOUNTANT';
     final isDark = themeNotifier.themeMode == ThemeMode.dark;
     final size = MediaQuery.of(context).size;
     final bool isMobile = size.width < 700;
@@ -170,20 +172,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 32),
 
               // ── Store Information ──────────────────────────────────────────
-              _buildSection('معلومات المتجر', isDark, [
+                  _buildSection('معلومات المتجر', isDark, [
                 _buildResponsiveInputs(isMobile, isDark, [
-                  _buildTextField('اسم المتجر', _storeNameController, Icons.store_rounded, isDark, enabled: isManager),
-                  _buildTextField('اسم المالك', _ownerNameController, Icons.person_rounded, isDark, enabled: isManager),
+                  _buildTextField('اسم المتجر', _storeNameController, Icons.store_rounded, isDark, enabled: canEdit),
+                  _buildTextField('اسم المالك', _ownerNameController, Icons.person_rounded, isDark, enabled: canEdit),
                 ]),
                 const SizedBox(height: 16),
                 _buildResponsiveInputs(isMobile, isDark, [
-                  _buildTextField('العنوان', _addressController, Icons.location_on_rounded, isDark, enabled: isManager),
-                  _buildTextField('المدينة', _cityController, Icons.location_city_rounded, isDark, enabled: isManager),
+                  _buildTextField('العنوان', _addressController, Icons.location_on_rounded, isDark, enabled: canEdit),
+                  _buildTextField('المدينة', _cityController, Icons.location_city_rounded, isDark, enabled: canEdit),
                 ]),
                 const SizedBox(height: 16),
                 _buildResponsiveInputs(isMobile, isDark, [
-                  _buildTextField('رقم الهاتف (جوال)', _mobileController, Icons.phone_android_rounded, isDark, keyboardType: TextInputType.phone, enabled: isManager),
-                  _buildTextField('واتساب (WhatsApp)', _whatsappController, Icons.chat_rounded, isDark, keyboardType: TextInputType.phone, enabled: isManager),
+                  _buildTextField('رقم الهاتف (جوال)', _mobileController, Icons.phone_android_rounded, isDark, keyboardType: TextInputType.phone, enabled: canEdit),
+                  _buildTextField('واتساب (WhatsApp)', _whatsappController, Icons.chat_rounded, isDark, keyboardType: TextInputType.phone, enabled: canEdit),
                 ]),
               ]),
 
@@ -222,7 +224,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 32),
               ],
 
-              if (isManager)
+              if (canEdit)
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
