@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/database_service.dart';
 import '../services/device_sync_service.dart';
 import '../services/auth_service.dart';
 import '../models/models.dart';
 import '../utils/timestamp_formatter.dart';
 import '../services/theme_service.dart';
+import '../services/customer_tracking_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -106,9 +108,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await db.saveStoreProfile(newProfile);
       _profile = newProfile;
 
+      // Save to SharedPreferences so CustomerTrackingService can find it
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('settings_store_name', _storeNameController.text.trim());
+      await prefs.setString('settings_owner_name', _ownerNameController.text.trim());
+      await prefs.setString('settings_address', _addressController.text.trim());
+      await prefs.setString('settings_city', _cityController.text.trim());
+      await prefs.setString('settings_phone', _mobileController.text.trim());
+      await prefs.setString('settings_whatsapp', _whatsappController.text.trim());
+
+      // Trigger immediate sync to server
+      // ignore: unawaited_futures
+      CustomerTrackingService.instance.syncCustomerData();
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم حفظ البيانات بنجاح')),
+          const SnackBar(content: Text('تم حفظ البيانات بنجاح وتمت المزامنة')),
         );
       }
     } catch (e) {

@@ -208,7 +208,7 @@ void _initWorkmanager() {
       await Workmanager().registerPeriodicTask(
         "1",
         syncTaskName,
-        frequency: const Duration(hours: 1),
+        frequency: const Duration(hours: 24),
         constraints: Constraints(
           networkType: NetworkType.connected,
         ),
