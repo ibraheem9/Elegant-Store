@@ -57,13 +57,11 @@ class CustomerTrackingService {
         }
       } catch (_) {}
 
-      // 4. Collect Usage Stats from Database
+      // 4. Collect Usa      // 4. Collect Stats
       final db = DatabaseService.instance;
       final totalInvoices = await db.getTotalInvoicesCount();
       final totalCustomers = await db.getTotalCustomersCount();
-      final totalSales = await db.getTotalSalesAmount();
-
-      // 5. Get User Info from Settings
+      final totalSales = await db.getTotalSalesAmount();     // 5. Get User Info from Settings
       final storeName = prefs.getString('settings_store_name') ?? '';
       final fullName = prefs.getString('settings_owner_name') ?? '';
       final phone = prefs.getString('settings_phone') ?? '';

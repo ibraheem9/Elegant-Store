@@ -239,6 +239,43 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
                                   Expanded(child: _buildCountTile('محمّل — فواتير', details.invoicesDownloaded, Colors.blue, isDark)),
                                 ],
                               ),
+                              if (details.recordsUpdated > 0 || details.recordsOverwritten > 0) ...[
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    if (details.recordsUpdated > 0)
+                                      Expanded(child: _buildCountTile('سجلات محدّثة', details.recordsUpdated, Colors.orange, isDark)),
+                                    if (details.recordsUpdated > 0 && details.recordsOverwritten > 0)
+                                      const SizedBox(width: 12),
+                                    if (details.recordsOverwritten > 0)
+                                      Expanded(child: _buildCountTile('سجلات مستبدلة', details.recordsOverwritten, Colors.redAccent, isDark)),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.info_outline_rounded, color: Colors.orange, size: 18),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'تم تحديث ${details.recordsUpdated + details.recordsOverwritten} سجل بناءً على قاعدة "الأحدث يربح".',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: isDark ? Colors.orange.shade200 : Colors.orange.shade800,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ],
                           ],
                         ),

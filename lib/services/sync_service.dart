@@ -19,6 +19,8 @@ class SyncDetails {
   final int invoicesUploaded;
   final int customersDownloaded;
   final int invoicesDownloaded;
+  final int recordsUpdated;
+  final int recordsOverwritten;
   final List<String> mergedCustomers;
 
   SyncDetails({
@@ -27,6 +29,8 @@ class SyncDetails {
     required this.invoicesUploaded,
     required this.customersDownloaded,
     required this.invoicesDownloaded,
+    this.recordsUpdated = 0,
+    this.recordsOverwritten = 0,
     required this.mergedCustomers,
   });
 
@@ -36,6 +40,8 @@ class SyncDetails {
     'invoicesUploaded': invoicesUploaded,
     'customersDownloaded': customersDownloaded,
     'invoicesDownloaded': invoicesDownloaded,
+    'recordsUpdated': recordsUpdated,
+    'recordsOverwritten': recordsOverwritten,
     'mergedCustomers': mergedCustomers,
   };
 
@@ -45,6 +51,8 @@ class SyncDetails {
     invoicesUploaded: json['invoicesUploaded'] ?? 0,
     customersDownloaded: json['customersDownloaded'] ?? 0,
     invoicesDownloaded: json['invoicesDownloaded'] ?? 0,
+    recordsUpdated: json['recordsUpdated'] ?? 0,
+    recordsOverwritten: json['recordsOverwritten'] ?? 0,
     mergedCustomers: List<String>.from(json['mergedCustomers'] ?? []),
   );
 }
@@ -310,6 +318,8 @@ class SyncService extends ChangeNotifier {
           });
         }
 
+        final Map<String, int> stats = {'updated': 0, 'overwritten': 0};
+
         // ── Two-pass pull: parents first, then children ────────────────────
         // Pass 1: write payment_methods and users so FK resolution works
         await _writePullPass(
@@ -317,6 +327,7 @@ class SyncService extends ChangeNotifier {
           pullData: pullData,
           tables: _parentTables,
           mergedNames: mergedNames,
+          stats: stats,
         );
 
         // Pass 2: write child tables (invoices, transactions, etc.)
@@ -326,6 +337,7 @@ class SyncService extends ChangeNotifier {
           pullData: pullData,
           tables: _childTables,
           mergedNames: mergedNames,
+          stats: stats,
         );
 
         // Mark pushed items as synced
@@ -359,6 +371,8 @@ class SyncService extends ChangeNotifier {
           invoicesUploaded: invUp,
           customersDownloaded: custDown,
           invoicesDownloaded: invDown,
+          recordsUpdated: stats['updated'] ?? 0,
+          recordsOverwritten: stats['overwritten'] ?? 0,
           mergedCustomers: mergedNames,
         ));
 
@@ -409,6 +423,7 @@ class SyncService extends ChangeNotifier {
     required List<String> tables,
     required List<String> mergedNames,
     bool allowSoftDeleted = false,
+    required Map<String, int> stats,
   }) async {
     // Collect deferred items: {table -> [item]} for FK-retry pass
     final Map<String, List<Map<String, dynamic>>> deferred = {};
@@ -419,8 +434,6 @@ class SyncService extends ChangeNotifier {
 
       final List<Map<String, dynamic>> failedItems = [];
 
-      // Using multiple small transactions instead of one giant one per table.
-      // This ensures that if one record fails, others in the same table still sync.
       for (final rawItem in rawItems) {
         if (rawItem is! Map) continue;
         final item = Map<String, dynamic>.from(rawItem);
@@ -440,28 +453,25 @@ class SyncService extends ChangeNotifier {
 
             final resolved = await _dbService.resolveRelationsInTxn(table, item, txn);
 
-            // Detect unresolved critical FK (user_id for invoices/transactions)
             if (_hasCriticalNullFk(table, resolved)) {
-              dev.log(
-                'Deferred $table item (unresolved FK): ${item['uuid']}',
-                name: 'SyncService',
-              );
               failedItems.add(item);
-              return; // skip this item in this pass
+              return;
             }
 
-            await _dbService.upsertFromSyncInTxn(
+            final result = await _dbService.upsertFromSyncInTxn(
               table,
               resolved,
               txn,
               allowSoftDeleted: allowSoftDeleted,
             );
+            
+            if (result == 1) { // Updated
+              stats['updated'] = (stats['updated'] ?? 0) + 1;
+            } else if (result == 2) { // Overwritten (Last Write Wins)
+              stats['overwritten'] = (stats['overwritten'] ?? 0) + 1;
+            }
           } catch (itemError) {
-            dev.log(
-              'Error on $table item ${item['uuid']}: $itemError — skipping',
-              name: 'SyncService',
-            );
-            // We don't add to failedItems here because it's a real error, not just an FK dependency
+            dev.log('Error on $table item ${item['uuid']}: $itemError', name: 'SyncService');
           }
         });
       }

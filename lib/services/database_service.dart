@@ -10,6 +10,7 @@ import 'dart:developer' as dev;
 import 'notification_repository.dart';
 
 class DatabaseService {
+  static final DatabaseService instance = DatabaseService();
   static Database? _database;
   static const String dbName = 'elegant_store_v300.db'; // HQ Sync Version
   final _uuid = const Uuid();
@@ -2711,8 +2712,9 @@ class DatabaseService {
           where: 'id = ?',
           whereArgs: [existingId],
         );
+        return incomingVersion > existingVersion ? 2 : 1; // 2=Overwritten, 1=Updated
       }
-      return existingId;
+      return 0; // No change
     } else {
       // 2. For users: also try matching by username to handle UUID changes
       if (table == 'users') {

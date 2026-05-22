@@ -91,6 +91,11 @@ JQIDAQAB
     return _buildHardwareId();
   }
 
+  /// Alias for getHardwareId to maintain compatibility with tracking service.
+  Future<String> getDeviceId() async {
+    return getHardwareId();
+  }
+
   /// Checks the stored license (if any) and returns the result.
   Future<LicenseResult> checkStoredLicense() async {
     try {
