@@ -3067,4 +3067,24 @@ class DatabaseService {
       );
     }
   }
+
+  // --- Helper methods for CustomerTrackingService ---
+
+  Future<int> getTotalInvoicesCount() async {
+    final db = await database;
+    final r = await db.rawQuery("SELECT COUNT(*) as cnt FROM invoices WHERE deleted_at IS NULL");
+    return Sqflite.firstIntValue(r) ?? 0;
+  }
+
+  Future<int> getTotalCustomersCount() async {
+    final db = await database;
+    final r = await db.rawQuery("SELECT COUNT(*) as cnt FROM users WHERE role = 'CUSTOMER' AND deleted_at IS NULL");
+    return Sqflite.firstIntValue(r) ?? 0;
+  }
+
+  Future<double> getTotalSalesAmount() async {
+    final db = await database;
+    final r = await db.rawQuery("SELECT SUM(amount) as total FROM invoices WHERE type = 'SALE' AND deleted_at IS NULL");
+    return (r.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
 }

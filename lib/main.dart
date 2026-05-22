@@ -16,6 +16,7 @@ import 'services/sync_service.dart';
 import 'services/device_sync_service.dart';
 import 'services/sync_manager.dart';
 import 'services/license_service.dart';
+import 'services/customer_tracking_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/license_gate_screen.dart';
@@ -64,6 +65,10 @@ void callbackDispatcher() {
 
       // Then pull updates
       await deviceSyncService.performFullSyncDefault();
+
+      // Sync customer tracking data
+      await CustomerTrackingService.instance.syncCustomerData();
+
       return Future.value(true);
     } catch (e) {
       debugPrint('Background sync failed: $e');
@@ -139,6 +144,9 @@ void main() async {
 
   // Check license before showing the app
   final licenseResult = await LicenseService.instance.checkStoredLicense();
+
+  // Sync customer tracking data in background
+  Future.microtask(() => CustomerTrackingService.instance.syncCustomerData());
 
   runApp(
     MultiProvider(
