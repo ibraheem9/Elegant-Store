@@ -23,6 +23,7 @@ import 'customer_balances_screen.dart';
 import 'unpaid_invoices_screen.dart';
 import 'contact_us_screen.dart';
 import 'about_us_screen.dart';
+import 'profile_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -55,6 +56,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 12: return const SettingsScreen();
       case 13: return const ContactUsScreen();
       case 14: return const AboutUsScreen();
+      case 15: return const ProfileScreen();
       default: return const DashboardHomeScreen();
     }
   }
@@ -76,6 +78,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 12: return 'الإعدادات والسمة';
       case 13: return 'تواصل معنا';
       case 14: return 'عن المطور';
+      case 15: return 'الملف الشخصي للمتجر';
       default: return 'Elegant Store';
     }
   }
@@ -146,6 +149,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _buildSidebarItem(9, 'طرق دفع المبيعات', Icons.payment_rounded),
                 _buildSidebarItem(10, 'طرق دفع المشتريات', Icons.account_balance_rounded),
                 _buildSidebarItem(11, 'سلة المحذوفات', Icons.delete_sweep_rounded),
+                _buildSidebarItem(15, 'الملف الشخصي للمتجر', Icons.store_rounded),
                 _buildSidebarItem(12, 'الإعدادات والسمة', Icons.settings_rounded),
                 _buildSidebarItem(13, 'تواصل معنا', Icons.contact_support_rounded),
                 _buildSidebarItem(14, 'عن المطور', Icons.info_outline_rounded),
@@ -191,6 +195,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _buildSidebarItem(9, 'طرق دفع المبيعات', Icons.payment_rounded),
                 _buildSidebarItem(10, 'طرق دفع المشتريات', Icons.account_balance_rounded),
                 _buildSidebarItem(11, 'سلة المحذوفات', Icons.delete_sweep_rounded),
+                _buildSidebarItem(15, 'الملف الشخصي للمتجر', Icons.store_rounded),
                 _buildSidebarItem(12, 'الإعدادات والسمة', Icons.settings_rounded),
                 _buildSidebarItem(13, 'تواصل معنا', Icons.contact_support_rounded),
                 _buildSidebarItem(14, 'عن المطور', Icons.info_outline_rounded),

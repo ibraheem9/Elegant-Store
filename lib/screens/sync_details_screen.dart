@@ -711,6 +711,29 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
             ),
+            const SizedBox(height: 16),
+
+            // ── Reset Data button ──────────────────────────────────────────
+            OutlinedButton.icon(
+              onPressed: (_isResetting || isRestoring) ? null : _confirmAndReset,
+              icon: _isResetting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange),
+                    )
+                  : const Icon(Icons.delete_forever_rounded, color: Colors.orange),
+              label: Text(
+                _isResetting ? 'جاري المسح...' : 'مسح البيانات المحلية والبدء من جديد',
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, color: Colors.orange, fontSize: 14),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Colors.orange),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
             const SizedBox(height: 12),
           ],
         );

@@ -123,6 +123,10 @@ class SyncManager extends ChangeNotifier {
       debugPrint('SyncManager: [2/2] Pulling remote changes via DeviceSyncService...');
       final success = await _deviceSyncService.performFullSync(_syncTables);
 
+      // Step 3: Sync Store Profile and Metrics to its own endpoint
+      debugPrint('SyncManager: [3/3] Syncing store profile to separate endpoint...');
+      await _deviceSyncService.syncStoreProfileOnly();
+
       if (success) {
         debugPrint('SyncManager: Unified sync completed successfully');
         return true;

@@ -60,7 +60,7 @@ class DatabaseService {
 
     final db = await openDatabase(
       path,
-      version: 9,
+      version: 10,
       onCreate: (db, version) async {
         await _createTables(db);
         await _createTriggers(db);
@@ -186,38 +186,34 @@ class DatabaseService {
           await db.execute(NotificationRepository.createTableSql);
           await db.execute(NotificationRepository.createIndexSql);
         }
-        if (oldVersion < 8) {
-          // v8: Correct balance formula — payment_status now drives the balance.
-          //   DEPOSIT  PAID                  → -amount  (credit)
-          //   SALE     UNPAID|DEFERRED       → +amount  (debt)
-          //   WITHDRAWAL UNPAID              → +amount  (debt)
-          //   All other combinations         → 0  (settled, no effect)
-          try {
-            await db.execute('DROP TRIGGER IF EXISTS trg_invoice_insert');
-          } catch (_) {}
-          try {
-            await db.execute('DROP TRIGGER IF EXISTS trg_invoice_update');
-          } catch (_) {}
-          try {
-            await db.execute('DROP TRIGGER IF EXISTS trg_invoice_delete');
-          } catch (_) {}
-          await _createTriggers(db);
-          // Recalculate all customer balances with the corrected formula.
-          await db.rawUpdate('''
-            UPDATE users SET balance = (
-              SELECT COALESCE(SUM(
-                CASE
-                  WHEN i.type = 'DEPOSIT'    AND i.payment_status IN ('PAID','paid')                          THEN -i.amount
-                  WHEN i.type = 'SALE'       AND i.payment_status IN ('UNPAID','DEFERRED','unpaid','deferred') THEN  i.amount
-                  WHEN i.type = 'WITHDRAWAL' AND i.payment_status IN ('UNPAID','unpaid')                      THEN  i.amount
-                  ELSE 0
-                END
-              ), 0)
-              FROM invoices i
-              WHERE i.user_id = users.id AND i.deleted_at IS NULL
-            )
-            WHERE role = 'CUSTOMER' AND deleted_at IS NULL
-          ''');
+        if (oldVersion < 10) {
+          // v10: Add product_customers and product_device_info for profile & sync metrics.
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS product_customers (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              device_id TEXT UNIQUE NOT NULL,
+              store_name TEXT,
+              owner_name TEXT,
+              address TEXT,
+              city TEXT,
+              mobile TEXT,
+              whatsapp TEXT,
+              invoice_count INTEGER DEFAULT 0,
+              customers_count INTEGER DEFAULT 0,
+              total_sales REAL DEFAULT 0.0,
+              total_purchase REAL DEFAULT 0.0,
+              last_sync_time TEXT,
+              last_active_time TEXT
+            )''');
+
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS product_device_info (
+              device_id TEXT PRIMARY KEY,
+              device_name TEXT,
+              device_model TEXT,
+              location_lat REAL,
+              location_long REAL
+            )''');
         }
       },
     );
@@ -383,6 +379,33 @@ class DatabaseService {
     // v9: Local notifications table — one row per (customer_id, type)
     await db.execute(NotificationRepository.createTableSql);
     await db.execute(NotificationRepository.createIndexSql);
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS product_customers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_id TEXT UNIQUE NOT NULL,
+        store_name TEXT,
+        owner_name TEXT,
+        address TEXT,
+        city TEXT,
+        mobile TEXT,
+        whatsapp TEXT,
+        invoice_count INTEGER DEFAULT 0,
+        customers_count INTEGER DEFAULT 0,
+        total_sales REAL DEFAULT 0.0,
+        total_purchase REAL DEFAULT 0.0,
+        last_sync_time TEXT,
+        last_active_time TEXT
+      )''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS product_device_info (
+        device_id TEXT PRIMARY KEY,
+        device_name TEXT,
+        device_model TEXT,
+        location_lat REAL,
+        location_long REAL
+      )''');
   }
 
   Future<void> _createTriggers(Database db) async {
@@ -2934,5 +2957,114 @@ class DatabaseService {
     );
     final statsCount = (statsResult.first['cnt'] as int?) ?? 0;
     return statsCount > 0;
+  }
+
+  // --- Profile & Device Info Methods ---
+
+  Future<StoreProfile?> getStoreProfile(String deviceId) async {
+    final db = await database;
+    final r = await db.query(
+      'product_customers',
+      where: 'device_id = ?',
+      whereArgs: [deviceId],
+    );
+    if (r.isNotEmpty) return StoreProfile.fromMap(r.first);
+    return null;
+  }
+
+  Future<void> saveStoreProfile(StoreProfile profile) async {
+    final db = await database;
+    await db.insert(
+      'product_customers',
+      profile.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<DeviceInfoModel?> getDeviceInfo(String deviceId) async {
+    final db = await database;
+    final r = await db.query(
+      'product_device_info',
+      where: 'device_id = ?',
+      whereArgs: [deviceId],
+    );
+    if (r.isNotEmpty) return DeviceInfoModel.fromMap(r.first);
+    return null;
+  }
+
+  Future<void> saveDeviceInfo(DeviceInfoModel info) async {
+    final db = await database;
+    await db.insert(
+      'product_device_info',
+      info.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Recalculates store metrics: invoice count, customer count, total sales, and total purchases.
+  Future<Map<String, dynamic>> recalculateStoreMetrics() async {
+    final db = await database;
+
+    // Total customers
+    final customerResult = await db.rawQuery(
+      "SELECT COUNT(*) as cnt FROM users WHERE role = 'CUSTOMER' AND deleted_at IS NULL",
+    );
+    final customersCount = Sqflite.firstIntValue(customerResult) ?? 0;
+
+    // Total invoices
+    final invoiceResult = await db.rawQuery(
+      "SELECT COUNT(*) as cnt FROM invoices WHERE deleted_at IS NULL",
+    );
+    final invoiceCount = Sqflite.firstIntValue(invoiceResult) ?? 0;
+
+    // Total sales (amount of all SALE invoices)
+    final salesResult = await db.rawQuery(
+      "SELECT SUM(amount) as total FROM invoices WHERE type = 'SALE' AND deleted_at IS NULL",
+    );
+    final totalSales = (salesResult.first['total'] as num?)?.toDouble() ?? 0.0;
+
+    // Total purchases
+    final purchaseResult = await db.rawQuery(
+      "SELECT SUM(amount) as total FROM purchases WHERE deleted_at IS NULL",
+    );
+    final totalPurchase = (purchaseResult.first['total'] as num?)?.toDouble() ?? 0.0;
+
+    return {
+      'customers_count': customersCount,
+      'invoice_count': invoiceCount,
+      'total_sales': totalSales,
+      'total_purchase': totalPurchase,
+    };
+  }
+
+  Future<void> updateStoreProfileMetrics(String deviceId) async {
+    final metrics = await recalculateStoreMetrics();
+    final db = await database;
+
+    // Check if profile exists first
+    final existing = await db.query('product_customers', where: 'device_id = ?', whereArgs: [deviceId]);
+    if (existing.isEmpty) {
+      await db.insert('product_customers', {
+        'device_id': deviceId,
+        'customers_count': metrics['customers_count'],
+        'invoice_count': metrics['invoice_count'],
+        'total_sales': metrics['total_sales'],
+        'total_purchase': metrics['total_purchase'],
+        'last_active_time': TimestampFormatter.nowUtc(),
+      });
+    } else {
+      await db.update(
+        'product_customers',
+        {
+          'customers_count': metrics['customers_count'],
+          'invoice_count': metrics['invoice_count'],
+          'total_sales': metrics['total_sales'],
+          'total_purchase': metrics['total_purchase'],
+          'last_active_time': TimestampFormatter.nowUtc(),
+        },
+        where: 'device_id = ?',
+        whereArgs: [deviceId],
+      );
+    }
   }
 }

@@ -1,0 +1,21 @@
+# Task Management
+
+- [x] Project Exploration
+- [x] Create Models
+	- [x] Add `StoreProfile` and `DeviceInfoModel` to `models.dart`
+- [x] Update Database Service
+	- [x] Bump DB version to 10
+	- [x] Add new tables to schema
+	- [x] Implement metrics recalculation logic
+	- [x] Add CRUD methods for profile and device info
+- [x] Create Profile Screen
+	- [x] Implement UI with forms and metrics cards
+	- [x] Integrate with `DatabaseService` and `DeviceSyncService`
+- [x] Update Dashboard Screen
+	- [x] Add Profile link to sidebar/drawer
+	- [x] Register screen in navigation
+- [x] Finalize Sync Logic
+	- [x] Recalculate metrics before sync
+	- [x] Update `last_sync_time` after sync
+- [x] Add Reset Data button to Sync Details
+- [ ] Manual Verification

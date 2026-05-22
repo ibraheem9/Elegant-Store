@@ -8,6 +8,9 @@ import 'package:uuid/uuid.dart';
 import 'auth_service.dart';
 import 'database_service.dart';
 
+import '../core/config/api_config.dart';
+import '../utils/timestamp_formatter.dart';
+
 /// DeviceSyncService
 ///
 /// Handles timestamp-based device sync with the server.
@@ -95,6 +98,9 @@ class DeviceSyncService {
       } else if (defaultTargetPlatform == TargetPlatform.iOS) {
         final iosInfo = await deviceInfo.iosInfo;
         deviceName = iosInfo.model;
+      } else if (defaultTargetPlatform == TargetPlatform.windows) {
+        final windowsInfo = await deviceInfo.windowsInfo;
+        deviceName = windowsInfo.computerName;
       } else {
         deviceName = 'Web Browser';
       }
@@ -321,6 +327,16 @@ class DeviceSyncService {
 
       if (response.statusCode == 200 && response.data['success'] == true) {
         debugPrint('[DeviceSync] Sync completed for device: $deviceId');
+
+        // Update last sync time in local profile table
+        final db = await _databaseService.database;
+        await db.update(
+          'product_customers',
+          {'last_sync_time': TimestampFormatter.nowUtc()},
+          where: 'device_id = ?',
+          whereArgs: [deviceId],
+        );
+
         _isSyncing = false;
         onSyncComplete?.call();
         return true;
@@ -489,6 +505,10 @@ class DeviceSyncService {
   /// Perform full sync cycle
   Future<bool> performFullSync(List<String> tables) async {
     try {
+      final deviceId = await getDeviceId();
+      // Update local metrics and last_active before sync starts
+      await _databaseService.updateStoreProfileMetrics(deviceId);
+
       // Step 1: Initialize sync (registers device on server if new)
       if (!await initSync()) {
         return false;
@@ -534,6 +554,37 @@ class DeviceSyncService {
     } catch (e) {
       await failSync();
       onSyncError?.call('Full sync failed: $e');
+      return false;
+    }
+  }
+
+  /// Syncs only the store profile and metrics to its own separate endpoint.
+  Future<bool> syncStoreProfileOnly() async {
+    try {
+      final deviceId = await getDeviceId();
+      await _databaseService.updateStoreProfileMetrics(deviceId);
+      
+      final profile = await _databaseService.getStoreProfile(deviceId);
+      final info = await _databaseService.getDeviceInfo(deviceId);
+      
+      if (profile == null) return false;
+
+      final response = await _dio.post(
+        ApiConfig.profileSyncEndpoint,
+        data: {
+          'profile': profile.toMap(),
+          'device_info': info?.toMap(),
+          'device_id': deviceId,
+        },
+      );
+
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        debugPrint('[DeviceSync] Profile synced successfully to separate endpoint');
+        return true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('[DeviceSync] Profile sync error: $e');
       return false;
     }
   }
