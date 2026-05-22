@@ -3089,4 +3089,10 @@ class DatabaseService {
     final r = await db.rawQuery("SELECT SUM(amount) as total FROM invoices WHERE type = 'SALE' AND deleted_at IS NULL");
     return (r.first['total'] as num?)?.toDouble() ?? 0.0;
   }
+
+  Future<double> getTotalPurchaseAmount() async {
+    final db = await database;
+    final r = await db.rawQuery("SELECT SUM(amount) as total FROM purchases WHERE deleted_at IS NULL");
+    return (r.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
 }

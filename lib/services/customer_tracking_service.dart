@@ -22,20 +22,24 @@ class CustomerTrackingService {
       final deviceId = await LicenseService.instance.getDeviceId();
       
       // 1. Collect Device Info
+      String deviceName = 'Unknown';
       String deviceModel = 'Unknown';
       String osVersion = 'Unknown';
       
       if (Platform.isAndroid) {
         final androidInfo = await _deviceInfo.androidInfo;
+        deviceName = androidInfo.host;
         deviceModel = '${androidInfo.manufacturer} ${androidInfo.model}';
         osVersion = 'Android ${androidInfo.version.release}';
       } else if (Platform.isIOS) {
         final iosInfo = await _deviceInfo.iosInfo;
+        deviceName = iosInfo.name;
         deviceModel = iosInfo.utsname.machine;
         osVersion = 'iOS ${iosInfo.systemVersion}';
       } else if (Platform.isWindows) {
         final winInfo = await _deviceInfo.windowsInfo;
-        deviceModel = winInfo.computerName;
+        deviceName = winInfo.computerName;
+        deviceModel = winInfo.productName;
         osVersion = 'Windows ${winInfo.releaseId}';
       }
 
@@ -57,32 +61,42 @@ class CustomerTrackingService {
         }
       } catch (_) {}
 
-      // 4. Collect Usa      // 4. Collect Stats
+      // 4. Collect Stats
       final db = DatabaseService.instance;
-      final totalInvoices = await db.getTotalInvoicesCount();
-      final totalCustomers = await db.getTotalCustomersCount();
-      final totalSales = await db.getTotalSalesAmount();     // 5. Get User Info from Settings
+      final invoiceCount = await db.getTotalInvoicesCount();
+      final customersCount = await db.getTotalCustomersCount();
+      final totalSales = await db.getTotalSalesAmount();
+      final totalPurchase = await db.getTotalPurchaseAmount();
+
+      // 5. Get User Info from Settings
       final storeName = prefs.getString('settings_store_name') ?? '';
-      final fullName = prefs.getString('settings_owner_name') ?? '';
-      final phone = prefs.getString('settings_phone') ?? '';
+      final ownerName = prefs.getString('settings_owner_name') ?? '';
+      final address = prefs.getString('settings_address') ?? '';
+      final city = prefs.getString('settings_city') ?? '';
+      final mobile = prefs.getString('settings_phone') ?? '';
       final whatsapp = prefs.getString('settings_whatsapp') ?? '';
 
       // 6. Prepare Payload
       final payload = {
         'device_id': deviceId,
         'store_name': storeName,
-        'full_name': fullName,
-        'phone': phone,
+        'owner_name': ownerName,
+        'address': address,
+        'city': city,
+        'mobile': mobile,
         'whatsapp': whatsapp,
+        'device_name': deviceName,
         'device_model': deviceModel,
         'os_version': osVersion,
         'app_version': appVersion,
         'latitude': lat,
         'longitude': lng,
-        'total_invoices': totalInvoices,
-        'total_customers': totalCustomers,
-        'total_sales_amount': totalSales,
-        'last_active_at': DateTime.now().toIso8601String(),
+        'invoice_count': invoiceCount,
+        'customers_count': customersCount,
+        'total_sales': totalSales,
+        'total_purchase': totalPurchase,
+        'last_sync_time': DateTime.now().toIso8601String(),
+        'last_active_time': DateTime.now().toIso8601String(),
       };
 
       // 7. Send to Server (Background)
