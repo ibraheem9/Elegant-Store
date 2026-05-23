@@ -1733,19 +1733,12 @@ class DatabaseService {
     final invRows = await db.rawQuery(
       '''
       SELECT
-        -- app_sales: SALE + PAID + payment_method type = app
+        -- app_sales: (SALE + PAID + payment_method type = app) + (DEPOSIT + PAID + payment_method type = app)
         COALESCE(SUM(CASE
-          WHEN i.type = 'SALE'
+          WHEN (i.type = 'SALE' OR i.type = 'DEPOSIT')
             AND i.payment_status IN ('PAID','paid')
             AND pm.type = 'app'
           THEN i.amount ELSE 0 END), 0) AS app_sales,
-
-        -- app_sales_deposit: DEPOSIT + PAID + payment_method type = app
-        COALESCE(SUM(CASE
-          WHEN i.type = 'DEPOSIT'
-            AND i.payment_status IN ('PAID','paid')
-            AND pm.type = 'app'
-          THEN i.amount ELSE 0 END), 0) AS app_sales_deposit,
 
         -- app_debt: SALE + UNPAID or DEFERRED (any payment method)
         COALESCE(SUM(CASE
@@ -1817,7 +1810,6 @@ class DatabaseService {
 
     return {
       'app_sales':             (inv['app_sales']             as num?)?.toDouble() ?? 0.0,
-      'app_sales_deposit':     (inv['app_sales_deposit']     as num?)?.toDouble() ?? 0.0,
       'app_debt':              (inv['app_debt']              as num?)?.toDouble() ?? 0.0,
       'cash_debt':             (inv['cash_debt']             as num?)?.toDouble() ?? 0.0,
       'cash_withdrawals':      (inv['cash_debt']             as num?)?.toDouble() ?? 0.0,
@@ -1856,19 +1848,12 @@ class DatabaseService {
     final invRows = await db.rawQuery(
       '''
       SELECT
-        -- app_sales: SALE + PAID + payment_method type = app
+        -- app_sales: (SALE + PAID + payment_method type = app) + (DEPOSIT + PAID + payment_method type = app)
         COALESCE(SUM(CASE
-          WHEN i.type = 'SALE'
+          WHEN (i.type = 'SALE' OR i.type = 'DEPOSIT')
             AND i.payment_status IN ('PAID','paid')
             AND pm.type = 'app'
           THEN i.amount ELSE 0 END), 0) AS app_sales,
-
-        -- app_sales_deposit: DEPOSIT + PAID + payment_method type = app
-        COALESCE(SUM(CASE
-          WHEN i.type = 'DEPOSIT'
-            AND i.payment_status IN ('PAID','paid')
-            AND pm.type = 'app'
-          THEN i.amount ELSE 0 END), 0) AS app_sales_deposit,
 
         -- app_debt: SALE + UNPAID or DEFERRED (any payment method)
         COALESCE(SUM(CASE
@@ -1940,7 +1925,6 @@ class DatabaseService {
 
     return {
       'app_sales':             (inv['app_sales']             as num?)?.toDouble() ?? 0.0,
-      'app_sales_deposit':     (inv['app_sales_deposit']     as num?)?.toDouble() ?? 0.0,
       'app_debt':              (inv['app_debt']              as num?)?.toDouble() ?? 0.0,
       'cash_debt':             (inv['cash_debt']             as num?)?.toDouble() ?? 0.0,
       'cash_withdrawals':      (inv['cash_debt']             as num?)?.toDouble() ?? 0.0,

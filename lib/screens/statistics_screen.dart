@@ -28,14 +28,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
   // ── Manual inputs ──────────────────────────────────────────────────────────
   final _todayCashController = TextEditingController();
-
   // ── Auto-calculated from DB ───────────────────────────────────────────────
   // Sales
-  double _appSales            = 0.0;  // SALE + PAID + pm.type='app'
-  double _appSalesDeposit     = 0.0;  // DEPOSIT + PAID + pm.type='app'
-  double _cashSalesInvoice    = 0.0;  // SALE + PAID + pm.type='cash'
+  double _appSales            = 0.0;  // (SALE + PAID + pm.type=\'app\') + (DEPOSIT + PAID + pm.type=\'app\')
+  double _cashSalesInvoice    = 0.0;  // SALE + PAID + pm.type=\'cash\'
   double _cashWithdrawalTotal = 0.0;  // all WITHDRAWAL invoices (for cash sales formula)
-  double _cashSalesDeposit    = 0.0;  // DEPOSIT + PAID + pm.type='cash' (deducted)
   // Debts
   double _appDebt             = 0.0;  // SALE + UNPAID/DEFERRED
   double _cashDebt            = 0.0;  // WITHDRAWAL + UNPAID
@@ -140,18 +137,15 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     if (_isSingleDay) {
       savedStats = await db.getTodayStatistics(date: _selectedDate);
     }
-
     setState(() {
-      _appSales            = detailedStats['app_sales']             ?? 0.0;
-      _appSalesDeposit     = detailedStats['app_sales_deposit']     ?? 0.0;
-      _cashSalesInvoice    = detailedStats['cash_sales_invoice']    ?? 0.0;
-      _cashWithdrawalTotal = detailedStats['cash_withdrawal_total'] ?? 0.0;
+      _appSales            = detailedStats[\'app_sales\']             ?? 0.0;      _cashSalesInvoice    = detailedStats["cash_sales_invoice"]    ?? 0.0;
+      _cashWithdrawalTotal = detailedStats["cash_withdrawal_total"] ?? 0.0;
       _cashSalesDeposit    = detailedStats['cash_sales_deposit']    ?? 0.0;
       _appDebt             = detailedStats['app_debt']              ?? 0.0;
       _cashDebt            = detailedStats['cash_debt']             ?? 0.0;
       _cashPurchases       = detailedStats['cash_purchases']        ?? 0.0;
       _appPurchases        = detailedStats['app_purchases']         ?? 0.0;
-      _totalCredits        = detailedStats['total_credits']         ?? 0.0;
+      _totalCredits        = detailedStats[\'total_credits\']         ?? 0.0;
       _yesterdayCash       = yesterdayCash;
       _monthlyData         = monthly;
       if (savedStats != null) {
@@ -160,7 +154,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       }
       _isLoading = false;
     });
-  }
 
   // ── Filter actions ─────────────────────────────────────────────────────────
   Future<void> _applyFilter(_FilterMode mode) async {
@@ -225,30 +218,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   // ── Derived values (User Formulas) ────────────────────────────────────────
   bool get _cashEntered => _todayCashController.text.trim().isNotEmpty;
 
-  /// x = all invoice that have type deposit and payment status paid and payment method app
-  ///     - all invoice that have payment status unpaid or deferred and type sale
-  double get _x => _appSalesDeposit - _appDebt;
+  /// Total app sales = (SALE + PAID + app) + (DEPOSIT + PAID + app)
+  double get _totalAppSales => _appSales;
 
-  /// credit = all invoice that have payment status unpaid or deferred and type sale
-  ///          - all invoice that have type deposit and payment status paid and payment method app
-  /// (must be positive)
-  double get _credit {
-    final val = _appDebt - _appSalesDeposit;
-    return val > 0 ? val : 0.0;
-  }
 
-  /// Total app sales = total invoice that have payment status paid and type sale and payment method app + x
-  /// if x > 0: Total app sales = total invoice that have payment status paid and type sale and payment method app + x - credit
-  double get _totalAppSales {
-    if (_x <= 0) {
-      return _appSales + _x;
-    } else {
-      return _appSales + _x - _credit;
-    }
-  }
-
-  /// 1b. Total Deposit App = all invoice that have type deposit and payment status paid and payment method app
-  double get _totalDepositApp => _appSalesDeposit;
 
   /// 1c. Total Deposit Cash = all invoice that have type deposit and payment status paid and payment method cash
   double get _totalDepositCash => _cashSalesDeposit;
