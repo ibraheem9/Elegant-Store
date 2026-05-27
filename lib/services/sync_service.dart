@@ -204,6 +204,30 @@ class SyncService extends ChangeNotifier {
     }
   }
 
+  Future<void> saveManualSyncDetails({
+    required int customersUploaded,
+    required int invoicesUploaded,
+    required int customersDownloaded,
+    required int invoicesDownloaded,
+    required int recordsUpdated,
+  }) async {
+    final localTimestamp = TimestampFormatter.nowUtc();
+    
+    final details = SyncDetails(
+      lastSyncTime: localTimestamp,
+      customersUploaded: customersUploaded,
+      invoicesUploaded: invoicesUploaded,
+      customersDownloaded: customersDownloaded,
+      invoicesDownloaded: invoicesDownloaded,
+      recordsUpdated: recordsUpdated,
+      recordsOverwritten: 0,
+      mergedCustomers: [],
+    );
+
+    await _saveSyncDetails(details);
+    await _prefs.setString('last_sync_time_local', localTimestamp);
+  }
+
   Future<void> _saveSyncDetails(SyncDetails details) async {
     _lastSyncDetails = details;
     await _prefs.setString('last_sync_details_v2', jsonEncode(details.toJson()));
@@ -337,6 +361,23 @@ class SyncService extends ChangeNotifier {
             }
           }
         });
+
+        // Also update the local "Last Sync" display time for the Push phase
+        final localTimestamp = TimestampFormatter.nowUtc();
+        await _prefs.setString('last_sync_time_local', localTimestamp);
+        
+        // Update SyncDetails for the Push phase
+        final currentDetails = _lastSyncDetails;
+        await _saveSyncDetails(SyncDetails(
+          lastSyncTime: localTimestamp,
+          customersUploaded: custUp,
+          invoicesUploaded: invUp,
+          customersDownloaded: currentDetails?.customersDownloaded ?? 0,
+          invoicesDownloaded: currentDetails?.invoicesDownloaded ?? 0,
+          recordsUpdated: currentDetails?.recordsUpdated ?? 0,
+          recordsOverwritten: currentDetails?.recordsOverwritten ?? 0,
+          mergedCustomers: currentDetails?.mergedCustomers ?? [],
+        ));
 
         _setSyncProgress(1.0, "تم رفع البيانات بنجاح");
         _isSyncing = false;

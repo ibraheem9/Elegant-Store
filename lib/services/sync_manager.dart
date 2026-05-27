@@ -166,6 +166,18 @@ class SyncManager extends ChangeNotifier {
         
         final updated = stats['updated'] ?? 0;
         final inserted = stats['inserted'] ?? 0;
+        
+        // Update SyncDetails in SyncService so the UI shows the correct "Last Sync Time"
+        // and includes both Push counts (from SyncService) and Pull counts (from DeviceSyncService).
+        final pushDetails = _syncService.lastSyncDetails;
+        await _syncService.saveManualSyncDetails(
+          customersUploaded: pushDetails?.customersUploaded ?? 0,
+          invoicesUploaded: pushDetails?.invoicesUploaded ?? 0,
+          customersDownloaded: inserted,
+          invoicesDownloaded: 0,
+          recordsUpdated: updated,
+        );
+
         String summary = "اكتملت المزامنة بنجاح ✓";
         if (updated > 0 || inserted > 0) {
           summary += " (تم تحديث $updated وإضافة $inserted سجل)";
