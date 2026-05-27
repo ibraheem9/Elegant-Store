@@ -299,18 +299,8 @@ class _AppHomeState extends State<_AppHome> with WidgetsBindingObserver {
 
     _postLoginSyncTriggered = true;
 
-    // Trigger device sync
-    Future.microtask(() async {
-      try {
-        final syncManager = context.read<SyncManager>();
-        // Enable automatic sync (15 min interval)
-        syncManager.enable();
-        // Force immediate sync on login
-        await syncManager.forceSyncNow();
-      } catch (e) {
-        debugPrint('Post-login sync failed: $e');
-      }
-    });
+    // We no longer trigger automatic sync on login as requested.
+    // SyncManager is now manual.
   }
 
   @override
@@ -318,19 +308,7 @@ class _AppHomeState extends State<_AppHome> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       final authService = context.read<AuthService>();
       if (authService.isLoggedIn) {
-        Future.microtask(() async {
-          try {
-            final syncManager = context.read<SyncManager>();
-            // Ensure sync is enabled when app resumes
-            if (!syncManager.isEnabled) {
-              syncManager.enable();
-            }
-            // Force sync on app resume
-            await syncManager.forceSyncNow();
-          } catch (e) {
-            debugPrint('App resume sync failed: $e');
-          }
-        });
+        // We no longer trigger automatic sync on app resume as requested.
       }
     }
   }

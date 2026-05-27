@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../services/sync_service.dart';
+import '../services/sync_manager.dart';
 
 class SyncDetailsScreen extends StatefulWidget {
   const SyncDetailsScreen({Key? key}) : super(key: key);
@@ -662,24 +663,29 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
   }
 
   Widget _buildActionButtons(bool isDark) {
-    return Consumer<SyncService>(
-      builder: (context, syncService, _) {
+    return Consumer2<SyncService, SyncManager>(
+      builder: (context, syncService, syncManager, _) {
         final isRestoring = _isRestoring || (syncService.isSyncing && syncService.restoreProgress > 0);
-        final progress = syncService.restoreProgress;
-        final statusText = syncService.restoreStatus;
+        final isSyncing = syncManager.isSyncing;
+        
+        final restoreProgress = syncService.restoreProgress;
+        final syncProgress = syncManager.syncProgress;
+        
+        final statusText = isRestoring ? syncService.restoreStatus : syncManager.syncStatusText;
+        final currentProgress = isRestoring ? restoreProgress : syncProgress;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // ── Progress bar (visible only during restore) ─────────────────
-            if (isRestoring) ...[
+            // ── Progress bar (visible during restore OR manual sync) ────────
+            if (isRestoring || isSyncing) ...[
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: isDark ? const Color(0xFF1E293B) : Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: Colors.teal.withOpacity(0.3),
+                    color: (isRestoring ? Colors.teal : Colors.blue).withOpacity(0.3),
                   ),
                 ),
                 child: Column(
@@ -687,11 +693,15 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.cloud_download_rounded, color: Colors.teal, size: 18),
+                        Icon(
+                          isRestoring ? Icons.cloud_download_rounded : Icons.sync_rounded,
+                          color: isRestoring ? Colors.teal : Colors.blue,
+                          size: 18,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            statusText.isNotEmpty ? statusText : 'جاري الاستعادة…',
+                            statusText.isNotEmpty ? statusText : (isRestoring ? 'جاري الاستعادة…' : 'جاري المزامنة…'),
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
@@ -700,11 +710,11 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
                           ),
                         ),
                         Text(
-                          '${(progress * 100).toStringAsFixed(0)}%',
-                          style: const TextStyle(
+                          '${(currentProgress * 100).toStringAsFixed(0)}%',
+                          style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
-                            color: Colors.teal,
+                            color: isRestoring ? Colors.teal : Colors.blue,
                           ),
                         ),
                       ],
@@ -713,12 +723,12 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: LinearProgressIndicator(
-                        value: progress > 0 ? progress : null,
+                        value: currentProgress > 0 ? currentProgress : null,
                         minHeight: 8,
                         backgroundColor: isDark
                             ? Colors.white.withOpacity(0.08)
-                            : Colors.teal.withOpacity(0.12),
-                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.teal),
+                            : (isRestoring ? Colors.teal : Colors.blue).withOpacity(0.12),
+                        valueColor: AlwaysStoppedAnimation<Color>(isRestoring ? Colors.teal : Colors.blue),
                       ),
                     ),
                   ],
@@ -727,9 +737,34 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
               const SizedBox(height: 12),
             ],
 
+            // ── Manual Sync button ──────────────────────────────────────────
+            ElevatedButton.icon(
+              onPressed: (isRestoring || isSyncing || _isResetting) ? null : () async {
+                await syncManager.forceSyncNow();
+                await _loadStats();
+              },
+              icon: isSyncing
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.sync_rounded, color: Colors.white),
+              label: Text(
+                isSyncing ? 'جاري المزامنة...' : 'بدء مزامنة البيانات يدوياً',
+                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0B74FF),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+            const SizedBox(height: 12),
+
             // ── Full Restore from Server button ────────────────────────────
             ElevatedButton.icon(
-              onPressed: (_isResetting || isRestoring) ? null : _handleRestore,
+              onPressed: (_isResetting || isRestoring || isSyncing) ? null : _handleRestore,
               icon: isRestoring
                   ? const SizedBox(
                       width: 18,
@@ -752,7 +787,7 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
 
             // ── Reset Data button ──────────────────────────────────────────
             OutlinedButton.icon(
-              onPressed: (_isResetting || isRestoring) ? null : _confirmAndReset,
+              onPressed: (_isResetting || isRestoring || isSyncing) ? null : _confirmAndReset,
               icon: _isResetting
                   ? const SizedBox(
                       width: 18,

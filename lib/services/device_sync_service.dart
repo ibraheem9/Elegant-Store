@@ -31,6 +31,7 @@ class DeviceSyncService {
   VoidCallback? onSyncComplete;
   Function(String)? onSyncError;
   Function(int)? onRecordsReceived;
+  Function(double, String)? onProgressUpdate;
 
   DeviceSyncService({
     required Dio dio,
@@ -502,59 +503,68 @@ class DeviceSyncService {
 
   // ────────────────────────────────────────────────────────────────────────
 
-  /// Perform full sync cycle
-  Future<bool> performFullSync(List<String> tables) async {
+  /// Perform full sync cycle. Returns stats map on success.
+  Future<Map<String, int>?> performFullSync(List<String> tables) async {
     try {
       final deviceId = await getDeviceId();
+      onProgressUpdate?.call(0.1, "جاري تحديث البيانات المحلية...");
       // Update local metrics and last_active before sync starts
       await _databaseService.updateStoreProfileMetrics(deviceId);
 
       // Step 1: Initialize sync (registers device on server if new)
+      onProgressUpdate?.call(0.2, "جاري الاتصال بالسيرفر...");
       if (!await initSync()) {
-        return false;
+        return null;
       }
 
       // Step 2: Start sync
+      onProgressUpdate?.call(0.3, "بدء جلسة المزامنة...");
       if (!await startSync()) {
-        return false;
+        return null;
       }
 
       // Step 3: Get changed records
+      onProgressUpdate?.call(0.4, "جاري طلب البيانات الجديدة...");
       final changedRecords = await _getChangedRecordsInternal(tables);
       if (changedRecords == null) {
         // 404 during changed-records: device not registered — re-init and retry once
         debugPrint('[DeviceSync] Device not found during changed-records, re-initializing...');
         if (await initSync() && await startSync()) {
           final retryRecords = await getChangedRecords(tables);
-          if (retryRecords.isNotEmpty) await _saveChangedRecords(retryRecords);
-          if (!await completeSync()) { await failSync(); return false; }
-          return true;
+          Map<String, int> stats = {};
+          if (retryRecords.isNotEmpty) stats = await _saveChangedRecords(retryRecords);
+          if (!await completeSync()) { await failSync(); return null; }
+          return stats;
         }
         onSyncError?.call('جهازك غير مسجل على السيرفر. سيتم إعادة التسجيل تلقائياً في المحاولة التالية.');
-        return false;
+        return null;
       }
 
       // Step 4: Save records to local database
+      Map<String, int> finalStats = {'inserted': 0, 'updated': 0, 'skipped': 0};
       if (changedRecords.isNotEmpty) {
-        await _saveChangedRecords(changedRecords);
+        onProgressUpdate?.call(0.6, "جاري حفظ التحديثات في قاعدة البيانات...");
+        finalStats = await _saveChangedRecords(changedRecords);
       }
 
       // Step 5: Complete sync
+      onProgressUpdate?.call(0.9, "جاري إنهاء عملية المزامنة...");
       if (!await completeSync()) {
         await failSync();
-        return false;
+        return null;
       }
 
-      return true;
+      onProgressUpdate?.call(1.0, "اكتملت المزامنة بنجاح");
+      return finalStats;
     } on DioException catch (e) {
       debugPrint('[DeviceSync] Full sync DioException: $e');
       await failSync();
       onSyncError?.call(_mapSyncError(e, 'sync'));
-      return false;
+      return null;
     } catch (e) {
       await failSync();
       onSyncError?.call('Full sync failed: $e');
-      return false;
+      return null;
     }
   }
 
@@ -660,9 +670,14 @@ class DeviceSyncService {
   }
 
   /// Save changed records to local database
-  Future<void> _saveChangedRecords(Map<String, dynamic> changedRecords) async {
+  Future<Map<String, int>> _saveChangedRecords(Map<String, dynamic> changedRecords) async {
     try {
       final db = await _databaseService.database;
+      final Map<String, int> stats = {
+        'inserted': 0,
+        'updated': 0,
+        'skipped': 0,
+      };
 
       // Define table order to respect foreign keys (parents first)
       const List<String> parentTables = ['payment_methods', 'users'];
@@ -682,7 +697,8 @@ class DeviceSyncService {
           for (final record in records) {
             if (record is! Map) continue;
             final item = Map<String, dynamic>.from(record);
-            await _databaseService.upsertFromSyncInTxn(tableName, item, txn);
+            final result = await _databaseService.upsertFromSyncInTxn(tableName, item, txn);
+            _updateStats(stats, result['status'] as String?);
           }
         }
 
@@ -696,16 +712,24 @@ class DeviceSyncService {
             // Resolve UUID relations to local IDs (CRITICAL for fixing ID jump and FK mismatch)
             final resolved = await _databaseService.resolveRelationsInTxn(tableName, item, txn);
             
-            await _databaseService.upsertFromSyncInTxn(tableName, resolved, txn);
+            final result = await _databaseService.upsertFromSyncInTxn(tableName, resolved, txn);
+            _updateStats(stats, result['status'] as String?);
           }
         }
       });
 
-      debugPrint('[DeviceSync] Saved all changed records successfully');
+      debugPrint('[DeviceSync] Saved all changed records successfully. Stats: $stats');
+      return stats;
     } catch (e) {
       debugPrint('[DeviceSync] Error saving changed records: $e');
       rethrow;
     }
+  }
+
+  void _updateStats(Map<String, int> stats, String? status) {
+    if (status == 'INSERT') stats['inserted'] = (stats['inserted'] ?? 0) + 1;
+    if (status == 'UPDATE') stats['updated'] = (stats['updated'] ?? 0) + 1;
+    if (status == 'SKIP') stats['skipped'] = (stats['skipped'] ?? 0) + 1;
   }
 
   /// Get localized timestamp with device timezone
@@ -757,7 +781,7 @@ class DeviceSyncService {
 
   /// Perform full sync with default tables
   Future<bool> performFullSyncDefault() async {
-    return performFullSync([
+    final stats = await performFullSync([
       'users',
       'invoices',
       'transactions',
@@ -766,5 +790,6 @@ class DeviceSyncService {
       'daily_statistics',
       'edit_history',
     ]);
+    return stats != null;
   }
 }

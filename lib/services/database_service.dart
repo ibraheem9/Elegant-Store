@@ -2631,21 +2631,23 @@ class DatabaseService {
     );
   }
 
-  Future<int> upsertFromSync(String table, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> upsertFromSync(String table, Map<String, dynamic> data) async {
     final db = await database;
     return await db.transaction((txn) async {
       return await upsertFromSyncInTxn(table, data, txn);
     });
   }
 
-  Future<int> upsertFromSyncInTxn(
+  /// Performs a version-gated upsert for records incoming from server sync.
+  /// Returns a map: {'id': localId, 'status': 'INSERT'|'UPDATE'|'SKIP'|'ERROR'}
+  Future<Map<String, dynamic>> upsertFromSyncInTxn(
     String table,
     Map<String, dynamic> data,
     dynamic txn, {
     bool allowSoftDeleted = false,
   }) async {
     final uuid = data['uuid'];
-    if (uuid == null) return -1;
+    if (uuid == null) return {'id': -1, 'status': 'ERROR'};
 
     final sanitizedData = Map<String, dynamic>.from(data);
     sanitizedData.remove('id');
@@ -2696,9 +2698,11 @@ class DatabaseService {
           where: 'id = ?',
           whereArgs: [existingId],
         );
-        return incomingVersion > existingVersion ? 2 : 1; // 2=Overwritten, 1=Updated
+        // Status UPDATE if versions same, or status might be considered "OVERWRITE" if newer.
+        // We'll return UPDATE for any successful version-gated update.
+        return {'id': existingId, 'status': 'UPDATE'};
       }
-      return 0; // No change
+      return {'id': existingId, 'status': 'SKIP'};
     } else {
       // 2. For users: also try matching by username to handle UUID changes
       if (table == 'users') {
@@ -2717,7 +2721,7 @@ class DatabaseService {
               where: 'id = ?',
               whereArgs: [existingId],
             );
-            return existingId;
+            return {'id': existingId, 'status': 'UPDATE'};
           }
         }
       }
@@ -2754,8 +2758,9 @@ class DatabaseService {
                 where: 'id = ?',
                 whereArgs: [existingId],
               );
+              return {'id': existingId, 'status': 'UPDATE'};
             }
-            return existingId;
+            return {'id': existingId, 'status': 'SKIP'};
           }
         }
       }
@@ -2764,13 +2769,14 @@ class DatabaseService {
       // (no point creating a record locally that is already deleted on server)
       // Exception: during a full restore, we MUST insert soft-deleted records
       // so that FK references from child records (invoices → users) can be resolved.
-      if (isDeletedOnServer && !allowSoftDeleted) return -1;
+      if (isDeletedOnServer && !allowSoftDeleted) return {'id': -1, 'status': 'SKIP'};
 
       if (table == 'users') {
         // Assign a safe local password; real auth goes through the server token
         sanitizedData['password'] = sanitizedData['password'] ?? '***';
       }
-      return await txn.insert(table, sanitizedData);
+      final newId = await txn.insert(table, sanitizedData);
+      return {'id': newId, 'status': 'INSERT'};
     }
   }
 

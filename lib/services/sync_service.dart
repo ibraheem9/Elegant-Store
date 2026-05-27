@@ -70,6 +70,21 @@ class SyncService extends ChangeNotifier {
   SyncDetails? _lastSyncDetails;
   SyncDetails? get lastSyncDetails => _lastSyncDetails;
 
+  // ── Sync progress ────────────────────────────────────────────────────────
+  /// Human-readable status message shown in the progress bar for pushes.
+  String _syncStatusText = '';
+  String get syncStatusText => _syncStatusText;
+
+  /// 0.0 → 1.0 progress of the current push operation.
+  double _syncProgress = 0.0;
+  double get syncProgress => _syncProgress;
+
+  void _setSyncProgress(double progress, String status) {
+    _syncProgress = progress;
+    _syncStatusText = status;
+    notifyListeners();
+  }
+
   // ── Restore progress ─────────────────────────────────────────────────────
   /// 0.0 → 1.0 progress of the current full restore operation.
   double _restoreProgress = 0.0;
@@ -255,7 +270,14 @@ class SyncService extends ChangeNotifier {
     return newId;
   }
 
-  Future<void> performFullSync({bool isInitialSync = false}) async {
+  /// Main sync entry point.
+  /// 
+  /// If [pushOnly] is true, it only uploads local changes and marks them as synced.
+  /// This is used by SyncManager which handles the Pull phase via DeviceSyncService.
+  Future<void> performFullSync({
+    bool isInitialSync = false,
+    bool pushOnly = false,
+  }) async {
     if (_isSyncing) return;
 
     final bool hasInternet = await checkConnectivity();
@@ -266,81 +288,39 @@ class SyncService extends ChangeNotifier {
     }
 
     _isSyncing = true;
+    _syncProgress = 0.0;
+    _syncStatusText = "بدء عملية المزامنة...";
     notifyListeners();
 
     try {
-      dev.log('Starting sync. Initial: $isInitialSync', name: 'SyncService');
+      dev.log('Starting sync. Initial: $isInitialSync, PushOnly: $pushOnly', name: 'SyncService');
 
-      final String? lastSyncTime =
-          isInitialSync ? null : _prefs.getString('last_sync_time');
-
+      final String? lastSyncTime = isInitialSync ? null : _prefs.getString('last_sync_time');
       final payload = await _prepareSyncPayload();
+      
+      final int totalToUpload = payload.values.fold(0, (sum, list) => sum + list.length);
       final int custUp = payload['users']?.length ?? 0;
       final int invUp  = payload['invoices']?.length ?? 0;
 
       final deviceId = await _getOrCreateDeviceId();
-      final response = await _dio.post('sync/receive', data: {
-        'data': payload,
-        'last_sync_time': lastSyncTime,
-        'device_id': deviceId,
-      });
 
-      final responseData = response.data is String
-          ? jsonDecode(response.data)
-          : response.data;
+      // ── Step 1: PUSH (Chunked) ────────────────────────────────────────────
+      _setSyncProgress(0.05, "جاري تحضير البيانات للرفع...");
+      
+      final pushSuccess = await _performChunkedPush(
+        payload: payload,
+        deviceId: deviceId,
+        lastSyncTime: lastSyncTime,
+        pushOnly: pushOnly,
+      );
 
-      final bool isSuccess = _isSuccessResponse(responseData['success']);
+      if (!pushSuccess) {
+        throw Exception('فشل رفع البيانات إلى السيرفر');
+      }
 
-      if (response.statusCode == 200 && isSuccess) {
-        final pullData = _safeMap(responseData['pull_data']);
-        final String? serverTimestamp =
-            _safeString(responseData['timestamp'] ?? responseData['server_time']);
-        final remappedUuids = _safeMap(responseData['remapped_uuids']);
-
-        if (pullData.isEmpty && serverTimestamp == null) {
-          throw Exception('استجابة غير صالحة من السيرفر: بيانات المزامنة ناقصة');
-        }
-
-        final int custDown = _safeList(pullData['users']).length;
-        final int invDown  = _safeList(pullData['invoices']).length;
-        final List<String> mergedNames = [];
-
-        // Apply UUID remappings first (outside transaction for safety)
+      if (pushOnly) {
+        // Mark pushed items as synced in a transaction
         final db = await _dbService.database;
-        if (remappedUuids != null && remappedUuids.isNotEmpty) {
-          await db.transaction((txn) async {
-            for (final entry in remappedUuids.entries) {
-              final newUuid = entry.value?.toString();
-              if (newUuid != null && newUuid.isNotEmpty) {
-                await _applyUuidRemap(entry.key, newUuid, txn);
-              }
-            }
-          });
-        }
-
-        final Map<String, int> stats = {'updated': 0, 'overwritten': 0};
-
-        // ── Two-pass pull: parents first, then children ────────────────────
-        // Pass 1: write payment_methods and users so FK resolution works
-        await _writePullPass(
-          db: db,
-          pullData: pullData,
-          tables: _parentTables,
-          mergedNames: mergedNames,
-          stats: stats,
-        );
-
-        // Pass 2: write child tables (invoices, transactions, etc.)
-        // At this point all users and payment_methods are in local DB.
-        await _writePullPass(
-          db: db,
-          pullData: pullData,
-          tables: _childTables,
-          mergedNames: mergedNames,
-          stats: stats,
-        );
-
-        // Mark pushed items as synced
         await db.transaction((txn) async {
           for (final table in payload.keys) {
             final uuids = payload[table]!
@@ -358,12 +338,77 @@ class SyncService extends ChangeNotifier {
           }
         });
 
+        _setSyncProgress(1.0, "تم رفع البيانات بنجاح");
+        _isSyncing = false;
+        notifyListeners();
+        return;
+      }
+
+      // ── Step 2: PULL (Legacy flow for non-push-only) ──────────────────────
+      // Note: This part is kept for backward compatibility if SyncService.performFullSync 
+      // is called directly instead of through SyncManager.
+      
+      _setSyncProgress(0.5, "جاري طلب التحديثات من السيرفر...");
+      
+      final response = await _dio.post('sync/receive', data: {
+        'data': {}, // Already pushed in chunks, send empty here to just get pull_data
+        'last_sync_time': lastSyncTime,
+        'device_id': deviceId,
+      });
+
+      final responseData = response.data is String ? jsonDecode(response.data) : response.data;
+      final bool isSuccess = _isSuccessResponse(responseData['success']);
+
+      if (response.statusCode == 200 && isSuccess) {
+        final pullData = _safeMap(responseData['pull_data']);
+        final String? serverTimestamp = _safeString(responseData['timestamp'] ?? responseData['server_time']);
+        final remappedUuids = _safeMap(responseData['remapped_uuids']);
+
+        if (pullData.isEmpty && serverTimestamp == null) {
+          throw Exception('استجابة غير صالحة من السيرفر: بيانات المزامنة ناقصة');
+        }
+
+        final int custDown = _safeList(pullData['users']).length;
+        final int invDown  = _safeList(pullData['invoices']).length;
+        final List<String> mergedNames = [];
+
+        // Apply UUID remappings
+        final db = await _dbService.database;
+        if (remappedUuids != null && remappedUuids.isNotEmpty) {
+          await db.transaction((txn) async {
+            for (final entry in remappedUuids.entries) {
+              final newUuid = entry.value?.toString();
+              if (newUuid != null && newUuid.isNotEmpty) {
+                await _applyUuidRemap(entry.key, newUuid, txn);
+              }
+            }
+          });
+        }
+
+        final Map<String, int> stats = {'updated': 0, 'overwritten': 0};
+
+        _setSyncProgress(0.6, "جاري تحديث البيانات المحلية...");
+        
+        await _writePullPass(db: db, pullData: pullData, tables: _parentTables, mergedNames: mergedNames, stats: stats);
+        _setSyncProgress(0.8, "جاري تحديث البيانات التابعة...");
+        await _writePullPass(db: db, pullData: pullData, tables: _childTables, mergedNames: mergedNames, stats: stats);
+
+        // Mark pushed items as synced
+        await db.transaction((txn) async {
+          for (final table in payload.keys) {
+            final uuids = payload[table]!.where((e) => e['uuid'] != null).map((e) => e['uuid'] as String).toList();
+            if (uuids.isNotEmpty) {
+              await txn.update(table, {'is_synced': 1}, where: 'uuid IN (${List.filled(uuids.length, '?').join(', ')})', whereArgs: uuids);
+            }
+          }
+        });
+
         await _dbService.recalculateAllBalances();
         final localTimestamp = TimestampFormatter.nowUtc();
         if (serverTimestamp != null) {
-          await _prefs.setString('last_sync_time', serverTimestamp); // keep server version for next sync request
+          await _prefs.setString('last_sync_time', serverTimestamp);
         }
-        await _prefs.setString('last_sync_time_local', localTimestamp); // local version for display
+        await _prefs.setString('last_sync_time_local', localTimestamp);
 
         await _saveSyncDetails(SyncDetails(
           lastSyncTime: localTimestamp,
@@ -376,33 +421,97 @@ class SyncService extends ChangeNotifier {
           mergedCustomers: mergedNames,
         ));
 
-        dev.log('Sync completed at $serverTimestamp.', name: 'SyncService');
+        _setSyncProgress(1.0, "اكتملت المزامنة بنجاح");
       } else {
-        final String errorMsg =
-            responseData['message'] as String? ?? 'Unknown server error';
-        throw Exception(errorMsg);
+        throw Exception(responseData['message'] as String? ?? 'Unknown server error');
       }
     } on DioException catch (e) {
-      String message = 'فشلت المزامنة بسبب مشكلة في الشبكة';
-      if (e.type == DioExceptionType.connectionTimeout) {
-        message = 'انتهت مهلة الاتصال بالسيرفر';
-      } else if (e.response?.statusCode == 401) {
-        message = 'انتهت صلاحية الجلسة، يرجى إعادة تسجيل الدخول';
-      } else if (e.response?.statusCode == 500) {
-        final serverMsg = e.response?.data is Map
-            ? (e.response!.data['message'] ?? 'خطأ داخلي في السيرفر (500)')
-            : 'خطأ داخلي في السيرفر (500)';
-        message = serverMsg.toString();
-      }
-      dev.log('Sync failed (Network): ${e.message}', name: 'SyncService');
-      throw Exception(message);
+      _handleSyncError(e);
     } catch (e) {
-      dev.log('Sync failed (General): $e', name: 'SyncService', error: e);
-      rethrow;
+      _handleSyncError(e);
     } finally {
       _isSyncing = false;
       notifyListeners();
     }
+  }
+
+  /// Performs chunked push of local changes to the server.
+  Future<bool> _performChunkedPush({
+    required Map<String, List<Map<String, dynamic>>> payload,
+    required String deviceId,
+    required String? lastSyncTime,
+    required bool pushOnly,
+  }) async {
+    const int chunkSize = 150; // Balanced size to avoid server limits (413 Payload Too Large)
+    
+    // Flatten all records into a list of (tableName, data) pairs for easier chunking
+    final List<MapEntry<String, Map<String, dynamic>>> allRecords = [];
+    for (final table in payload.keys) {
+      for (final record in payload[table]!) {
+        allRecords.add(MapEntry(table, record));
+      }
+    }
+
+    if (allRecords.isEmpty) {
+      dev.log('Push: No local changes to upload.', name: 'SyncService');
+      return true;
+    }
+
+    final int totalRecords = allRecords.length;
+    int processed = 0;
+
+    dev.log('Pushing $totalRecords records in chunks of $chunkSize...', name: 'SyncService');
+
+    for (int i = 0; i < allRecords.length; i += chunkSize) {
+      final end = (i + chunkSize < allRecords.length) ? i + chunkSize : allRecords.length;
+      final chunk = allRecords.sublist(i, end);
+      
+      // Reconstruct a payload map for this chunk
+      final Map<String, List<Map<String, dynamic>>> chunkPayload = {};
+      for (final entry in chunk) {
+        chunkPayload.putIfAbsent(entry.key, () => []).add(entry.value);
+      }
+
+      // Progress calculation for push phase (0.1 to 0.5 or 0.1 to 1.0 depending on mode)
+      final double progressScale = pushOnly ? 0.9 : 0.4;
+      final double currentProgress = 0.1 + ((processed / totalRecords) * progressScale);
+      _setSyncProgress(currentProgress, "جاري رفع البيانات (${processed + chunk.length} / $totalRecords)...");
+
+      final response = await _dio.post('sync/receive', data: {
+        'data': chunkPayload,
+        'last_sync_time': lastSyncTime,
+        'device_id': deviceId,
+        'is_partial': true, // Tell server this is part of a larger sync
+      });
+
+      final responseData = response.data is String ? jsonDecode(response.data) : response.data;
+      if (response.statusCode != 200 || !_isSuccessResponse(responseData['success'])) {
+        dev.log('Push failed at chunk $i: ${responseData['message']}', name: 'SyncService');
+        return false;
+      }
+
+      processed += chunk.length;
+    }
+
+    return true;
+  }
+
+  void _handleSyncError(dynamic e) {
+    String message = 'فشلت المزامنة';
+    if (e is DioException) {
+      if (e.type == DioExceptionType.connectionTimeout) message = 'انتهت مهلة الاتصال بالسيرفر';
+      else if (e.response?.statusCode == 401) message = 'انتهت صلاحية الجلسة، يرجى إعادة تسجيل الدخول';
+      else if (e.response?.statusCode == 413) message = 'حجم البيانات كبير جداً، يرجى المحاولة لاحقاً';
+      else if (e.response?.statusCode == 500) {
+        final serverMsg = e.response?.data is Map ? e.response!.data['message'] : 'خطأ داخلي في السيرفر';
+        message = serverMsg.toString();
+      }
+    } else {
+      message = e.toString().replaceAll('Exception: ', '');
+    }
+    _syncStatusText = "فشل: $message";
+    notifyListeners();
+    throw Exception(message);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -465,10 +574,11 @@ class SyncService extends ChangeNotifier {
               allowSoftDeleted: allowSoftDeleted,
             );
             
-            if (result == 1) { // Updated
+            final status = result['status'] as String?;
+            if (status == 'UPDATE') {
               stats['updated'] = (stats['updated'] ?? 0) + 1;
-            } else if (result == 2) { // Overwritten (Last Write Wins)
-              stats['overwritten'] = (stats['overwritten'] ?? 0) + 1;
+            } else if (status == 'INSERT') {
+              // Not tracked in this legacy stats map, but we could add it
             }
           } catch (itemError) {
             dev.log('Error on $table item ${item['uuid']}: $itemError', name: 'SyncService');

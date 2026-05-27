@@ -17,6 +17,7 @@ Group files by component and order logically.
 - Implemented `recalculateStoreMetrics()` to aggregate total customers, invoices, sales, and purchases.
 - Added CRUD methods for `StoreProfile` and `DeviceInfoModel`.
 - Added `updateStoreProfileMetrics()` to refresh metrics and update `last_active_time`.
+- Updated `upsertFromSyncInTxn` to return detailed operation results (`INSERT`, `UPDATE`, `SKIP`) for accurate sync reporting.
 
 ---
 
@@ -27,16 +28,28 @@ Group files by component and order logically.
 
 #### [device_sync_service.dart](file:///D:/Work/2026/Hamoda/Store_System/Elegant-Store/lib/services/device_sync_service.dart)
 - Added `syncStoreProfileOnly()` method which POSTs `StoreProfile` and `DeviceInfoModel` to the `profileSyncEndpoint`.
-- Updated `performFullSync()` to trigger `updateStoreProfileMetrics()` before sync starts.
-- Updated `completeSync()` to save `last_sync_time` in the `product_customers` table upon successful completion.
+- Updated `performFullSync()` to track granular progress and return record statistics.
 - Improved device name retrieval for Windows using `windowsInfo.computerName`.
 
 #### [sync_manager.dart](file:///D:/Work/2026/Hamoda/Store_System/Elegant-Store/lib/services/sync_manager.dart)
-- Updated unified sync flow to include a third step: calling `_deviceSyncService.syncStoreProfileOnly()`.
+- Implemented **Granular Progress Tracking** (0.0 - 1.0) with status messages.
+- Updated unified sync flow to include:
+    1. Push local changes.
+    2. Pull remote updates (with record count reporting).
+    3. Push profile/metrics to separate endpoint.
+- Removed automatic sync on instantiation/login; sync is now **Manual Only** as requested.
+
+#### [sync_details_screen.dart](file:///D:/Work/2026/Hamoda/Store_System/Elegant-Store/lib/screens/sync_details_screen.dart)
+- Integrated a **Real-Time Progress Bar** for the manual sync process.
+- Added a summary alert showing the number of updated and newly added records after sync.
+- Added a "Reset Data" button for fresh starts.
 
 ---
 
 ### UI Layer
+
+#### [main.dart](file:///D:/Work/2026/Hamoda/Store_System/Elegant-Store/lib/main.dart)
+- Removed automatic sync triggers from login and app resume flows.
 
 #### [NEW] [profile_screen.dart](file:///D:/Work/2026/Hamoda/Store_System/Elegant-Store/lib/screens/profile_screen.dart)
 - Implemented the Profile Screen with editable fields for Managers:

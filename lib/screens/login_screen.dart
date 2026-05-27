@@ -105,9 +105,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
       // Step 2: Check AFTER login() — login() may have cleared last_sync_time
       // for a new user/store, so we must re-read it here, not before login().
-      final bool firstLogin = await _isFirstLogin();
+      // final bool firstLogin = await _isFirstLogin();
 
-      // Step 3: On first login (or after user/store switch), run full sync
+      // Step 3: REMOVED automatic sync after login. 
+      // Users should start the sync manually from the dashboard.
+      /*
       if (firstLogin && mounted) {
         setState(() => _syncStatusMessage = 'جاري تحميل بيانات المتجر...');
         try {
@@ -122,6 +124,7 @@ class _LoginScreenState extends State<LoginScreen> {
           debugPrint('Initial sync failed on first login: $e');
         }
       }
+      */
 
       // Navigation is handled automatically by Consumer<AuthService> in main.dart
     } catch (e) {

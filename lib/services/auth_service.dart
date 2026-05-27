@@ -195,7 +195,8 @@ class AuthService extends ChangeNotifier {
         };
 
         // Capture the local auto-incremented ID
-        final int localId = await _dbService.upsertFromSync('users', localUserDataMap);
+        final Map<String, dynamic> upsertResult = await _dbService.upsertFromSync('users', localUserDataMap);
+        final int localId = upsertResult['id'] as int;
         localUserDataMap['id'] = localId;
 
         _currentUser = User.fromMap(localUserDataMap);

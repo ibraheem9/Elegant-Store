@@ -615,6 +615,10 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
       final success = await syncManager.forceSyncNow();
       if (mounted) {
         setState(() => _syncStatus = success ? "تمت المزامنة بنجاح" : "فشلت المزامنة");
+        
+        if (success) {
+          _showSyncSummaryAlert();
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -637,6 +641,66 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const SyncDetailsScreen()),
+    );
+  }
+
+  void _showSyncSummaryAlert() {
+    final syncService = context.read<SyncService>();
+    final details = syncService.lastSyncDetails;
+    if (details == null) return;
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded, color: Colors.green, size: 28),
+            const SizedBox(width: 12),
+            const Text('اكتملت المزامنة', style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('تم تحديث البيانات بنجاح مع السيرفر:'),
+            const SizedBox(height: 16),
+            _buildSummaryRow(Icons.upload_rounded, 'سجلات مرفوعة', '${details.customersUploaded + details.invoicesUploaded}'),
+            _buildSummaryRow(Icons.download_rounded, 'سجلات محمّلة', '${details.customersDownloaded + details.invoicesDownloaded}'),
+            _buildSummaryRow(Icons.update_rounded, 'سجلات محدّثة', '${details.recordsUpdated}'),
+            if (details.mergedCustomers.isNotEmpty) ...[
+              const Divider(height: 24),
+              Text('تم دمج ${details.mergedCustomers.length} زبائن مكررين.', 
+                style: const TextStyle(fontSize: 12, color: Colors.orange, fontWeight: FontWeight.bold)),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('حسنًا', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: Colors.blue),
+          const SizedBox(width: 8),
+          Text('$label:', style: const TextStyle(fontSize: 13)),
+          const Spacer(),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+        ],
+      ),
     );
   }
 
@@ -731,6 +795,10 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
   }
 
   Widget _buildSyncProgress(bool isDark, bool isSyncing) {
+    final syncManager = context.watch<SyncManager>();
+    final progress = syncManager.syncProgress;
+    final statusText = syncManager.syncStatusText.isNotEmpty ? syncManager.syncStatusText : _syncStatus;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -745,14 +813,36 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
             children: [
               const Icon(Icons.cloud_sync_rounded, color: Colors.blue, size: 20),
               const SizedBox(width: 12),
-              Expanded(child: Text(_syncStatus, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: isDark ? Colors.white : Colors.blue[900]), overflow: TextOverflow.ellipsis)),
+              Expanded(
+                child: Text(
+                  statusText,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: isDark ? Colors.white : Colors.blue[900],
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (isSyncing)
+                Text(
+                  '${(progress * 100).toStringAsFixed(0)}%',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.blue[300] : Colors.blue[800],
+                  ),
+                ),
             ],
           ),
           if (isSyncing) ...[
             const SizedBox(height: 12),
-            const ClipRRect(
-              borderRadius: BorderRadius.all(Radius.circular(10)),
-              child: LinearProgressIndicator(minHeight: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: LinearProgressIndicator(
+                value: progress > 0 ? progress : null,
+                minHeight: 6,
+              ),
             ),
           ],
         ],
