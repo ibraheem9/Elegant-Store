@@ -148,100 +148,100 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final size = MediaQuery.of(context).size;
     final bool isMobile = size.width < 700;
 
-    if (_isLoading && _profile == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(isMobile ? 16 : 32, isMobile ? 16 : 32, isMobile ? 16 : 32, 40),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'الملف الشخصي للمتجر',
-                style: TextStyle(
-                  fontSize: isMobile ? 24 : 32,
-                  fontWeight: FontWeight.w900,
-                  color: isDark ? const Color(0xFFDCEFFF) : const Color(0xFF0F172A),
-                ),
-              ),
-              const SizedBox(height: 32),
-
-              // ── Store Information ──────────────────────────────────────────
-                  _buildSection('معلومات المتجر', isDark, [
-                _buildResponsiveInputs(isMobile, isDark, [
-                  _buildTextField('اسم المتجر', _storeNameController, Icons.store_rounded, isDark, enabled: canEdit),
-                  _buildTextField('اسم المالك', _ownerNameController, Icons.person_rounded, isDark, enabled: canEdit),
-                ]),
-                const SizedBox(height: 16),
-                _buildResponsiveInputs(isMobile, isDark, [
-                  _buildTextField('العنوان', _addressController, Icons.location_on_rounded, isDark, enabled: canEdit),
-                  _buildTextField('المدينة', _cityController, Icons.location_city_rounded, isDark, enabled: canEdit),
-                ]),
-                const SizedBox(height: 16),
-                _buildResponsiveInputs(isMobile, isDark, [
-                  _buildTextField('رقم الهاتف (جوال)', _mobileController, Icons.phone_android_rounded, isDark, keyboardType: TextInputType.phone, enabled: canEdit),
-                  _buildTextField('واتساب (WhatsApp)', _whatsappController, Icons.chat_rounded, isDark, keyboardType: TextInputType.phone, enabled: canEdit),
-                ]),
-              ]),
-
-              const SizedBox(height: 32),
-
-              // ── Business Metrics (Visible only to Manager/Developer) ───────
-              if (isManager) ...[
-                _buildSection('إحصائيات العمل', isDark, [
-                  GridView.count(
-                    crossAxisCount: isMobile ? 2 : 4,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
-                    childAspectRatio: isMobile ? 1.5 : 2,
+    return Center(
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 1200),
+        child: _isLoading && _profile == null
+            ? const Center(child: CircularProgressIndicator())
+            : SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(isMobile ? 16 : 32, isMobile ? 16 : 32, isMobile ? 16 : 32, 40),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildMetricCard('إجمالي المبيعات', '${_profile?.totalSales.toStringAsFixed(2) ?? "0.00"} ₪', Icons.trending_up_rounded, Colors.green),
-                      _buildMetricCard('إجمالي المشتريات', '${_profile?.totalPurchase.toStringAsFixed(2) ?? "0.00"} ₪', Icons.shopping_cart_rounded, Colors.orange),
-                      _buildMetricCard('عدد الفواتير', '${_profile?.invoiceCount ?? 0}', Icons.receipt_long_rounded, Colors.blue),
-                      _buildMetricCard('عدد الزبائن', '${_profile?.customersCount ?? 0}', Icons.people_alt_rounded, Colors.purple),
+                      Text(
+                        'الملف الشخصي للمتجر',
+                        style: TextStyle(
+                          fontSize: isMobile ? 24 : 32,
+                          fontWeight: FontWeight.w900,
+                          color: isDark ? const Color(0xFFDCEFFF) : const Color(0xFF0F172A),
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+
+                      // ── Store Information ──────────────────────────────────────────
+                      _buildSection('معلومات المتجر', isDark, [
+                        _buildResponsiveInputs(isMobile, isDark, [
+                          _buildTextField('اسم المتجر', _storeNameController, Icons.store_rounded, isDark, enabled: canEdit),
+                          _buildTextField('اسم المالك', _ownerNameController, Icons.person_rounded, isDark, enabled: canEdit),
+                        ]),
+                        const SizedBox(height: 16),
+                        _buildResponsiveInputs(isMobile, isDark, [
+                          _buildTextField('العنوان', _addressController, Icons.location_on_rounded, isDark, enabled: canEdit),
+                          _buildTextField('المدينة', _cityController, Icons.location_city_rounded, isDark, enabled: canEdit),
+                        ]),
+                        const SizedBox(height: 16),
+                        _buildResponsiveInputs(isMobile, isDark, [
+                          _buildTextField('رقم الهاتف (جوال)', _mobileController, Icons.phone_android_rounded, isDark, keyboardType: TextInputType.phone, enabled: canEdit),
+                          _buildTextField('واتساب (WhatsApp)', _whatsappController, Icons.chat_rounded, isDark, keyboardType: TextInputType.phone, enabled: canEdit),
+                        ]),
+                      ]),
+
+                      const SizedBox(height: 32),
+
+                      // ── Business Metrics (Visible only to Manager/Developer) ───────
+                      if (isManager) ...[
+                        _buildSection('إحصائيات العمل', isDark, [
+                          GridView.count(
+                            crossAxisCount: isMobile ? 2 : 4,
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            mainAxisSpacing: 12,
+                            crossAxisSpacing: 12,
+                            childAspectRatio: isMobile ? 1.5 : 2,
+                            children: [
+                              _buildMetricCard('إجمالي المبيعات', '${_profile?.totalSales.toStringAsFixed(2) ?? "0.00"} ₪', Icons.trending_up_rounded, Colors.green),
+                              _buildMetricCard('إجمالي المشتريات', '${_profile?.totalPurchase.toStringAsFixed(2) ?? "0.00"} ₪', Icons.shopping_cart_rounded, Colors.orange),
+                              _buildMetricCard('عدد الفواتير', '${_profile?.invoiceCount ?? 0}', Icons.receipt_long_rounded, Colors.blue),
+                              _buildMetricCard('عدد الزبائن', '${_profile?.customersCount ?? 0}', Icons.people_alt_rounded, Colors.purple),
+                            ],
+                          ),
+                        ]),
+                        const SizedBox(height: 32),
+                      ],
+
+                      // ── Device Information (Visible only to Manager/Developer) ──────
+                      if (isManager) ...[
+                        _buildSection('معلومات الجهاز والمزامنة', isDark, [
+                          _buildInfoRow('معرف الجهاز (Device ID)', _deviceInfo?.deviceId ?? '-', isDark),
+                          const Divider(),
+                          _buildInfoRow('اسم الجهاز', _deviceInfo?.deviceName ?? '-', isDark),
+                          const Divider(),
+                          _buildInfoRow('آخر مزامنة', _profile?.lastSyncTime?.toLocalArabic() ?? 'لم تتم المزامنة بعد', isDark),
+                        ]),
+                        const SizedBox(height: 32),
+                      ],
+
+                      if (canEdit)
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: _isLoading ? null : _saveProfile,
+                            icon: _isLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.save_rounded, color: Colors.white),
+                            label: const Text('حفظ التغييرات', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0B74FF),
+                              padding: const EdgeInsets.symmetric(vertical: 18),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 40),
                     ],
                   ),
-                ]),
-                const SizedBox(height: 32),
-              ],
-
-              // ── Device Information (Visible only to Manager/Developer) ──────
-              if (isManager) ...[
-                _buildSection('معلومات الجهاز والمزامنة', isDark, [
-                  _buildInfoRow('معرف الجهاز (Device ID)', _deviceInfo?.deviceId ?? '-', isDark),
-                  const Divider(),
-                  _buildInfoRow('اسم الجهاز', _deviceInfo?.deviceName ?? '-', isDark),
-                  const Divider(),
-                  _buildInfoRow('آخر مزامنة', _profile?.lastSyncTime?.toLocalArabic() ?? 'لم تتم المزامنة بعد', isDark),
-                ]),
-                const SizedBox(height: 32),
-              ],
-
-              if (canEdit)
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _isLoading ? null : _saveProfile,
-                    icon: _isLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.save_rounded, color: Colors.white),
-                    label: const Text('حفظ التغييرات', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0B74FF),
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    ),
-                  ),
                 ),
-              const SizedBox(height: 40),
-            ],
-          ),
-        ),
+              ),
       ),
     );
   }

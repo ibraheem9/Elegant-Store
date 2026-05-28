@@ -213,6 +213,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildNavigationRail(ThemeData theme, bool isDark, AuthService auth) {
     int getRailIndex() {
+      bool isManager = auth.isManager();
       // Map all indices to rail indices
       switch (_selectedIndex) {
         case 0: return 0;
@@ -220,15 +221,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         case 2: return 2;
         case 3: return 3;
         case 4: return 4;
-        case 5: return 5;
-        case 6: return 6;
-        case 9: return 7;
-        case 10: return 7;
-        case 11: return 8;
-        case 12: return 9;
-        case 13: return 10;
-        case 14: return 11;
-        case 15: return 12;
+        case 5: return 5; // Accountants (Manager only)
+        case 6: return isManager ? 6 : 5;
+        case 9: return isManager ? 7 : 6;
+        case 10: return isManager ? 7 : 6;
+        case 11: return isManager ? 8 : 7;
+        case 12: return isManager ? 9 : 8;
+        case 13: return isManager ? 10 : 9;
+        case 14: return isManager ? 11 : 10;
+        case 15: return isManager ? 12 : 11;
         default: return 0;
       }
     }
@@ -237,22 +238,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
       backgroundColor: const Color(0xFF0F172A),
       selectedIndex: getRailIndex(),
       onDestinationSelected: (int index) {
+        bool isManager = auth.isManager();
         int targetScreen;
-        switch (index) {
-          case 0: targetScreen = 0; break;
-          case 1: targetScreen = 1; break;
-          case 2: targetScreen = 2; break;
-          case 3: targetScreen = 3; break;
-          case 4: targetScreen = 4; break;
-          case 5: targetScreen = 5; break;
-          case 6: targetScreen = 6; break;
-          case 7: targetScreen = 9; break;
-          case 8: targetScreen = 11; break;
-          case 9: targetScreen = 12; break;
-          case 10: targetScreen = 13; break;
-          case 11: targetScreen = 14; break;
-          case 12: targetScreen = 15; break;
-          default: targetScreen = 0;
+        
+        // Dynamic mapping based on manager status
+        if (isManager) {
+          switch (index) {
+            case 0: targetScreen = 0; break;
+            case 1: targetScreen = 1; break;
+            case 2: targetScreen = 2; break;
+            case 3: targetScreen = 3; break;
+            case 4: targetScreen = 4; break;
+            case 5: targetScreen = 5; break;
+            case 6: targetScreen = 6; break;
+            case 7: targetScreen = 9; break;
+            case 8: targetScreen = 11; break;
+            case 9: targetScreen = 12; break;
+            case 10: targetScreen = 13; break;
+            case 11: targetScreen = 14; break;
+            case 12: targetScreen = 15; break;
+            default: targetScreen = 0;
+          }
+        } else {
+          switch (index) {
+            case 0: targetScreen = 0; break;
+            case 1: targetScreen = 1; break;
+            case 2: targetScreen = 2; break;
+            case 3: targetScreen = 3; break;
+            case 4: targetScreen = 4; break;
+            case 5: targetScreen = 6; break;
+            case 6: targetScreen = 9; break;
+            case 7: targetScreen = 11; break;
+            case 8: targetScreen = 12; break;
+            case 9: targetScreen = 13; break;
+            case 10: targetScreen = 14; break;
+            case 11: targetScreen = 15; break;
+            default: targetScreen = 0;
+          }
         }
         setState(() => _selectedIndex = targetScreen);
       },
