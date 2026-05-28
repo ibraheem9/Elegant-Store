@@ -281,7 +281,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       labelType: NavigationRailLabelType.none,
       leading: Padding(
         padding: const EdgeInsets.symmetric(vertical: 20),
-        child: Image.asset('assets/logo.png', height: 40),
+        child: Image.asset('assets/icon.png', height: 32),
       ),
       destinations: [
         const NavigationRailDestination(icon: Icon(Icons.dashboard_rounded, color: Colors.white60), selectedIcon: Icon(Icons.dashboard_rounded), label: Text('لوحة التحكم')),
