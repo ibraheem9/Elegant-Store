@@ -15,7 +15,6 @@ class SyncDetailsScreen extends StatefulWidget {
 }
 
 class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
-  bool _isResetting = false;
   bool _isRestoring = false;
 
   Map<String, int> _unsyncedCounts = {};
@@ -125,46 +124,6 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
       }
     } finally {
       if (mounted) setState(() => _isRestoring = false);
-    }
-  }
-
-  Future<void> _confirmAndReset() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => _buildResetConfirmDialog(ctx),
-    );
-    if (confirmed != true) return;
-
-    setState(() => _isResetting = true);
-    try {
-      final db = context.read<DatabaseService>();
-      final prefs = await SharedPreferences.getInstance();
-
-      await db.clearAllDataAndReset();
-      await prefs.remove('last_sync_time');
-
-      if (mounted) {
-        ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
-          const SnackBar(
-            content: Text('تم مسح جميع البيانات المحلية. سيتم تحميل البيانات عند المزامنة التالية.'),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 4),
-          ),
-        );
-        await _loadStats();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
-          SnackBar(
-            content: Text('فشل إعادة التهيئة: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isResetting = false);
     }
   }
 
@@ -737,34 +696,9 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
               const SizedBox(height: 12),
             ],
 
-            // ── Manual Sync button ──────────────────────────────────────────
-            ElevatedButton.icon(
-              onPressed: (isRestoring || isSyncing || _isResetting) ? null : () async {
-                await syncManager.forceSyncNow();
-                await _loadStats();
-              },
-              icon: isSyncing
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Icon(Icons.sync_rounded, color: Colors.white),
-              label: Text(
-                isSyncing ? 'جاري المزامنة...' : 'بدء مزامنة البيانات يدوياً',
-                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0B74FF),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              ),
-            ),
-            const SizedBox(height: 12),
-
             // ── Full Restore from Server button ────────────────────────────
             ElevatedButton.icon(
-              onPressed: (_isResetting || isRestoring || isSyncing) ? null : _handleRestore,
+              onPressed: (isRestoring || isSyncing) ? null : _handleRestore,
               icon: isRestoring
                   ? const SizedBox(
                       width: 18,
@@ -783,141 +717,12 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
             ),
-            const SizedBox(height: 16),
-
-            // ── Reset Data button ──────────────────────────────────────────
-            OutlinedButton.icon(
-              onPressed: (_isResetting || isRestoring || isSyncing) ? null : _confirmAndReset,
-              icon: _isResetting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange),
-                    )
-                  : const Icon(Icons.delete_forever_rounded, color: Colors.orange),
-              label: Text(
-                _isResetting ? 'جاري المسح...' : 'مسح البيانات المحلية والبدء من جديد',
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold, color: Colors.orange, fontSize: 14),
-              ),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Colors.orange),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              ),
-            ),
             const SizedBox(height: 12),
           ],
         );
       },
     );
   }
-  Widget _buildResetConfirmDialog(BuildContext ctx) {
-    final isDark = Theme.of(ctx).brightness == Brightness.dark;
-    return AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 22),
-            ),
-            const SizedBox(width: 12),
-            const Text('تأكيد مسح البيانات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'سيتم حذف جميع البيانات المحلية من الجهاز، بما في ذلك:',
-              style: TextStyle(fontSize: 13),
-            ),
-            const SizedBox(height: 12),
-            ...[
-              'جميع الزبائن والمحاسبين',
-              'جميع الفواتير والمعاملات',
-              'جميع المشتريات والإحصائيات',
-              'طرق الدفع والسجل التاريخي',
-            ].map(
-              (item) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Row(
-                  children: [
-                    const Icon(Icons.remove_circle_outline, size: 14, color: Colors.red),
-                    const SizedBox(width: 8),
-                    Text(item, style: const TextStyle(fontSize: 12)),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.orange.withOpacity(0.3)),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.info_outline, size: 16, color: Colors.orange),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'البيانات على السيرفر لن تُحذف. ستُستعاد عند المزامنة التالية.',
-                      style: TextStyle(fontSize: 11, color: Colors.orange),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue.withOpacity(0.3)),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.developer_mode_rounded, size: 16, color: Colors.blue),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'حساب المطور (ibraheem / 123) سيُعاد زرعه تلقائياً بعد المسح.',
-                      style: TextStyle(fontSize: 11, color: Colors.blue),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('إلغاء', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: const Text('نعم، امسح البيانات', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-        ],
-    );
-  }
-
   // ─────────────────────────────────────────────────────────────────────────
   // HELPERS
   // ─────────────────────────────────────────────────────────────────────────

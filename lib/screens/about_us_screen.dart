@@ -16,19 +16,12 @@ class AboutUsScreen extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final size = MediaQuery.of(context).size;
-    final bool isMobile = size.width < 600;
+    final bool isMobile = size.width < 700;
 
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: theme.scaffoldBackgroundColor,
-        appBar: AppBar(
-          title: const Text('عن المطور', style: TextStyle(fontWeight: FontWeight.bold)),
-          centerTitle: true,
-          elevation: 0,
-          backgroundColor: Colors.transparent,
-          foregroundColor: isDark ? Colors.white : Colors.black,
-        ),
+        backgroundColor: isDark ? Colors.transparent : const Color(0xFFF1F5F9),
         body: SingleChildScrollView(
           padding: EdgeInsets.symmetric(
             horizontal: isMobile ? 20 : 40,

@@ -90,14 +90,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final isDark = theme.brightness == Brightness.dark;
     final auth = context.read<AuthService>();
 
-    final bool isMobile = width < 650;
-    final bool isTablet = width >= 650 && width < 1100;
+    final bool isMobile = width < 700;
+    final bool isTablet = width >= 700 && width < 1100;
     final bool isDesktop = width >= 1100;
 
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: theme.scaffoldBackgroundColor,
-      drawer: isMobile ? _buildMobileDrawer(isDark, auth) : null,
+      drawer: _buildMobileDrawer(isDark, auth),
       body: Row(
         children: [
           if (isDesktop) _buildFullSidebar(theme, isDark, auth),
@@ -105,7 +105,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Expanded(
             child: Column(
               children: [
-                _buildAdaptiveAppBar(theme, width, isMobile, isDark),
+                _buildAdaptiveAppBar(theme, width, !isDesktop && !isTablet, isDark),
                 Expanded(
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 300),
@@ -196,12 +196,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _buildSidebarItem(10, 'طرق دفع المشتريات', Icons.account_balance_rounded),
                 _buildSidebarItem(11, 'سلة المحذوفات', Icons.delete_sweep_rounded),
                 _buildSidebarItem(15, 'الملف الشخصي للمتجر', Icons.store_rounded),
-                _buildSidebarItem(12, 'الإعدادات والسمة', Icons.settings_rounded),
-                _buildSidebarItem(13, 'تواصل معنا', Icons.contact_support_rounded),
-                _buildSidebarItem(14, 'عن المطور', Icons.info_outline_rounded),
               ],
             ),
           ),
+          // Moved Settings, Contact, and About to the bottom
+          const Divider(color: Colors.white10, indent: 20, endIndent: 20),
+          _buildSidebarItem(12, 'الإعدادات والسمة', Icons.settings_rounded),
+          _buildSidebarItem(13, 'تواصل معنا', Icons.contact_support_rounded),
+          _buildSidebarItem(14, 'عن المطور', Icons.info_outline_rounded),
+          const SizedBox(height: 8),
           _buildUserCard(false, isDark),
         ],
       ),
@@ -209,10 +212,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildNavigationRail(ThemeData theme, bool isDark, AuthService auth) {
+    int getRailIndex() {
+      // Map all indices to rail indices
+      switch (_selectedIndex) {
+        case 0: return 0;
+        case 1: return 1;
+        case 2: return 2;
+        case 3: return 3;
+        case 4: return 4;
+        case 5: return 5;
+        case 6: return 6;
+        case 9: return 7;
+        case 10: return 7;
+        case 11: return 8;
+        case 12: return 9;
+        case 13: return 10;
+        case 14: return 11;
+        case 15: return 12;
+        default: return 0;
+      }
+    }
+
     return NavigationRail(
       backgroundColor: const Color(0xFF0F172A),
-      selectedIndex: _selectedIndex,
-      onDestinationSelected: (int index) => setState(() => _selectedIndex = index),
+      selectedIndex: getRailIndex(),
+      onDestinationSelected: (int index) {
+        int targetScreen;
+        switch (index) {
+          case 0: targetScreen = 0; break;
+          case 1: targetScreen = 1; break;
+          case 2: targetScreen = 2; break;
+          case 3: targetScreen = 3; break;
+          case 4: targetScreen = 4; break;
+          case 5: targetScreen = 5; break;
+          case 6: targetScreen = 6; break;
+          case 7: targetScreen = 9; break;
+          case 8: targetScreen = 11; break;
+          case 9: targetScreen = 12; break;
+          case 10: targetScreen = 13; break;
+          case 11: targetScreen = 14; break;
+          case 12: targetScreen = 15; break;
+          default: targetScreen = 0;
+        }
+        setState(() => _selectedIndex = targetScreen);
+      },
       labelType: NavigationRailLabelType.none,
       leading: Padding(
         padding: const EdgeInsets.symmetric(vertical: 20),
@@ -230,6 +273,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         const NavigationRailDestination(icon: Icon(Icons.payment_rounded, color: Colors.white60), selectedIcon: Icon(Icons.payment_rounded, color: Colors.blue), label: Text('طرق الدفع')),
         const NavigationRailDestination(icon: Icon(Icons.delete_sweep_rounded, color: Colors.white60), selectedIcon: Icon(Icons.delete_sweep_rounded, color: Colors.blue), label: Text('المحذوفات')),
         const NavigationRailDestination(icon: Icon(Icons.settings_rounded, color: Colors.white60), selectedIcon: Icon(Icons.settings_rounded, color: Colors.blue), label: Text('الإعدادات')),
+        const NavigationRailDestination(icon: Icon(Icons.contact_support_rounded, color: Colors.white60), selectedIcon: Icon(Icons.contact_support_rounded, color: Colors.blue), label: Text('تواصل معنا')),
+        const NavigationRailDestination(icon: Icon(Icons.info_outline_rounded, color: Colors.white60), selectedIcon: Icon(Icons.info_outline_rounded, color: Colors.blue), label: Text('عن المطور')),
+        const NavigationRailDestination(icon: Icon(Icons.store_rounded, color: Colors.white60), selectedIcon: Icon(Icons.store_rounded, color: Colors.blue), label: Text('الملف الشخصي')),
       ],
     );
   }

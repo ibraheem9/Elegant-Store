@@ -366,286 +366,287 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final bool isMobile = size.width < 700;
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(isMobile ? 16 : 32, isMobile ? 16 : 32, isMobile ? 16 : 32, 40),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'الإعدادات والتحكم',
-              style: TextStyle(
-                fontSize: isMobile ? 24 : 32,
-                fontWeight: FontWeight.w900,
-                color: isDark
-                    ? const Color(0xFFDCEFFF)
-                    : const Color(0xFF0F172A),
-              ),
-            ),
-            const SizedBox(height: 32),
-
-            // ── Profile ───────────────────────────────────────────────────
-            _buildSection('الملف الشخصي', isDark, [
-              _buildResponsiveInputs(isMobile, isDark, [
-                _buildTextField('الاسم الكامل', _nameController,
-                    Icons.person, isDark),
-                _buildTextField('اسم المستخدم', _usernameController,
-                    Icons.alternate_email, isDark),
-              ]),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _updateProfile,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0B74FF),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: const Text('تحديث البيانات',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold)),
-                ),
-              ),
-            ]),
-
-            const SizedBox(height: 32),
-
-            // ── Change Password ───────────────────────────────────────────
-            _buildSection('تغيير كلمة المرور', isDark, [
-              _buildResponsiveInputs(isMobile, isDark, [
-                _buildTextField(
-                  'كلمة المرور الحالية',
-                  _currentPasswordController,
-                  Icons.lock_outline,
-                  isDark,
-                  obscure: _obscureCurrentPassword,
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscureCurrentPassword
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined,
-                      color: Colors.grey,
-                      size: 20,
-                    ),
-                    onPressed: () => setState(() =>
-                        _obscureCurrentPassword = !_obscureCurrentPassword),
+      backgroundColor: isDark ? Colors.transparent : const Color(0xFFF1F5F9),
+      body: Center(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 1200),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(isMobile ? 16 : 32, isMobile ? 16 : 32, isMobile ? 16 : 32, 40),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'الإعدادات والتحكم',
+                  style: TextStyle(
+                    fontSize: isMobile ? 24 : 32,
+                    fontWeight: FontWeight.w900,
+                    color: isDark
+                        ? const Color(0xFFDCEFFF)
+                        : const Color(0xFF0F172A),
                   ),
                 ),
-                _buildTextField(
-                  'كلمة المرور الجديدة',
-                  _newPasswordController,
-                  Icons.lock_reset,
-                  isDark,
-                  obscure: _obscureNewPassword,
-                  suffixIcon: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.copy_rounded,
-                            color: Color(0xFF0B74FF), size: 20),
-                        onPressed: () {
-                          if (_newPasswordController.text.isNotEmpty) {
-                            Clipboard.setData(ClipboardData(
-                                text: _newPasswordController.text));
-                            _showSnackBar('تم نسخ كلمة المرور', Colors.blue);
-                          }
-                        },
-                        tooltip: 'نسخ كلمة المرور',
+                const SizedBox(height: 32),
+
+                // ── Profile ───────────────────────────────────────────────────
+                _buildSection('الملف الشخصي', isDark, [
+                  _buildResponsiveInputs(isMobile, isDark, [
+                    _buildTextField('الاسم الكامل', _nameController,
+                        Icons.person, isDark),
+                    _buildTextField('اسم المستخدم', _usernameController,
+                        Icons.alternate_email, isDark),
+                  ]),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _updateProfile,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0B74FF),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
                       ),
-                      IconButton(
+                      child: const Text('تحديث البيانات',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ]),
+
+                const SizedBox(height: 32),
+
+                // ── Change Password ───────────────────────────────────────────
+                _buildSection('تغيير كلمة المرور', isDark, [
+                  _buildResponsiveInputs(isMobile, isDark, [
+                    _buildTextField(
+                      'كلمة المرور الحالية',
+                      _currentPasswordController,
+                      Icons.lock_outline,
+                      isDark,
+                      obscure: _obscureCurrentPassword,
+                      suffixIcon: IconButton(
                         icon: Icon(
-                          _obscureNewPassword
+                          _obscureCurrentPassword
                               ? Icons.visibility_outlined
                               : Icons.visibility_off_outlined,
                           color: Colors.grey,
                           size: 20,
                         ),
-                        onPressed: () => setState(
-                            () => _obscureNewPassword = !_obscureNewPassword),
+                        onPressed: () => setState(() =>
+                            _obscureCurrentPassword = !_obscureCurrentPassword),
                       ),
-                    ],
+                    ),
+                    _buildTextField(
+                      'كلمة المرور الجديدة',
+                      _newPasswordController,
+                      Icons.lock_reset,
+                      isDark,
+                      obscure: _obscureNewPassword,
+                      suffixIcon: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.copy_rounded,
+                                color: Color(0xFF0B74FF), size: 20),
+                            onPressed: () {
+                              if (_newPasswordController.text.isNotEmpty) {
+                                Clipboard.setData(ClipboardData(
+                                    text: _newPasswordController.text));
+                                _showSnackBar('تم نسخ كلمة المرور', Colors.blue);
+                              }
+                            },
+                            tooltip: 'نسخ كلمة المرور',
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              _obscureNewPassword
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                              color: Colors.grey,
+                              size: 20,
+                            ),
+                            onPressed: () => setState(
+                                () => _obscureNewPassword = !_obscureNewPassword),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _changePassword,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('تغيير كلمة المرور',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold)),
+                    ),
                   ),
-                ),
-              ]),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _changePassword,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: const Text('تغيير كلمة المرور',
+                ]),
+
+                const SizedBox(height: 32),
+
+                // ── Security ──────────────────────────────────────────────────
+                _buildSection('الحماية والأمان', isDark, [
+                  if (_canCheckBiometrics)
+                    SwitchListTile(
+                      title: const Text('تفعيل الدخول ببصمة الإصبع',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: const Text(
+                          'استخدم البصمة لتسجيل الدخول السريع بدلاً من كلمة المرور'),
+                      value: _biometricEnabled,
+                      onChanged: _toggleBiometric,
+                      activeColor: Colors.green,
+                      secondary:
+                          const Icon(Icons.fingerprint, color: Colors.green),
+                    )
+                  else
+                    const ListTile(
+                      title: Text('البصمة غير مدعومة'),
+                      subtitle: Text(
+                          'جهازك لا يدعم المصادقة الحيوية أو لم يتم إعدادها'),
+                      leading: Icon(Icons.fingerprint, color: Colors.grey),
+                    ),
+                ]),
+
+                const SizedBox(height: 32),
+
+                // ── System & Notifications ────────────────────────────────────
+                _buildSection('النظام والتنبيهات', isDark, [
+                  SwitchListTile(
+                    title: Text(
+                      'الوضع الداكن (Dark Mode)',
                       style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold)),
-                ),
-              ),
-            ]),
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : Colors.black),
+                    ),
+                    value: isDark,
+                    onChanged: (val) => themeNotifier.toggleTheme(val),
+                    secondary: Icon(Icons.dark_mode,
+                        color: isDark
+                            ? const Color(0xFF00E5FF)
+                            : Colors.grey),
+                  ),
+                  const Divider(),
+                  SwitchListTile(
+                    title: const Text('تفعيل تنبيهات الديون والتحصيل',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    value: _notificationsEnabled,
+                    onChanged: _saveNotificationSettings,
+                    activeColor: const Color(0xFF0B74FF),
+                  ),
+                ]),
 
-            const SizedBox(height: 32),
+                const SizedBox(height: 32),
 
-            // ── Security ──────────────────────────────────────────────────
-            _buildSection('الحماية والأمان', isDark, [
-              if (_canCheckBiometrics)
-                SwitchListTile(
-                  title: const Text('تفعيل الدخول ببصمة الإصبع',
-                      style: TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: const Text(
-                      'استخدم البصمة لتسجيل الدخول السريع بدلاً من كلمة المرور'),
-                  value: _biometricEnabled,
-                  onChanged: _toggleBiometric,
-                  activeColor: Colors.green,
-                  secondary:
-                      const Icon(Icons.fingerprint, color: Colors.green),
-                )
-              else
-                const ListTile(
-                  title: Text('البصمة غير مدعومة'),
-                  subtitle: Text(
-                      'جهازك لا يدعم المصادقة الحيوية أو لم يتم إعدادها'),
-                  leading: Icon(Icons.fingerprint, color: Colors.grey),
-                ),
-            ]),
+                // ── Data Export / Import ──────────────────────────────────
+                _buildSection('النسخ الاحتياطي والاستعادة', isDark, [
+                  ListTile(
+                    leading: _isExportingExcel
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.green),
+                          )
+                        : const Icon(Icons.table_view_rounded,
+                            color: Colors.green, size: 28),
+                    title: const Text(
+                      'تصدير كملف Excel',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: const Text(
+                      'تصدير الفواتير وأرصدة العملاء في ملف Excel منظم لسهولة المراجعة والطباعة.',
+                    ),
+                    onTap: _isExportingExcel ? null : _exportInvoicesToExcel,
+                  ),
+                  const Divider(height: 1, indent: 16, endIndent: 16),
+                  ListTile(
+                    leading: _isExporting
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.download_rounded,
+                            color: Color(0xFF0B74FF), size: 28),
+                    title: const Text(
+                      'تصدير قاعدة البيانات (JSON)',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: const Text(
+                      'تصدير جميع البيانات (مستخدمون، فواتير، معاملات، مشتريات، إحصائيات) كملف JSON مترابط يمكن استخدامه لاستعادة أي قاعدة بيانات.',
+                    ),
+                    onTap: _isExporting ? null : _exportData,
+                  ),
+                  const Divider(height: 1, indent: 16, endIndent: 16),
+                  ListTile(
+                    leading: _isImporting
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange),
+                          )
+                        : const Icon(Icons.upload_file_rounded,
+                            color: Colors.orange, size: 28),
+                    title: const Text(
+                      'استيراد من ملف JSON',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: const Text(
+                      'استعادة أو دمج البيانات من ملف نسخة احتياطية. السجلات الأحدث تُحدِّث القديمة (last-write-wins).',
+                    ),
+                    onTap: _isImporting ? null : _importData,
+                  ),
+                ]),
 
-            const SizedBox(height: 32),
+                // ── Developer Tools ───────────────────────────────────────────
+                if (auth.isDeveloper()) ...[
+                  const SizedBox(height: 32),
+                  _buildSection('إدارة متقدمة (للمطور)', isDark, [
+                    ListTile(
+                      title: const Text('إعادة ضبط حالة المزامنة',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                      leading:
+                          const Icon(Icons.sync_problem, color: Colors.blue),
+                      onTap: () async {
+                        await context
+                            .read<DatabaseService>()
+                            .resetSyncStatus();
+                        _showSnackBar(
+                            'تمت إعادة ضبط المزامنة', Colors.blue);
+                      },
+                    ),
+                  ]),
+                ],
 
-            // ── System & Notifications ────────────────────────────────────
-            _buildSection('النظام والتنبيهات', isDark, [
-              SwitchListTile(
-                title: Text(
-                  'الوضع الداكن (Dark Mode)',
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : Colors.black),
+                const SizedBox(height: 48),
+                Center(
+                  child: TextButton.icon(
+                    onPressed: () => auth.logout(),
+                    icon: const Icon(Icons.logout, color: Colors.red),
+                    label: const Text('تسجيل الخروج',
+                        style: TextStyle(
+                            color: Colors.red,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18)),
+                  ),
                 ),
-                value: isDark,
-                onChanged: (val) => themeNotifier.toggleTheme(val),
-                secondary: Icon(Icons.dark_mode,
-                    color: isDark
-                        ? const Color(0xFF00E5FF)
-                        : Colors.grey),
-              ),
-              const Divider(),
-              SwitchListTile(
-                title: const Text('تفعيل تنبيهات الديون والتحصيل',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
-                value: _notificationsEnabled,
-                onChanged: _saveNotificationSettings,
-                activeColor: const Color(0xFF0B74FF),
-              ),
-            ]),
-
-            const SizedBox(height: 32),
-
-            // ── Data Export / Import ──────────────────────────────────
-            _buildSection('النسخ الاحتياطي والاستعادة', isDark, [
-              ListTile(
-                leading: _isExportingExcel
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.green),
-                      )
-                    : const Icon(Icons.table_view_rounded,
-                        color: Colors.green, size: 28),
-                title: const Text(
-                  'تصدير كملف Excel',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: const Text(
-                  'تصدير الفواتير وأرصدة العملاء في ملف Excel منظم لسهولة المراجعة والطباعة.',
-                ),
-                onTap: _isExportingExcel ? null : _exportInvoicesToExcel,
-              ),
-              const Divider(height: 1, indent: 16, endIndent: 16),
-              ListTile(
-                leading: _isExporting
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.download_rounded,
-                        color: Color(0xFF0B74FF), size: 28),
-                title: const Text(
-                  'تصدير قاعدة البيانات (JSON)',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: const Text(
-                  'تصدير جميع البيانات (مستخدمون، فواتير، معاملات، مشتريات، إحصائيات) كملف JSON مترابط يمكن استخدامه لاستعادة أي قاعدة بيانات.',
-                ),
-                onTap: _isExporting ? null : _exportData,
-              ),
-              const Divider(height: 1, indent: 16, endIndent: 16),
-              ListTile(
-                leading: _isImporting
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange),
-                      )
-                    : const Icon(Icons.upload_file_rounded,
-                        color: Colors.orange, size: 28),
-                title: const Text(
-                  'استيراد من ملف JSON',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: const Text(
-                  'استعادة أو دمج البيانات من ملف نسخة احتياطية. السجلات الأحدث تُحدِّث القديمة (last-write-wins).',
-                ),
-                onTap: _isImporting ? null : _importData,
-              ),
-            ]),
-
-            // ── Developer Tools ───────────────────────────────────────────
-            if (auth.isDeveloper()) ...[
-              const SizedBox(height: 32),
-              _buildSection('إدارة متقدمة (للمطور)', isDark, [
-                ListTile(
-                  title: const Text('إعادة ضبط حالة المزامنة',
-                      style: TextStyle(fontWeight: FontWeight.bold)),
-                  leading:
-                      const Icon(Icons.sync_problem, color: Colors.blue),
-                  onTap: () async {
-                    await context
-                        .read<DatabaseService>()
-                        .resetSyncStatus();
-                    _showSnackBar(
-                        'تمت إعادة ضبط المزامنة', Colors.blue);
-                  },
-                ),
-              ]),
-            ],
-
-            const SizedBox(height: 48),
-            Center(
-              child: TextButton.icon(
-                onPressed: () => auth.logout(),
-                icon: const Icon(Icons.logout, color: Colors.red),
-                label: const Text('تسجيل الخروج',
-                    style: TextStyle(
-                        color: Colors.red,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18)),
-              ),
+                const SizedBox(height: 64),
+              ],
             ),
-            const SizedBox(height: 64),
-          ],
+          ),
         ),
       ),
     );
   }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // HELPERS
-  // ─────────────────────────────────────────────────────────────────────────
 
   Widget _buildResponsiveInputs(
       bool isMobile, bool isDark, List<Widget> children) {

@@ -151,7 +151,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: theme.scaffoldBackgroundColor,
+        backgroundColor: isDark ? Colors.transparent : const Color(0xFFF1F5F9),
         body: _submitted ? _buildSuccessState(theme) : _buildForm(theme, isDark),
       ),
     );

@@ -7,6 +7,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:workmanager/workmanager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'services/database_service.dart';
 import 'services/auth_service.dart';
@@ -96,6 +97,17 @@ void main() async {
   if (Platform.isWindows) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
+
+    await windowManager.ensureInitialized();
+    WindowOptions windowOptions = const WindowOptions(
+      minimumSize: Size(800, 600),
+      center: true,
+      title: 'Elegant Store',
+    );
+    windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+      await windowManager.focus();
+    });
   }
 
   // Initialize database (local SQLite, should be fast)
