@@ -284,20 +284,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Image.asset('assets/logo.png', height: 40),
       ),
       destinations: [
-        const NavigationRailDestination(icon: Icon(Icons.dashboard_rounded, color: Colors.white60), selectedIcon: Icon(Icons.dashboard_rounded, color: Colors.blue), label: Text('لوحة التحكم')),
-        const NavigationRailDestination(icon: Icon(Icons.receipt_long_rounded, color: Colors.white60), selectedIcon: Icon(Icons.receipt_long_rounded, color: Colors.blue), label: Text('شاشة البيع')),
-        const NavigationRailDestination(icon: Icon(Icons.bar_chart_rounded, color: Colors.white60), selectedIcon: Icon(Icons.bar_chart_rounded, color: Colors.blue), label: Text('إحصائيات اليوم')),
-        const NavigationRailDestination(icon: Icon(Icons.shopping_cart_rounded, color: Colors.white60), selectedIcon: Icon(Icons.shopping_cart_rounded, color: Colors.blue), label: Text('المشتريات')),
-        const NavigationRailDestination(icon: Icon(Icons.people_alt_rounded, color: Colors.white60), selectedIcon: Icon(Icons.people_alt_rounded, color: Colors.blue), label: Text('إدارة الزبائن')),
+        const NavigationRailDestination(icon: Icon(Icons.dashboard_rounded, color: Colors.white60), selectedIcon: Icon(Icons.dashboard_rounded), label: Text('لوحة التحكم')),
+        const NavigationRailDestination(icon: Icon(Icons.receipt_long_rounded, color: Colors.white60), selectedIcon: Icon(Icons.receipt_long_rounded), label: Text('شاشة البيع')),
+        const NavigationRailDestination(icon: Icon(Icons.bar_chart_rounded, color: Colors.white60), selectedIcon: Icon(Icons.bar_chart_rounded), label: Text('إحصائيات اليوم')),
+        const NavigationRailDestination(icon: Icon(Icons.shopping_cart_rounded, color: Colors.white60), selectedIcon: Icon(Icons.shopping_cart_rounded), label: Text('المشتريات')),
+        const NavigationRailDestination(icon: Icon(Icons.people_alt_rounded, color: Colors.white60), selectedIcon: Icon(Icons.people_alt_rounded), label: Text('إدارة الزبائن')),
         if (auth.isManager())
-          const NavigationRailDestination(icon: Icon(Icons.badge_rounded, color: Colors.white60), selectedIcon: Icon(Icons.badge_rounded, color: Colors.blue), label: Text('إدارة الموظفين')),
-        const NavigationRailDestination(icon: Icon(Icons.payments_rounded, color: Colors.white60), selectedIcon: Icon(Icons.payments_rounded, color: Colors.blue), label: Text('مراجعة المدفوعات')),
-        const NavigationRailDestination(icon: Icon(Icons.payment_rounded, color: Colors.white60), selectedIcon: Icon(Icons.payment_rounded, color: Colors.blue), label: Text('طرق الدفع')),
-        const NavigationRailDestination(icon: Icon(Icons.delete_sweep_rounded, color: Colors.white60), selectedIcon: Icon(Icons.delete_sweep_rounded, color: Colors.blue), label: Text('المحذوفات')),
-        const NavigationRailDestination(icon: Icon(Icons.settings_rounded, color: Colors.white60), selectedIcon: Icon(Icons.settings_rounded, color: Colors.blue), label: Text('الإعدادات')),
-        const NavigationRailDestination(icon: Icon(Icons.contact_support_rounded, color: Colors.white60), selectedIcon: Icon(Icons.contact_support_rounded, color: Colors.blue), label: Text('تواصل معنا')),
-        const NavigationRailDestination(icon: Icon(Icons.info_outline_rounded, color: Colors.white60), selectedIcon: Icon(Icons.info_outline_rounded, color: Colors.blue), label: Text('عن المطور')),
-        const NavigationRailDestination(icon: Icon(Icons.store_rounded, color: Colors.white60), selectedIcon: Icon(Icons.store_rounded, color: Colors.blue), label: Text('الملف الشخصي')),
+          const NavigationRailDestination(icon: Icon(Icons.badge_rounded, color: Colors.white60), selectedIcon: Icon(Icons.badge_rounded), label: Text('إدارة الموظفين')),
+        const NavigationRailDestination(icon: Icon(Icons.payments_rounded, color: Colors.white60), selectedIcon: Icon(Icons.payments_rounded), label: Text('مراجعة المدفوعات')),
+        const NavigationRailDestination(icon: Icon(Icons.payment_rounded, color: Colors.white60), selectedIcon: Icon(Icons.payment_rounded), label: Text('طرق الدفع')),
+        const NavigationRailDestination(icon: Icon(Icons.delete_sweep_rounded, color: Colors.white60), selectedIcon: Icon(Icons.delete_sweep_rounded), label: Text('المحذوفات')),
+        const NavigationRailDestination(icon: Icon(Icons.settings_rounded, color: Colors.white60), selectedIcon: Icon(Icons.settings_rounded), label: Text('الإعدادات')),
+        const NavigationRailDestination(icon: Icon(Icons.contact_support_rounded, color: Colors.white60), selectedIcon: Icon(Icons.contact_support_rounded), label: Text('تواصل معنا')),
+        const NavigationRailDestination(icon: Icon(Icons.info_outline_rounded, color: Colors.white60), selectedIcon: Icon(Icons.info_outline_rounded), label: Text('عن المطور')),
+        const NavigationRailDestination(icon: Icon(Icons.store_rounded, color: Colors.white60), selectedIcon: Icon(Icons.store_rounded), label: Text('الملف الشخصي')),
       ],
     );
   }
@@ -397,10 +397,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (MediaQuery.of(context).size.width < 650) Navigator.pop(context);
         },
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        leading: Icon(icon, color: isSelected ? Colors.blue : Colors.white60, size: 22),
+        leading: Icon(icon, color: isSelected ? Colors.white : Colors.white60, size: 22),
         title: Text(title, style: TextStyle(color: isSelected ? Colors.white : Colors.white70, fontSize: 14, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
         selected: isSelected,
-        selectedTileColor: Colors.blue.withOpacity(0.15),
+        selectedTileColor: Colors.white.withOpacity(0.15),
       ),
     );
   }

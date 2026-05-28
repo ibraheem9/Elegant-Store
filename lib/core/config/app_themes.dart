@@ -85,6 +85,11 @@ class AppThemes {
         borderSide: const BorderSide(color: AppColors.lightPrimary, width: 2),
       ),
     ),
+    navigationRailTheme: const NavigationRailThemeData(
+      indicatorColor: Colors.white,
+      selectedIconTheme: IconThemeData(color: Color(0xFF0F172A)),
+      unselectedIconTheme: IconThemeData(color: Colors.white60),
+    ),
     dataTableTheme: DataTableThemeData(
       headingTextStyle: const TextStyle(
         color: AppColors.lightOnBackground,
@@ -182,6 +187,11 @@ class AppThemes {
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: AppColors.darkPrimary, width: 2),
       ),
+    ),
+    navigationRailTheme: const NavigationRailThemeData(
+      indicatorColor: Colors.white,
+      selectedIconTheme: IconThemeData(color: Color(0xFF0F172A)),
+      unselectedIconTheme: IconThemeData(color: Colors.white60),
     ),
     dataTableTheme: DataTableThemeData(
       headingTextStyle: const TextStyle(
