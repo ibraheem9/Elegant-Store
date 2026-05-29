@@ -225,7 +225,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   // ── Derived values (User Formulas) ────────────────────────────────────────
   bool get _cashEntered => _todayCashController.text.trim().isNotEmpty;
 
-  /// Total app sales = (SALE + PAID + app) + (DEPOSIT + PAID + app)
+  /// Total app sales = total invoice that have payment status paid and type sale and payment method app
+  ///                 + all invoice that have type deposit and payment status paid and payment method app
   double get _totalAppSales => _appSales;
 
   /// 1b. Total Deposit App = DEPOSIT + PAID + app
@@ -510,7 +511,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           mainAxisSpacing: 16,
           childAspectRatio: isSmall ? 2.8 : 3.5,
           children: [
-            _buildAutoDisplay('إجمالي مبيعات التطبيق', _totalAppSales, Icons.phonelink_ring_rounded, Colors.blue, isDark),
+            _buildAutoDisplay('إجمالي المبيعات على التطبيق', _totalAppSales, Icons.phonelink_ring_rounded, Colors.blue, isDark),
             _buildAutoDisplay('إجمالي مبيعات الكاش', _totalCashSales, Icons.local_atm_rounded, Colors.green, isDark),
             _buildAutoDisplay('إجمالي المبيعات', _totalSales, Icons.trending_up_rounded, Colors.teal, isDark),
             _buildAutoDisplay('إجمالي ديون التطبيق', _totalAppDebt, Icons.account_balance_rounded, Colors.purple, isDark),
@@ -524,62 +525,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           ],
         ),
         const SizedBox(height: 16),
-        _buildDebtStatusInfo(isDark),
       ],
-    );
-  }
-
-  Widget _buildDebtStatusInfo(bool isDark) {
-    String message;
-    Color color;
-    IconData icon;
-
-    if (_x == 0) {
-      message = 'جميع ديون التطبيق مسددة';
-      color = Colors.green;
-      icon = Icons.check_circle_outline;
-    } else if (_x > 0) {
-      message = 'يوجد رصيد دائن (رصيد إضافي)';
-      color = Colors.blue;
-      icon = Icons.info_outline;
-    } else {
-      message = 'لا تزال هناك ديون تطبيق غير مسددة';
-      color = Colors.red;
-      icon = Icons.warning_amber_rounded;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.4)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              message,
-              style: TextStyle(
-                color: color,
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
-            ),
-          ),
-          if (_x != 0)
-            Text(
-              '${_x.abs().toStringAsFixed(2)}',
-              style: TextStyle(
-                color: color,
-                fontWeight: FontWeight.w900,
-                fontSize: 16,
-              ),
-            ),
-        ],
-      ),
     );
   }
 

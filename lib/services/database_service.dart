@@ -1816,7 +1816,7 @@ class DatabaseService {
     final cred = creditsRows.first;
 
     return {
-      'app_sales':             (inv['app_sales']             as num?)?.toDouble() ?? 0.0,
+      'app_sales':             ((inv['app_sales_invoice'] as num?)?.toDouble() ?? 0.0) + ((inv['app_sales_deposit'] as num?)?.toDouble() ?? 0.0),
       'app_debt':              (inv['app_debt']              as num?)?.toDouble() ?? 0.0,
       'cash_debt':             (inv['cash_debt']             as num?)?.toDouble() ?? 0.0,
       'cash_withdrawals':      (inv['cash_debt']             as num?)?.toDouble() ?? 0.0,
