@@ -1,4 +1,5 @@
 import '../utils/timestamp_formatter.dart';
+import '../widgets/notification_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -1373,7 +1374,13 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                   const Icon(Icons.verified, color: Colors.blue, size: 20),
                 ],
               ]),
+        backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+        elevation: 0,
+        foregroundColor: isDark ? Colors.white : Colors.black,
+        iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black),
         actions: [
+          NotificationBadge(isDark: isDark),
+          const SizedBox(width: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             child: ElevatedButton.icon(
@@ -1390,10 +1397,6 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
             ),
           ),
         ],
-        backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
-        elevation: 0,
-        foregroundColor: isDark ? Colors.white : Colors.black,
-        iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black),
       ),
       body: _isLoading
           ? ShimmerLoading(isDark: isDark, itemCount: 5)
@@ -1412,49 +1415,6 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
               ]),
             ),
     );
-  }
-
-  /// Shows a dropdown menu anchored to the customer name in the AppBar.
-  void _showNameDropdown(BuildContext context, bool isDark) async {
-    final RenderBox renderBox = context.findRenderObject() as RenderBox;
-    final offset = renderBox.localToGlobal(Offset.zero);
-
-    final selected = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        offset.dx,
-        offset.dy + renderBox.size.height,
-        offset.dx + renderBox.size.width,
-        0,
-      ),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      items: [
-        PopupMenuItem(
-          value: 'edit',
-          child: Row(children: const [
-            Icon(Icons.edit_outlined, color: Colors.blue, size: 18),
-            SizedBox(width: 10),
-            Text('تعديل بيانات الزبون'),
-          ]),
-        ),
-        PopupMenuItem(
-          value: 'delete',
-          child: Row(children: const [
-            Icon(Icons.delete_outline, color: Colors.red, size: 18),
-            SizedBox(width: 10),
-            Text('حذف الزبون', style: TextStyle(color: Colors.red)),
-          ]),
-        ),
-      ],
-    );
-
-    if (!mounted) return;
-    if (selected == 'edit') {
-      final saved = await showAddEditCustomerForm(context, customer: _currentCustomer);
-      if (saved) _loadData();
-    } else if (selected == 'delete') {
-      await _deleteCustomer();
-    }
   }
 
   // ── Info grid ─────────────────────────────────────────────────────────────

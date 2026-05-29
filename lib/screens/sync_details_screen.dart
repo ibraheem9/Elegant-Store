@@ -1,3 +1,4 @@
+import '../widgets/notification_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -156,6 +157,8 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
           foregroundColor: isDark ? Colors.white : Colors.black87,
           elevation: 0,
           actions: [
+            NotificationBadge(isDark: isDark),
+            const SizedBox(width: 8),
             IconButton(
               icon: const Icon(Icons.refresh_rounded),
               tooltip: 'تحديث الإحصائيات',

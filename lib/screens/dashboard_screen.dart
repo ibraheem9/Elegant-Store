@@ -1,4 +1,5 @@
 import '../utils/timestamp_formatter.dart';
+import '../widgets/notification_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -495,60 +496,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildNotificationIcon(bool isDark) {
-    return Consumer<DatabaseService>(
-      builder: (context, db, _) => FutureBuilder<int>(
-        future: db.notificationRepo.getTotalCount(),
-        builder: (context, snap) {
-          final count = snap.data ?? 0;
-          return Stack(
-            children: [
-              InkWell(
-                onTap: () async {
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const NotificationsScreen()),
-                  );
-                  // Rebuild badge after returning from notifications
-                  if (mounted) setState(() {});
-                },
-                borderRadius: BorderRadius.circular(20),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1E293B) : Colors.grey[100],
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    count > 0 ? Icons.notifications_rounded : Icons.notifications_none_rounded,
-                    color: count > 0 ? Colors.orange : (isDark ? const Color(0xFF00E5FF) : const Color(0xFF64748B)),
-                    size: 22,
-                  ),
-                ),
-              ),
-              if (count > 0)
-                Positioned(
-                  right: 2,
-                  top: 2,
-                  child: Container(
-                    padding: const EdgeInsets.all(2),
-                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 1.5),
-                    ),
-                    child: Text(
-                      count > 99 ? '99+' : '$count',
-                      style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-            ],
-          );
-        },
-      ),
-    );
+    return NotificationBadge(isDark: isDark);
   }
 
   /// Shows a confirmation dialog, runs a pre-logout sync with a progress

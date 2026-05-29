@@ -3,6 +3,7 @@ import 'package:path/path.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/models.dart';
 import '../utils/timestamp_formatter.dart';
@@ -23,6 +24,20 @@ class DatabaseService {
   /// Prevents repeated full rebuilds on every hot-reload / widget rebuild.
   bool _notificationsSeedDone = false;
 
+  /// Reactive notifier for the total unread notification count.
+  /// Widgets can listen to this to update badges instantly.
+  final ValueNotifier<int> notificationCountNotifier = ValueNotifier<int>(0);
+
+  /// Refreshes the notification count from the database and notifies listeners.
+  Future<void> refreshNotificationCount() async {
+    try {
+      final count = await notificationRepo.getTotalCount();
+      notificationCountNotifier.value = count;
+    } catch (e) {
+      dev.log('Error refreshing notification count: $e', name: 'DatabaseService');
+    }
+  }
+
   Future<Database> get database async {
     if (_database != null) {
       // Seed notifications once per app session, AFTER the DB is fully open.
@@ -32,6 +47,7 @@ class DatabaseService {
         Future.microtask(() async {
           try {
             await notificationRepo.rebuildAll();
+            await refreshNotificationCount();
             dev.log('Notification seed completed.', name: 'DatabaseService');
           } catch (e) {
             dev.log('Notification seed error: $e', name: 'DatabaseService');
@@ -908,6 +924,7 @@ class DatabaseService {
     }).then((invoiceId) async {
       // Option 2: refresh notifications after the balance trigger has fired.
       await notificationRepo.refreshAllForCustomer(inv.userId);
+      await refreshNotificationCount();
       return invoiceId;
     });
   }
@@ -975,6 +992,7 @@ class DatabaseService {
     // Always recalculate balance after delete so the customer's balance
     // reflects the removal of this invoice's financial effect.
     await recalculateUserBalance(inv.userId);
+    await refreshNotificationCount();
   }
 
   /// Restores a soft-deleted invoice and immediately recalculates the owner's balance.
@@ -997,6 +1015,7 @@ class DatabaseService {
     // Always recalculate balance after restore so the customer's balance
     // reflects the re-inclusion of this invoice's financial effect.
     await recalculateUserBalance(inv.userId);
+    await refreshNotificationCount();
   }
 
   /// SAFE-HOUSE: Marks the invoice as unsynced (is_synced = 0) so the next
@@ -1073,6 +1092,7 @@ class DatabaseService {
     });
     // Hard-delete all notifications for this customer since they are now gone.
     await notificationRepo.deleteAllForCustomer(customerId);
+    await refreshNotificationCount();
   }
 
   Future<List<Invoice>> getCustomerInvoices(
@@ -1159,6 +1179,7 @@ class DatabaseService {
     );
     // Option 2: refresh persisted notifications for this customer immediately.
     await notificationRepo.refreshAllForCustomer(userId);
+    await refreshNotificationCount();
   }
 
   /// Recalculates balances for ALL customers.
@@ -1188,6 +1209,7 @@ class DatabaseService {
     ''');
     // Option 3: rebuild all notifications after a bulk balance recalculation.
     await notificationRepo.rebuildAll();
+    await refreshNotificationCount();
   }
 
   /// Returns global stats in a **single SQL query** instead of loading all customers into RAM.
@@ -1698,6 +1720,7 @@ class DatabaseService {
     });
     // Option 2: refresh notifications after invoice update (amount/status may have changed).
     await notificationRepo.refreshAllForCustomer(newInv.userId);
+    await refreshNotificationCount();
   }
 
   Future<List<Map<String, dynamic>>> getEditHistory(
@@ -2513,6 +2536,7 @@ class DatabaseService {
       // Clear all notifications — rebuildAll() will be called after data is restored.
       await txn.rawDelete('DELETE FROM app_notifications');
     });
+    await refreshNotificationCount();
     dev.log(
       'clearAllDataForRestore: all tables cleared except user id=$keepUserId.',
       name: 'DatabaseService',
@@ -2536,6 +2560,7 @@ class DatabaseService {
       }
       await txn.rawDelete('DELETE FROM app_notifications');
     });
+    await refreshNotificationCount();
     dev.log('All data cleared from mobile database.', name: 'DatabaseService');
   }
 
@@ -2560,6 +2585,7 @@ class DatabaseService {
       // Reset all AUTOINCREMENT counters
       await txn.rawDelete('DELETE FROM sqlite_sequence');
     });
+    await refreshNotificationCount();
     // Reclaim disk space outside of transaction
     await db.rawQuery('VACUUM');
     // Re-seed the developer account so the developer can log in immediately

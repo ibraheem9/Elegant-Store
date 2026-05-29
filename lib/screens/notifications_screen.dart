@@ -42,9 +42,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   void initState() {
     super.initState();
-    // Rebuild notifications from the live DB state every time the screen opens,
-    // then load the first page from the freshly-updated table.
-    _rebuildThenLoad();
+    // Load current notifications immediately.
+    // We don't call rebuildAll here to avoid the lag.
+    // If the user wants to refresh, they can use pull-to-refresh or the refresh button.
+    _loadFirstPage(rebuild: false);
   }
 
   // ── Data loading ──────────────────────────────────────────────────────────────────────────────
@@ -54,7 +55,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   /// Rebuilds the app_notifications table from live data, then loads page 1.
   /// Called on screen open and on pull-to-refresh.
-  Future<void> _rebuildThenLoad() async {
+  Future<void> _rebuildThenLoad() => _loadFirstPage(rebuild: true);
+
+  /// Loads the first page. Optionally rebuilds the notification table first.
+  Future<void> _loadFirstPage({bool rebuild = true}) async {
     setState(() {
       _isLoading = true;
       _error = null;
@@ -63,8 +67,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       _hasMore = true;
     });
     try {
-      // Sync the persisted table with the current DB state before reading.
-      await _repo.rebuildAll();
+      if (rebuild) {
+        // Sync the persisted table with the current DB state before reading.
+        await _repo.rebuildAll();
+        // Update the notifier in DatabaseService
+        context.read<DatabaseService>().refreshNotificationCount();
+      }
       await _readPage();
     } catch (e) {
       if (mounted) {
@@ -106,8 +114,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
-  Future<void> _loadFirstPage() => _rebuildThenLoad();
-
   Future<void> _loadNextPage() async {
     if (_isLoadingMore || !_hasMore) return;
     setState(() => _isLoadingMore = true);
@@ -132,7 +138,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   void _onFilterChanged(String value) {
     if (_filter == value) return;
     setState(() => _filter = value);
-    _loadFirstPage();
+    _loadFirstPage(rebuild: false);
   }
 
   // ── Navigation ───────────────────────────────────────────────────────────
