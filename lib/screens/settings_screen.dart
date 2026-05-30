@@ -8,10 +8,10 @@ import '../services/export_service.dart';
 import '../services/import_service.dart';
 import '../services/theme_service.dart';
 import '../services/notification_service.dart';
-import '../models/models.dart';
+import 'export_data_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({Key? key}) : super(key: key);
+  const SettingsScreen({super.key});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -566,6 +566,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       'تصدير الفواتير وأرصدة العملاء في ملف Excel منظم لسهولة المراجعة والطباعة.',
                     ),
                     onTap: _isExportingExcel ? null : _exportInvoicesToExcel,
+                  ),
+                  const Divider(height: 1, indent: 16, endIndent: 16),
+                  ListTile(
+                    leading: const Icon(Icons.date_range_rounded, color: Color(0xFF0B74FF), size: 28),
+                    title: const Text(
+                      'تصدير مخصص (حسب التاريخ)',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: const Text(
+                      'تصدير بيانات محددة (فواتير، معاملات، مشتريات) ضمن فترة زمنية تختارها.',
+                    ),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const ExportDataScreen()),
+                      );
+                    },
                   ),
                   const Divider(height: 1, indent: 16, endIndent: 16),
                   ListTile(
