@@ -173,18 +173,76 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       // ── Store Information ──────────────────────────────────────────
                       _buildSection('معلومات المتجر', isDark, [
                         _buildResponsiveInputs(isMobile, isDark, [
-                          _buildTextField('اسم المتجر', _storeNameController, Icons.store_rounded, isDark, enabled: canEdit),
-                          _buildTextField('اسم المالك', _ownerNameController, Icons.person_rounded, isDark, enabled: canEdit),
+                          _buildTextField(
+                            'اسم المتجر',
+                            _storeNameController,
+                            Icons.store_rounded,
+                            isDark,
+                            enabled: canEdit,
+                            validator: (v) => v == null || v.trim().isEmpty ? 'يرجى إدخال اسم المتجر' : null,
+                          ),
+                          _buildTextField(
+                            'اسم المالك',
+                            _ownerNameController,
+                            Icons.person_rounded,
+                            isDark,
+                            enabled: canEdit,
+                            validator: (v) => v == null || v.trim().isEmpty ? 'يرجى إدخال اسم المالك' : null,
+                          ),
                         ]),
                         const SizedBox(height: 16),
                         _buildResponsiveInputs(isMobile, isDark, [
-                          _buildTextField('العنوان', _addressController, Icons.location_on_rounded, isDark, enabled: canEdit),
-                          _buildTextField('المدينة', _cityController, Icons.location_city_rounded, isDark, enabled: canEdit),
+                          _buildTextField(
+                            'العنوان',
+                            _addressController,
+                            Icons.location_on_rounded,
+                            isDark,
+                            enabled: canEdit,
+                            validator: (v) => v == null || v.trim().isEmpty ? 'يرجى إدخال العنوان' : null,
+                          ),
+                          _buildTextField(
+                            'المدينة',
+                            _cityController,
+                            Icons.location_city_rounded,
+                            isDark,
+                            enabled: canEdit,
+                            validator: (v) => v == null || v.trim().isEmpty ? 'يرجى إدخال المدينة' : null,
+                          ),
                         ]),
                         const SizedBox(height: 16),
                         _buildResponsiveInputs(isMobile, isDark, [
-                          _buildTextField('رقم الهاتف (جوال)', _mobileController, Icons.phone_android_rounded, isDark, keyboardType: TextInputType.phone, enabled: canEdit),
-                          _buildTextField('واتساب (WhatsApp)', _whatsappController, Icons.chat_rounded, isDark, keyboardType: TextInputType.phone, enabled: canEdit),
+                          _buildTextField(
+                            'رقم الهاتف (جوال)',
+                            _mobileController,
+                            Icons.phone_android_rounded,
+                            isDark,
+                            keyboardType: TextInputType.phone,
+                            enabled: canEdit,
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) return 'يرجى إدخال رقم الجوال';
+                              final clean = v.trim();
+                              if (!RegExp(r'^(059|056)[0-9]{7}$').hasMatch(clean)) {
+                                return 'رقم غير صحيح (يجب أن يبدأ بـ 059 أو 056 ويتكون من 10 أرقام)';
+                              }
+                              return null;
+                            },
+                          ),
+                          _buildTextField(
+                            'واتساب (WhatsApp)',
+                            _whatsappController,
+                            Icons.chat_rounded,
+                            isDark,
+                            keyboardType: TextInputType.phone,
+                            enabled: canEdit,
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) return 'يرجى إدخال رقم الواتساب';
+                              final clean = v.trim();
+                              if (!RegExp(r'^(059|056)[0-9]{7}$').hasMatch(clean)) {
+                                return 'رقم غير صحيح (يجب أن يبدأ بـ 059 أو 056 ويتكون من 10 أرقام)';
+                              }
+                              return null;
+                            },
+                          ),
                         ]),
                       ]),
 
@@ -273,11 +331,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Row(crossAxisAlignment: CrossAxisAlignment.start, children: children.expand((w) => [Expanded(child: w), const SizedBox(width: 16)]).toList()..removeLast());
   }
 
-  Widget _buildTextField(String label, TextEditingController controller, IconData icon, bool isDark, {TextInputType? keyboardType, bool enabled = true}) {
+  Widget _buildTextField(String label, TextEditingController controller, IconData icon, bool isDark, {TextInputType? keyboardType, bool enabled = true, String? Function(String?)? validator}) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       enabled: enabled,
+      validator: validator,
       style: TextStyle(color: isDark ? Colors.white : (enabled ? Colors.black : Colors.black54)),
       decoration: InputDecoration(
         labelText: label,
@@ -285,6 +344,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         prefixIcon: Icon(icon, color: const Color(0xFF0B74FF), size: 20),
         filled: true,
         fillColor: isDark ? const Color(0xFF071028) : Colors.grey[50],
+        errorStyle: const TextStyle(fontSize: 10, color: Colors.red),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -293,6 +353,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: Color(0xFF0B74FF), width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.red, width: 1),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.red, width: 2),
         ),
       ),
     );

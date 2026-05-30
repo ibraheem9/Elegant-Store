@@ -1,27 +1,29 @@
-# Walkthrough - Fully Scrollable Sidebar
+# Walkthrough - UI Enhancements and Validation
 
-I have updated the `DashboardScreen` to make the sidebar and mobile drawer fully scrollable. This ensures that all navigation items, settings, and the user profile card are always accessible, even on smaller screens or when the window is resized.
+I have completed the requested enhancements for the sidebar scrolling and store profile validation.
 
 ## Changes
 
-### [dashboard_screen.dart](file:///D:/Work/2026/Hamoda/Store_System/Elegant-Store/lib/screens/dashboard_screen.dart)
+### 1. Fully Scrollable Sidebar
+- **Desktop Sidebar**: Replaced the previous layout (which had a fixed footer) with a single, unified `ListView`. Now, the logo, navigation items, and user profile card all scroll together.
+- **Mobile Drawer**: Applied the same unified scrolling logic to the mobile drawer.
+- **Benefit**: Ensures all navigation options and the logout button are accessible on screens with limited vertical space.
 
-- **Sidebar (Desktop)**:
-    - Replaced the `Column` with a single `ListView`.
-    - Moved the `_buildSidebarHeader()` and `_buildUserCard()` inside the `ListView`'s children.
-    - Removed the `Expanded` wrapper around the middle navigation items.
-    - Added bottom padding/spacing to ensure the last item is clearly visible.
-
-- **Drawer (Mobile)**:
-    - Replaced the `Column` and its `Expanded` `ListView` with a single `ListView`.
-    - Moved the `_buildUserCard()` inside the `ListView`'s children.
-    - Removed the `SafeArea` wrapper from the footer to allow it to scroll with the rest of the content.
+### 2. Store Profile Validation
+- **Required Fields**: Added mandatory field checks for Store Name, Owner Name, Address, and City.
+- **Palestinian Mobile Constraints**:
+    - **Format**: Validates that mobile and WhatsApp numbers must start with `059` or `056`.
+    - **Length**: Ensures the number is exactly 10 digits long.
+- **Visual Feedback**: Added clear error messages in Arabic and updated the input field styling to show a red border when validation fails.
 
 ## Verification Summary
 
 ### Automated Tests
-- Ran `flutter analyze lib/screens/dashboard_screen.dart` and confirmed there are no syntax errors or breaking lint issues in the modified file.
+- Ran `flutter analyze` on both `dashboard_screen.dart` and `profile_screen.dart`. Confirmed no syntax errors or breaking issues.
 
 ### Manual Verification Recommended
-1.  **Resize Window**: Reduce the vertical height of the application window. Verify that the entire sidebar (from the top logo to the bottom logout button) scrolls as a single unit.
-2.  **Mobile View**: Open the mobile drawer and verify that the user profile card at the bottom scrolls with the navigation items.
+1.  **Sidebar**: Shrink the window vertically and verify the entire sidebar scrolls.
+2.  **Profile Screen**:
+    - Try saving with an empty field.
+    - Try entering an invalid phone number (e.g., `055...` or only 9 digits).
+    - Verify that valid numbers (starting with `059` or `056` and 10 digits total) are accepted.

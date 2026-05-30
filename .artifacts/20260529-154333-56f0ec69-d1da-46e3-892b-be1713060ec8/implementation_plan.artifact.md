@@ -1,21 +1,30 @@
-# Make Sidebar Fully Scrollable
+# Add Field Validation to Store Profile Screen
 
-The goal is to make the entire sidebar (aside) scrollable as a single unit, removing the fixed footer (User Card) and ensuring that all items, including settings and logout, scroll together if the content exceeds the screen height.
+The goal is to implement validation rules for the fields in the "Store Profile" screen (`ProfileScreen`), ensuring data integrity and following specific Palestinian (Gaza) mobile number constraints.
 
 ## Proposed Changes
 
 ### [Screens]
 
-#### [dashboard_screen.dart](file:///D:/Work/2026/Hamoda/Store_System/Elegant-Store/lib/screens/dashboard_screen.dart)
+#### [profile_screen.dart](file:///D:/Work/2026/Hamoda/Store_System/Elegant-Store/lib/screens/profile_screen.dart)
 
-- **Consolidate `_buildFullSidebar`**:
-    - Remove the `Column` and `Expanded` wrapper.
-    - Replace the middle `ListView` with a single `ListView` that wraps all content (Header, Main Items, Settings Items, Divider, and User Card).
-    - Adjust padding to maintain consistent layout.
+- **Update `_buildTextField`**:
+    - Add a `String? Function(String?)? validator` parameter to the helper method.
+    - Pass this validator to the internal `TextFormField`.
 
-- **Consolidate `_buildMobileDrawer`**:
-    - Apply the same logic to the `Drawer` content to ensure consistency across mobile and desktop.
-    - Remove `Expanded` and the fixed `SafeArea` at the bottom, moving `_buildUserCard` inside the scrollable list.
+- **Implement Validation Logic**:
+    - **Store Name**: Required field.
+    - **Owner Name**: Required field.
+    - **Address**: Required field.
+    - **City**: Required field.
+    - **Phone Number (Mobile)**: Required, must start with `059` or `056` and be exactly 10 digits long.
+    - **WhatsApp**: Required, must follow the same Palestinian mobile format.
+
+- **Regex for Phone Validation**: `^(059|056)[0-9]{7}$`
+
+- **Error Messages (Arabic)**:
+    - Empty field: `يرجى إدخال [اسم الحقل]`
+    - Invalid phone: `رقم غير صحيح (يجب أن يبدأ بـ 059 أو 056 ويتكون من 10 أرقام)`
 
 ---
 
@@ -25,7 +34,7 @@ The goal is to make the entire sidebar (aside) scrollable as a single unit, remo
 - Run `flutter analyze` to ensure no syntax errors.
 
 ### Manual Verification
-1.  **Sidebar Scrolling**: Reduce the window height until the sidebar items overflow. Verify that the entire sidebar (including the logo at the top and the user card at the bottom) scrolls together.
-2.  **User Card Visibility**: Verify that the user card is reachable at the end of the scrollable list.
-3.  **Mobile Drawer**: Open the drawer on mobile (or small window) and verify it is also fully scrollable.
-4.  **Layout Consistency**: Ensure the width and horizontal alignment of items remain correct after switching to a single `ListView`.
+1.  **Empty Field Test**: Clear one of the required fields and click "Save Changes". Verify that an error message appears in red.
+2.  **Invalid Phone Test**: Enter a number that doesn't start with 059/056 or is too short/long. Verify the specific phone error message appears.
+3.  **Valid Data Test**: Enter valid Palestinian numbers and fill all fields. Verify that the "Save Changes" succeeds and shows the success snackbar.
+4.  **Layout Check**: Ensure that error messages don't break the layout of the responsive grid.
