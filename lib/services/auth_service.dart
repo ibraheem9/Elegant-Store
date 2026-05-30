@@ -1,10 +1,8 @@
 import '../utils/timestamp_formatter.dart';
-import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:local_auth/local_auth.dart';
-import 'package:local_auth_windows/local_auth_windows.dart';
 import 'package:dio/dio.dart';
 import '../models/models.dart';
 import '../core/config/api_config.dart';
@@ -366,6 +364,36 @@ class AuthService extends ChangeNotifier {
       }
       return false;
     } catch (e) {
+      return false;
+    }
+  }
+
+  /// Resets the password using the UUID as a recovery key.
+  /// This is handled locally and will sync to the server on the next successful login/sync.
+  Future<bool> resetPassword(String username, String uuid, String newPassword) async {
+    try {
+      // 1. Verify username and UUID match
+      final user = await _dbService.getUserByUsername(username);
+      if (user == null || user.uuid != uuid) {
+        return false;
+      }
+
+      // 2. Perform the reset in the local database
+      final success = await _dbService.resetPasswordWithUuid(uuid, newPassword);
+      
+      if (success) {
+        // Update shared prefs if this was the last logged user
+        final prefs = await SharedPreferences.getInstance();
+        final lastUser = prefs.getString('last_logged_username');
+        if (lastUser != null && lastUser.toLowerCase() == username.toLowerCase()) {
+          await prefs.setString('last_logged_password', newPassword);
+        }
+        dev.log('Password reset successful for $username', name: 'AuthService');
+      }
+      
+      return success;
+    } catch (e) {
+      dev.log('Error in resetPassword: $e', name: 'AuthService');
       return false;
     }
   }

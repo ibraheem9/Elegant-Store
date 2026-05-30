@@ -1,8 +1,10 @@
+import '../utils/app_snackbar.dart';
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/timestamp_formatter.dart';
 import '../widgets/notification_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../services/sync_service.dart';
@@ -39,6 +41,123 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final GlobalKey<PaymentMethodsScreenState> _paymentMethodsKey = GlobalKey<PaymentMethodsScreenState>();
   final GlobalKey<PurchasesMethodsScreenState> _purchasesMethodsKey = GlobalKey<PurchasesMethodsScreenState>();
+
+  @override
+  void initState() {
+    super.initState();
+    _checkRecoveryKeyConfirmation();
+  }
+
+  Future<void> _checkRecoveryKeyConfirmation() async {
+    final auth = context.read<AuthService>();
+    final user = auth.currentUser;
+    if (user == null) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final bool isConfirmed = prefs.getBool('recovery_confirmed_${user.id}') ?? false;
+
+    if (!isConfirmed && mounted) {
+      // Small delay to ensure the context is ready
+      Future.delayed(const Duration(seconds: 1), () {
+        if (mounted) _showRecoveryKeyConfirmationDialog(user);
+      });
+    }
+  }
+
+  void _showRecoveryKeyConfirmationDialog(User user) {
+    bool isChecked = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            title: const Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text('تنبيه أمان هام', style: TextStyle(fontWeight: FontWeight.bold)),
+                SizedBox(width: 10),
+                Icon(Icons.security_rounded, color: Colors.orange, size: 28),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                const Text(
+                  'هذا هو "مفتاح الاستعادة" الخاص بك. ستحتاجه لاستعادة حسابك في حال نسيان كلمة المرور.',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(fontSize: 14),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                  ),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.copy_rounded, color: Colors.blue, size: 20),
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: user.uuid));
+                          AppSnackBar.success(context, 'تم نسخ مفتاح الاستعادة');
+                        },
+                        tooltip: 'نسخ',
+                      ),
+                      Expanded(
+                        child: Text(
+                          user.uuid,
+                          style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, fontSize: 13),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'يرجى نسخ هذا الرمز وحفظه في مكان آمن جداً (خارج الهاتف). لن يتمكن أحد من استعادة حسابك بدونه.',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(fontSize: 13, color: Colors.red, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 20),
+                CheckboxListTile(
+                  value: isChecked,
+                  onChanged: (val) => setDialogState(() => isChecked = val ?? false),
+                  title: const Text('أقر بأنني قمت بحفظ هذا المفتاح في مكان آمن ولن أفقده.', textAlign: TextAlign.right, style: TextStyle(fontSize: 12)),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  activeColor: Colors.blue,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ],
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: !isChecked ? null : () async {
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setBool('recovery_confirmed_${user.id}', true);
+                  if (context.mounted) Navigator.pop(context);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  minimumSize: const Size(double.infinity, 50),
+                ),
+                child: const Text('تأكيد وحفظ', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _getScreen(int index) {
     switch (index) {

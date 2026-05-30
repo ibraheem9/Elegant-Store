@@ -568,6 +568,53 @@ class DatabaseService {
     return null;
   }
 
+  /// Fetches a user by username (case-insensitive for comparison).
+  Future<User?> getUserByUsername(String username) async {
+    final db = await database;
+    final r = await db.query(
+      'users',
+      where: 'LOWER(username) = ? AND deleted_at IS NULL',
+      whereArgs: [username.toLowerCase()],
+      limit: 1,
+    );
+    if (r.isNotEmpty) return User.fromMap(r.first);
+    return null;
+  }
+
+  /// Updates the password for a user identified by their unique UUID.
+  /// This acts as a "Recovery Key" reset.
+  Future<bool> resetPasswordWithUuid(String uuid, String newPassword) async {
+    final db = await database;
+    final now = TimestampFormatter.nowUtc();
+    
+    // Check if user exists first to get version
+    final existing = await db.query(
+      'users',
+      columns: ['id', 'version'],
+      where: 'uuid = ? AND deleted_at IS NULL',
+      whereArgs: [uuid],
+    );
+    
+    if (existing.isEmpty) return false;
+    
+    final id = existing.first['id'] as int;
+    final currentVersion = (existing.first['version'] as int?) ?? 0;
+    
+    final rowsAffected = await db.update(
+      'users',
+      {
+        'password': newPassword,
+        'version': currentVersion + 1,
+        'is_synced': 0,
+        'updated_at': now,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    
+    return rowsAffected > 0;
+  }
+
   Future<List<User>> getCustomers() async {
     final db = await database;
     final r = await db.query(

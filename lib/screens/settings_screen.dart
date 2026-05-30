@@ -32,6 +32,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isExporting = false;
   bool _isExportingExcel = false;
   bool _isImporting = false;
+  bool _showRecoveryKey = false;
   TimeOfDay _notificationTime = const TimeOfDay(hour: 10, minute: 0);
 
   @override
@@ -186,6 +187,70 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await auth.setBiometricEnabled(false);
       setState(() => _biometricEnabled = false);
     }
+  }
+
+  Future<void> _revealRecoveryKey() async {
+    final auth = context.read<AuthService>();
+
+    // Wait, let's use biometric if available first.
+    final bool canBio = await auth.canCheckBiometrics();
+    bool isAuth = false;
+
+    if (canBio) {
+      final result = await auth.authenticateWithBiometrics();
+      if (result == LoginResult.success) {
+        isAuth = true;
+      }
+    }
+
+    if (!isAuth) {
+      // Prompt for password
+      final password = await _promptForPassword();
+      if (password != null) {
+        // We need a way to verify password without logging out.
+        // I'll add a method to AuthService for this.
+        final isValid = await auth.login(auth.currentUser!.username, password);
+        if (isValid == LoginResult.success) {
+          isAuth = true;
+        }
+      }
+    }
+
+    if (isAuth) {
+      setState(() => _showRecoveryKey = true);
+    } else {
+      _showSnackBar('فشل التحقق من الهوية', Colors.red);
+    }
+  }
+
+  Future<String?> _promptForPassword() async {
+    String? password;
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        final ctrl = TextEditingController();
+        return AlertDialog(
+          title: const Text('تأكيد كلمة المرور', textAlign: TextAlign.right),
+          content: TextField(
+            controller: ctrl,
+            obscureText: true,
+            textAlign: TextAlign.right,
+            decoration: const InputDecoration(labelText: 'كلمة المرور'),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+            TextButton(
+              onPressed: () {
+                password = ctrl.text;
+                Navigator.pop(ctx);
+              },
+              child: const Text('تأكيد'),
+            ),
+          ],
+        );
+      },
+    );
+    return password;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -490,6 +555,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               fontWeight: FontWeight.bold)),
                     ),
                   ),
+                  if (auth.isManager() || auth.isAccountant()) ...[
+                    const SizedBox(height: 24),
+                    const Divider(),
+                    const SizedBox(height: 16),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('مفتاح استعادة كلمة المرور',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: _showRecoveryKey
+                          ? SelectableText(auth.currentUser?.uuid ?? '-',
+                              style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, color: Color(0xFF0B74FF)))
+                          : const Text('اضغط للعرض (يتطلب التحقق)'),
+                      leading: const Icon(Icons.vpn_key_rounded, color: Colors.orange),
+                      trailing: _showRecoveryKey
+                          ? IconButton(
+                              icon: const Icon(Icons.copy_rounded, size: 20),
+                              onPressed: () {
+                                Clipboard.setData(ClipboardData(text: auth.currentUser?.uuid ?? ''));
+                                _showSnackBar('تم نسخ مفتاح الاستعادة', Colors.blue);
+                              },
+                            )
+                          : const Icon(Icons.lock_outline, size: 20),
+                      onTap: _showRecoveryKey ? null : _revealRecoveryKey,
+                    ),
+                  ],
                 ]),
 
                 const SizedBox(height: 32),
