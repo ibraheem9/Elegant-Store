@@ -371,6 +371,7 @@ class _SalesScreenState extends State<SalesScreen> {
     });
 
     try {
+      final actUser = context.read<AuthService>().currentUser;
       User customer;
       if (_selectedCustomer != null) {
         customer = _selectedCustomer!;
@@ -385,7 +386,12 @@ class _SalesScreenState extends State<SalesScreen> {
           isPermanentCustomer: 0,
           createdAt: TimestampFormatter.nowUtc(),
         );
-        final id = await db.insertUser(newUser, '123');
+        final id = await db.insertUser(
+          newUser,
+          '123',
+          performedById: actUser?.id,
+          performedByName: actUser?.username ?? actUser?.name,
+        );
         customer = (await db.getCustomers()).firstWhere((c) => c.id == id);
       }
 
@@ -406,11 +412,10 @@ class _SalesScreenState extends State<SalesScreen> {
         notes: _notesController.text,
       );
 
-      final _actUser = context.read<AuthService>().currentUser;
       final invoiceId = await db.insertInvoice(
         invoice,
-        performedById: _actUser?.id,
-        performedByName: _actUser?.username ?? _actUser?.name,
+        performedById: actUser?.id,
+        performedByName: actUser?.username ?? actUser?.name,
       );
       // Always recalculate after insert to ensure balance reflects the new invoice correctly
       await db.recalculateUserBalance(invoice.userId);
@@ -449,6 +454,7 @@ class _SalesScreenState extends State<SalesScreen> {
     });
 
     try {
+      final actUser = context.read<AuthService>().currentUser;
       User customer;
       if (_selectedCustomer != null) {
         customer = _selectedCustomer!;
@@ -463,18 +469,22 @@ class _SalesScreenState extends State<SalesScreen> {
           isPermanentCustomer: 0,
           createdAt: TimestampFormatter.nowUtc(),
         );
-        final id = await db.insertUser(newUser, '123');
+        final id = await db.insertUser(
+          newUser,
+          '123',
+          performedById: actUser?.id,
+          performedByName: actUser?.username ?? actUser?.name,
+        );
         customer = (await db.getCustomers()).firstWhere((c) => c.id == id);
       }
-      final _actUser = context.read<AuthService>().currentUser;
       await db.recordCashWithdrawal(
         customer: customer,
         amount: amount,
         notes: _notesController.text,
         paymentMethodId: _selectedPaymentMethod?.id,
         date: TimestampFormatter.applyPastDateRule(_selectedInvoiceDate),
-        performedById: _actUser?.id,
-        performedByName: _actUser?.username ?? _actUser?.name,
+        performedById: actUser?.id,
+        performedByName: actUser?.username ?? actUser?.name,
       );
       _clearFields();
       await _loadData();
@@ -517,7 +527,7 @@ class _SalesScreenState extends State<SalesScreen> {
     }
 
     final db = context.read<DatabaseService>();
-    final _actUser = context.read<AuthService>().currentUser;
+    final actUser = context.read<AuthService>().currentUser;
     setState(() => _isLoading = true);
     try {
       final combinedDateTime = TimestampFormatter.applyPastDateRule(_selectedInvoiceDate);
@@ -527,8 +537,8 @@ class _SalesScreenState extends State<SalesScreen> {
         notes: _notesController.text,
         paymentMethodId: _selectedPaymentMethod!.id!,
         date: combinedDateTime,
-        performedById: _actUser?.id,
-        performedByName: _actUser?.username ?? _actUser?.name,
+        performedById: actUser?.id,
+        performedByName: actUser?.username ?? actUser?.name,
       );
       _clearFields();
       await _loadData();
@@ -671,14 +681,14 @@ class _SalesScreenState extends State<SalesScreen> {
         isSynced: 0,
       );
 
-      final _actUser = context.read<AuthService>().currentUser;
+      final actUser = context.read<AuthService>().currentUser;
       await db.updateInvoiceWithLog(
         oldInv: inv,
         newInv: newInv,
         reason: reasonController.text,
-        performedById: _actUser?.id,
-        performedByName: _actUser?.username ?? _actUser?.name,
-        storeManagerId: _actUser?.parentId ?? _actUser?.id,
+        performedById: actUser?.id,
+        performedByName: actUser?.username ?? actUser?.name,
+        storeManagerId: actUser?.parentId ?? actUser?.id,
       );
       // Recalculate balance in case amount or payment_status changed
       await db.recalculateUserBalance(inv.userId);
@@ -693,133 +703,164 @@ class _SalesScreenState extends State<SalesScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('تاريخ تعديلات الفاتورة'),
-        content: history.isEmpty 
-          ? const Text('لا يوجد تعديلات سابقة لهذه الفاتورة')
-          : SizedBox(
-              width: double.maxFinite,
-              child: ListView.separated(
-                shrinkWrap: true,
-                itemCount: history.length,
-                separatorBuilder: (_, __) => const Divider(),
-                itemBuilder: (context, index) {
-                  final item = history[index];
-                  // Resolve field label
-                  final rawField = item['field_name'] as String?;
-                  final fieldLabel = rawField == 'amount'
-                      ? 'المبلغ'
-                      : rawField == 'payment_status'
-                          ? 'حالة الدفع'
-                          : rawField == 'notes'
-                              ? 'الملاحظات'
-                              : rawField == 'payment_method_id'
-                                  ? 'طريقة الدفع'
-                                  : rawField == 'created_at'
-                                      ? 'تاريخ الفاتورة'
-                                      : rawField ?? 'بيانات الفاتورة';
-                  // Resolve summary (action label)
-                  final action = item['action'] as String? ?? 'UPDATE';
-                  // Translate status values in summary text (handles old stored English values too)
-                  final String? summary = _translateSummary(item['summary'] as String?).isNotEmpty
-                      ? _translateSummary(item['summary'] as String?)
-                      : null;
-                  final editorName = item['edited_by_name'] as String?;
-                  final rawOldVal = item['old_value'] as String?;
-                  final rawNewVal = item['new_value'] as String?;
-                  // Translate status values and format dates in old/new values
-                  final oldVal = _translateHistoryValue(rawField ?? '', rawOldVal);
-                  final newVal = _translateHistoryValue(rawField ?? '', rawNewVal);
-                  final reason = item['edit_reason'] as String?;
-                  // Format date
-                  String dateStr = item['created_at'] as String? ?? '';
-                  try {
-                    final dt = DateTime.parse(dateStr);
-                    dateStr = '${dt.year}-${dt.month.toString().padLeft(2,'0')}-${dt.day.toString().padLeft(2,'0')}  ${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
-                  } catch (_) {}
-                  // Action badge color
-                  final badgeColor = action == 'CREATE'
-                      ? Colors.green
-                      : action == 'DELETE'
-                          ? Colors.red
-                          : Colors.orange;
-                  return ListTile(
-                    leading: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                      decoration: BoxDecoration(color: badgeColor.withOpacity(0.15), borderRadius: BorderRadius.circular(6)),
-                      child: Text(
-                        action == 'CREATE' ? 'إضافة' : action == 'DELETE' ? 'حذف' : 'تعديل',
-                        style: TextStyle(fontSize: 11, color: badgeColor, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    title: Text(
-                      summary ?? 'تغيير $fieldLabel',
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (oldVal != null && newVal != null)
-                          Text('من: $oldVal  ←  إلى: $newVal', style: const TextStyle(fontSize: 12)),
-                        if (reason != null && reason.isNotEmpty)
-                          Text('السبب: $reason', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 2,
-                          children: [
-                            if (editorName != null)
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    action == 'CREATE' ? Icons.person_add_rounded : Icons.person_rounded,
-                                    size: 12,
-                                    color: badgeColor,
-                                  ),
-                                  const SizedBox(width: 3),
-                                  Flexible(
-                                    child: Text(
-                                      action == 'CREATE'
-                                          ? 'أُنشئت بواسطة: $editorName'
-                                          : action == 'DELETE'
-                                              ? 'حُذفت بواسطة: $editorName'
-                                              : 'عُدّلت بواسطة: $editorName',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        color: badgeColor,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 1,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.access_time, size: 12),
-                                const SizedBox(width: 3),
-                                Flexible(
-                                  child: Text(
-                                    dateStr,
-                                    style: const TextStyle(fontSize: 11),
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 1,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  );
-                },
+      builder: (context) {
+        final screenWidth = MediaQuery.of(context).size.width;
+        final dialogWidth = screenWidth > 900 ? 800.0 : screenWidth > 600 ? 550.0 : double.maxFinite;
+
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('تاريخ تعديلات الفاتورة', style: TextStyle(fontWeight: FontWeight.bold)),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.pop(context),
               ),
+            ],
+          ),
+          content: history.isEmpty 
+            ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Text('لا يوجد تعديلات سابقة لهذه الفاتورة', textAlign: TextAlign.center),
+              )
+            : SizedBox(
+                width: dialogWidth,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.7,
+                  ),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: history.length,
+                    separatorBuilder: (_, __) => const Divider(height: 24),
+                    itemBuilder: (context, index) {
+                      final item = history[index];
+                      // Resolve field label
+                      final rawField = item['field_name'] as String?;
+                      final fieldLabel = rawField == 'amount'
+                          ? 'المبلغ'
+                          : rawField == 'payment_status'
+                              ? 'حالة الدفع'
+                              : rawField == 'notes'
+                                  ? 'الملاحظات'
+                                  : rawField == 'payment_method_id'
+                                      ? 'طريقة الدفع'
+                                      : rawField == 'created_at'
+                                          ? 'تاريخ الفاتورة'
+                                          : rawField ?? 'بيانات الفاتورة';
+                      
+                      final action = item['action'] as String? ?? 'UPDATE';
+                      final String? summary = _translateSummary(item['summary'] as String?);
+                      
+                      final editorName = item['edited_by_name'] as String?;
+                      final createdByName = item['created_by_name'] as String?;
+                      final rawOldVal = item['old_value'] as String?;
+                      final rawNewVal = item['new_value'] as String?;
+                      
+                      // Translate status values and format dates in old/new values
+                      final oldVal = _translateHistoryValue(rawField ?? '', rawOldVal);
+                      final newVal = _translateHistoryValue(rawField ?? '', rawNewVal);
+                      final reason = item['edit_reason'] as String?;
+                      
+                      // Format record timestamp (when the edit happened)
+                      final displayTime = TimestampFormatter.formatShort(item['created_at'] as String?);
+                      
+                      final badgeColor = action == 'CREATE'
+                          ? Colors.green
+                          : action == 'DELETE'
+                              ? Colors.red
+                              : Colors.orange;
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: badgeColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: badgeColor.withOpacity(0.3)),
+                                ),
+                                child: Text(
+                                  action == 'CREATE' ? 'إضافة' : action == 'DELETE' ? 'حذف' : 'تعديل',
+                                  style: TextStyle(fontSize: 12, color: badgeColor, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      summary ?? 'تغيير $fieldLabel',
+                                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                                    ),
+                                    if (oldVal != null && newVal != null && rawField != 'MULTIPLE')
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: Text('من: $oldVal  ←  إلى: $newVal', style: const TextStyle(fontSize: 13, color: Colors.blueGrey)),
+                                      ),
+                                    if (reason != null && reason.isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 6),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey.shade50,
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: Colors.grey.shade200),
+                                          ),
+                                          child: Text(
+                                            'سبب التعديل: $reason',
+                                            style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Icon(Icons.person_outline, size: 14, color: Colors.grey.shade600),
+                              const SizedBox(width: 4),
+                              Text(
+                                action == 'CREATE'
+                                    ? 'بواسطة: ${createdByName ?? editorName ?? "غير معروف"}'
+                                    : 'بواسطة: $editorName',
+                                style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                              ),
+                              const SizedBox(width: 12),
+                              Icon(Icons.access_time, size: 14, color: Colors.grey.shade600),
+                              const SizedBox(width: 4),
+                              Text(
+                                displayTime,
+                                style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                                textDirection: ui.TextDirection.ltr,
+                              ),
+                            ],
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('إغلاق'),
             ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء'))],
-      ),
+          ],
+        );
+      },
     );
   }
 
@@ -842,15 +883,15 @@ class _SalesScreenState extends State<SalesScreen> {
     if (confirm == true) {
       final db = context.read<DatabaseService>();
       await db.softDeleteInvoice(inv);
-      final _actUser = context.read<AuthService>().currentUser;
+      final actUser = context.read<AuthService>().currentUser;
       db.logActivity(
         targetId: inv.id!,
         targetType: 'INVOICE',
         action: 'DELETE',
         summary: 'حذف فاتورة بمبلغ ${inv.amount.toStringAsFixed(2)} NIS - الحالة: ${_translateHistoryValue('payment_status', inv.paymentStatus)}',
-        performedById: _actUser?.id,
-        performedByName: _actUser?.username ?? _actUser?.name,
-        storeManagerId: _actUser?.parentId ?? _actUser?.id,
+        performedById: actUser?.id,
+        performedByName: actUser?.username ?? actUser?.name,
+        storeManagerId: actUser?.parentId ?? actUser?.id,
       ).catchError((e) => debugPrint('logActivity failed: $e'));
 
       // Update local state instead of calling _loadData() to maintain scroll position

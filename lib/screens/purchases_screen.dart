@@ -147,26 +147,20 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     setState(() => _isLoading = true);
     try {
       final db  = context.read<DatabaseService>();
-      final now = DateTime.now();
-      final dt = TimestampFormatter.applyPastDateRule(_selectedDate);
-      final purchaseId = await db.insertPurchase(Purchase(
-        merchantName:  _merchantController.text.trim(),
-        amount:        amount,
-        paymentSource: _selectedMethod?.type == 'app' ? 'APP' : 'CASH',
-        paymentMethodId: _selectedMethod?.id,
-        notes:         _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
-        createdAt:     TimestampFormatter.toUtcString(dt),
-      ));
       final actUser = context.read<AuthService>().currentUser;
-      db.logActivity(
-        targetId: purchaseId,
-        targetType: 'PURCHASE',
-        action: 'CREATE',
-        summary: 'مشتريات جديدة من ${_merchantController.text.trim()} بمبلغ ${amount.toStringAsFixed(2)} ₪',
+      final dt = TimestampFormatter.applyPastDateRule(_selectedDate);
+      await db.insertPurchase(
+        Purchase(
+          merchantName:  _merchantController.text.trim(),
+          amount:        amount,
+          paymentSource: _selectedMethod?.type == 'app' ? 'APP' : 'CASH',
+          paymentMethodId: _selectedMethod?.id,
+          notes:         _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
+          createdAt:     TimestampFormatter.toUtcString(dt),
+        ),
         performedById: actUser?.id,
-        performedByName: actUser?.name,
-        storeManagerId: actUser?.parentId ?? actUser?.id,
-      ).catchError((e) => debugPrint('logActivity failed: $e'));
+        performedByName: actUser?.username ?? actUser?.name,
+      );
       _merchantController.clear();
       _amountController.clear();
       _notesController.clear();
@@ -365,30 +359,62 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                       itemBuilder: (_, i) {
                         final h = filtered[i];
                         final fieldName = h['field_name'] as String? ?? '';
+                        final action = h['action'] as String? ?? 'UPDATE';
                         final fieldLabel = _fieldLabel(fieldName);
                         final rawOld = h['old_value'] as String?;
                         final rawNew = h['new_value'] as String?;
+                        final editorName = h['edited_by_name'] as String? ?? 'غير معروف';
+                        final createdByName = h['created_by_name'] as String?;
+                        final createdById = h['created_by_id'];
                         // Format ISO date strings to readable format
                         final displayOld = _formatHistoryValue(fieldName, rawOld);
                         final displayNew = _formatHistoryValue(fieldName, rawNew);
+                        // Badge color by action type
+                        final badgeColor = action == 'CREATE'
+                            ? Colors.green
+                            : action == 'DELETE'
+                                ? Colors.red
+                                : Colors.orange;
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(children: [
-                                const Icon(Icons.edit, size: 14, color: Colors.orange),
-                                const SizedBox(width: 4),
-                                Text(fieldLabel,
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: badgeColor.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    action == 'CREATE' ? 'إضافة' : action == 'DELETE' ? 'حذف' : 'تعديل',
+                                    style: TextStyle(fontSize: 10, color: badgeColor, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                                if (fieldName.isNotEmpty) ...[
+                                  const SizedBox(width: 6),
+                                  const Icon(Icons.edit, size: 12, color: Colors.orange),
+                                  const SizedBox(width: 4),
+                                  Text(fieldLabel,
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                ],
                               ]),
                               const SizedBox(height: 2),
-                              Text('من: $displayOld  →  إلى: $displayNew',
-                                  style: const TextStyle(fontSize: 12)),
-                              Text('السبب: ${h['edit_reason'] ?? '-'}',
-                                  style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                              Text('بواسطة: ${h['edited_by_name'] ?? '-'}',
-                                  style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                              if (fieldName.isNotEmpty)
+                                Text('من: $displayOld  →  إلى: $displayNew',
+                                    style: const TextStyle(fontSize: 12)),
+                              if (h['edit_reason'] != null && h['edit_reason'].toString().isNotEmpty)
+                                Text('السبب: ${h['edit_reason']}',
+                                    style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                              Text(
+                                action == 'CREATE'
+                                    ? 'أُنشئت بواسطة: ${createdByName ?? editorName}${createdById != null ? " (ID: $createdById)" : ""}'
+                                    : action == 'DELETE'
+                                        ? 'حُذفت بواسطة: $editorName'
+                                        : 'عُدّلت بواسطة: $editorName',
+                                style: const TextStyle(fontSize: 11, color: Colors.grey),
+                              ),
                               Text(
                                 DateFormat('yyyy/MM/dd HH:mm').format(
                                     DateTime.tryParse(h['created_at'] as String? ?? '') ?? DateTime.now()),

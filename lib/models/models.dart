@@ -1,5 +1,4 @@
 import '../utils/timestamp_formatter.dart';
-import 'package:intl/intl.dart';
 
 // Helper to handle Laravel's decimal-as-string and normal numbers.
 // Rounds to 2 decimal places to prevent floating-point artifacts (e.g. 3.6e-16 instead of 0.00).
@@ -42,6 +41,8 @@ class User {
   final String? transferNames; 
   final double balance; 
   final int version;
+  final String? createdByName;
+  final int? createdById;
   final String createdAt;
   final String updatedAt;
   final String? deletedAt;
@@ -63,6 +64,8 @@ class User {
     this.transferNames,
     this.balance = 0.0,
     this.version = 1,
+    this.createdByName,
+    this.createdById,
     required this.createdAt,
     String? updatedAt,
     this.deletedAt,
@@ -86,6 +89,8 @@ class User {
       'transfer_names': transferNames,
       'balance': balance,
       'version': version,
+      'created_by_name': createdByName,
+      'created_by_id': createdById,
       'created_at': createdAt,
       'updated_at': updatedAt,
       'deleted_at': deletedAt,
@@ -110,6 +115,8 @@ class User {
       transferNames: map['transfer_names'],
       balance: _toDouble(map['balance']),
       version: map['version'] ?? 1,
+      createdByName: map['created_by_name'],
+      createdById: map['created_by_id'],
       createdAt: map['created_at'] ?? '',
       updatedAt: map['updated_at'] ?? '',
       deletedAt: map['deleted_at'],
@@ -140,6 +147,8 @@ class PaymentMethod {
   final int isActive;
   final int sortOrder;
   final int version;
+  final String? createdByName;
+  final int? createdById;
   final String createdAt;
   final String updatedAt;
   final int isSynced;
@@ -155,6 +164,8 @@ class PaymentMethod {
     this.isActive = 1,
     this.sortOrder = 0,
     this.version = 1,
+    this.createdByName,
+    this.createdById,
     String? createdAt,
     String? updatedAt,
     this.isSynced = 0,
@@ -173,6 +184,8 @@ class PaymentMethod {
       'is_active': isActive,
       'sort_order': sortOrder,
       'version': version,
+      'created_by_name': createdByName,
+      'created_by_id': createdById,
       'created_at': createdAt,
       'updated_at': updatedAt,
       'is_synced': isSynced,
@@ -191,6 +204,8 @@ class PaymentMethod {
       isActive: map['is_active'] ?? 1,
       sortOrder: map['sort_order'] ?? 0,
       version: map['version'] ?? 1,
+      createdByName: map['created_by_name'],
+      createdById: map['created_by_id'],
       createdAt: map['created_at'],
       updatedAt: map['updated_at'] ?? '',
       isSynced: map['is_synced'] ?? 0,
@@ -236,6 +251,8 @@ class Invoice {
   final String type; 
   final String? notes;
   final int version;
+  final String? createdByName;
+  final int? createdById;
   final String createdAt;
   final String updatedAt;
   final String? deletedAt;
@@ -260,6 +277,8 @@ class Invoice {
     this.type = 'SALE',
     this.notes,
     this.version = 1,
+    this.createdByName,
+    this.createdById,
     required this.createdAt,
     String? updatedAt,
     this.deletedAt,
@@ -285,6 +304,8 @@ class Invoice {
       'type': type,
       'notes': notes,
       'version': version,
+      'created_by_name': createdByName,
+      'created_by_id': createdById,
       'created_at': createdAt,
       'updated_at': updatedAt,
       'deleted_at': deletedAt,
@@ -306,6 +327,8 @@ class Invoice {
       type: map['type'] ?? 'SALE',
       notes: map['notes'],
       version: map['version'] ?? 1,
+      createdByName: map['created_by_name'],
+      createdById: map['created_by_id'],
       createdAt: map['created_at'] ?? '',
       updatedAt: map['updated_at'] ?? '',
       deletedAt: map['deleted_at'],
@@ -332,6 +355,8 @@ class FinancialTransaction {
   final int? paymentMethodId; 
   final String? notes; 
   final int version;
+  final String? createdByName;
+  final int? createdById;
   final String createdAt;
   final String updatedAt;
   final String? deletedAt;
@@ -351,6 +376,8 @@ class FinancialTransaction {
     this.paymentMethodId,
     this.notes,
     this.version = 1,
+    this.createdByName,
+    this.createdById,
     required this.createdAt,
     String? updatedAt,
     this.deletedAt,
@@ -372,6 +399,8 @@ class FinancialTransaction {
       'payment_method_id': paymentMethodId,
       'notes': notes,
       'version': version,
+      'created_by_name': createdByName,
+      'created_by_id': createdById,
       'created_at': createdAt,
       'updated_at': updatedAt,
       'deleted_at': deletedAt,
@@ -392,6 +421,8 @@ class FinancialTransaction {
       paymentMethodId: map['payment_method_id'],
       notes: map['notes'],
       version: map['version'] ?? 1,
+      createdByName: map['created_by_name'],
+      createdById: map['created_by_id'],
       createdAt: map['created_at'] ?? '',
       updatedAt: map['updated_at'] ?? '',
       deletedAt: map['deleted_at'],
@@ -413,6 +444,8 @@ class Purchase {
   final int? paymentMethodId;
   final String? notes;
   final int version;
+  final String? createdByName;
+  final int? createdById;
   final String createdAt;
   final String updatedAt;
   final String? deletedAt;
@@ -428,6 +461,8 @@ class Purchase {
     this.paymentMethodId,
     this.notes,
     this.version = 1,
+    this.createdByName,
+    this.createdById,
     required this.createdAt,
     String? updatedAt,
     this.deletedAt,
@@ -445,6 +480,8 @@ class Purchase {
       'payment_method_id': paymentMethodId,
       'notes': notes,
       'version': version,
+      'created_by_name': createdByName,
+      'created_by_id': createdById,
       'created_at': createdAt,
       'updated_at': updatedAt,
       'deleted_at': deletedAt,
@@ -463,6 +500,8 @@ class Purchase {
       paymentMethodId: map['payment_method_id'],
       notes: map['notes'],
       version: map['version'] ?? 1,
+      createdByName: map['created_by_name'],
+      createdById: map['created_by_id'],
       createdAt: map['created_at'] ?? '',
       updatedAt: map['updated_at'] ?? '',
       deletedAt: map['deleted_at'],
@@ -486,6 +525,8 @@ class DailyStatistics {
   final double totalSalesCash;
   final double totalSalesCredit;
   final int version;
+  final String? createdByName;
+  final int? createdById;
   final String createdAt;
   final String updatedAt;
   final int isSynced;
@@ -504,6 +545,8 @@ class DailyStatistics {
     this.totalSalesCash = 0.0,
     this.totalSalesCredit = 0.0,
     this.version = 1,
+    this.createdByName,
+    this.createdById,
     required this.createdAt,
     String? updatedAt,
     this.isSynced = 0,
@@ -524,6 +567,8 @@ class DailyStatistics {
       'total_sales_cash': totalSalesCash,
       'total_sales_credit': totalSalesCredit,
       'version': version,
+      'created_by_name': createdByName,
+      'created_by_id': createdById,
       'created_at': createdAt,
       'updated_at': updatedAt,
       'is_synced': isSynced,
@@ -545,6 +590,8 @@ class DailyStatistics {
       totalSalesCash: _toDouble(map['total_sales_cash']),
       totalSalesCredit: _toDouble(map['total_sales_credit']),
       version: map['version'] ?? 1,
+      createdByName: map['created_by_name'],
+      createdById: map['created_by_id'],
       createdAt: map['created_at'] ?? '',
       updatedAt: map['updated_at'] ?? '',
       isSynced: map['is_synced'] ?? 0,

@@ -1189,7 +1189,9 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                     final summary = h['summary'] as String?;
                     final oldVal = h['old_value'] as String?;
                     final newVal = h['new_value'] as String?;
-                    final creatorName = h['edited_by_name'] as String?;
+                    final editorName = h['edited_by_name'] as String?;
+                    final createdByName = h['created_by_name'] as String?;
+                    final createdById = h['created_by_id'];
                     final hasFieldChange = fieldLabel != null && oldVal != null && newVal != null;
                     // Badge color by action type
                     final badgeColor = action == 'CREATE'
@@ -1231,7 +1233,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                               ],
                             ]),
                             // Creator name for CREATE/DELETE actions
-                            if (creatorName != null && creatorName.isNotEmpty) ...[
+                            if ((createdByName ?? editorName) != null && (createdByName ?? editorName)!.isNotEmpty) ...[
                               const SizedBox(height: 4),
                               Row(children: [
                                 Icon(
@@ -1242,10 +1244,10 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                                 const SizedBox(width: 4),
                                 Text(
                                   action == 'CREATE'
-                                      ? 'أُنشئت بواسطة: $creatorName'
+                                      ? 'أُنشئت بواسطة: ${createdByName ?? editorName ?? "غير معروف"}${createdById != null ? " (ID: $createdById)" : ""}'
                                       : action == 'DELETE'
-                                          ? 'حُذفت بواسطة: $creatorName'
-                                          : 'عُدّلت بواسطة: $creatorName',
+                                          ? 'حُذفت بواسطة: $editorName'
+                                          : 'عُدّلت بواسطة: $editorName',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,

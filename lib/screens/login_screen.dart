@@ -206,7 +206,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       validator: (v) => v == null || v.isEmpty ? 'يرجى إدخال اسم المستخدم' : null,
                     ),
                   ] else if (step == 2) ...[
-                    const Text('الخطوة 2: أدخل مفتاح الاستعادة (UUID)'),
+                    const Text('الخطوة 2: أدخل مفتاح الاستعادة (Recovery Code)'),
                     const SizedBox(height: 8),
                     const Text(
                       'أدخل مفتاح الاستعادة الخاص بك لإعادة تعيين كلمة المرور.',
