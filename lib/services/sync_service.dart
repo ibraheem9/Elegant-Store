@@ -837,11 +837,10 @@ class SyncService extends ChangeNotifier {
             {
               item['parent_uuid'] = uuidCache['users']?[item['parent_id'] as int?];
               item.remove('parent_id');
-              final role     = item['role'] as String? ?? '';
               final isSynced = (item['is_synced'] as int? ?? 1) == 1;
               final hasPass  = (item['password'] as String?)?.isNotEmpty == true;
-              if (role == 'ACCOUNTANT' && !isSynced && hasPass) {
-                // Keep plain-text password so server can hash it
+              if (!isSynced && hasPass) {
+                // Keep plain-text password so server can hash it for any role (offline-first)
               } else {
                 item.remove('password');
               }

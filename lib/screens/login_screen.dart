@@ -104,6 +104,7 @@ class _LoginScreenState extends State<LoginScreen> {
       // Step 3: REMOVED automatic sync after login. 
       // Users should start the sync manually from the dashboard.
       /*
+      final syncService = Provider.of<SyncService>(context, listen: false);
       if (firstLogin && mounted) {
         setState(() => _syncStatusMessage = 'جاري تحميل بيانات المتجر...');
         try {

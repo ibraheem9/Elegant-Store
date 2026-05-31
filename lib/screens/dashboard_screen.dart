@@ -857,18 +857,21 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+/*
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  _buildSyncButton(isDark, syncService.isSyncing || context.read<SyncManager>().isSyncing),
+                  _buildSyncButton(isDark, syncService.isSyncing || context.read<SyncManager>().isSy
                 ],
               ),
-              if (syncService.isSyncing || context.read<SyncManager>().isSyncing || _syncStatus.contains('فشلت') || _syncStatus.contains('نجاح')) ...[
+              if (syncService.isSyncing || context.read<SyncManager>().isSyncing || _syncStatus.cont
                 const SizedBox(height: 16),
-                _buildSyncProgress(isDark, syncService.isSyncing || context.read<SyncManager>().isSyncing),
+                _buildSyncProgress(isDark, syncService.isSyncing || context.read<SyncManager>().isSy
               ],
               const SizedBox(height: 24),
               _buildLastSyncDetails(isDark, isMobile),
+*/
+              const SizedBox(height: 12),
               const SizedBox(height: 32),
               FutureBuilder<Map<String, dynamic>>(
                 future: db.getGlobalStats(),

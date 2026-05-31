@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/database_service.dart';
 import '../services/telemetry_service.dart';
-import '../models/models.dart';
 
 class StoreProfileScreen extends StatefulWidget {
   const StoreProfileScreen({Key? key}) : super(key: key);
@@ -30,15 +29,18 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
 
   Future<void> _loadProfile() async {
     setState(() => _isLoading = true);
+    final telemetry = context.read<TelemetryService>();
+    final deviceId = await telemetry.getOrCreateDeviceId();
     final db = context.read<DatabaseService>();
-    final profile = await db.getOwnerProfile();
+    final profile = await db.getStoreProfile(deviceId);
+    if (!mounted) return;
     if (profile != null) {
-      _storeNameController.text = profile.storeName;
-      _ownerNameController.text = profile.ownerName;
-      _addressController.text = profile.address;
-      _cityController.text = profile.city;
-      _phoneController.text = profile.phoneNumber;
-      _whatsappController.text = profile.whatsappNumber;
+      _storeNameController.text = profile.storeName ?? '';
+      _ownerNameController.text = profile.ownerName ?? '';
+      _addressController.text = profile.address ?? '';
+      _cityController.text = profile.city ?? '';
+      _phoneController.text = profile.mobile ?? '';
+      _whatsappController.text = profile.whatsapp ?? '';
     }
     if (mounted) setState(() => _isLoading = false);
   }

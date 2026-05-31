@@ -71,7 +71,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _showSnackBar('تم تحديث الملف الشخصي بنجاح', Colors.green);
     } else {
       _showSnackBar(
-          'فشل تحديث الملف الشخصي. تأكد من الاتصال بالإنترنت.', Colors.red);
+          auth.lastLoginError ?? 'فشل تحديث الملف الشخصي. يرجى المحاولة لاحقاً.',
+          Colors.red);
     }
   }
 
@@ -154,7 +155,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } else {
       _showSnackBar(
-          'فشل تغيير كلمة المرور. تأكد من كلمة المرور الحالية والاتصال.',
+          auth.lastLoginError ?? 'فشل تغيير كلمة المرور. تأكد من البيانات والاتصال.',
           Colors.red);
     }
   }

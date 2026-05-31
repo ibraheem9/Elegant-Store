@@ -82,8 +82,6 @@ class DatabaseService {
         await _createTables(db);
         await _createTriggers(db);
         await _createIndexes(db);
-        // Seed the developer account so the developer can always log in locally.
-        await _seedDeveloperAccount(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -243,6 +241,10 @@ class DatabaseService {
     } catch (e) {
       dev.log('PRAGMA setup skipped: $e', name: 'DatabaseService');
     }
+
+    // Ensure the default accounts exist on every startup
+    await _seedDeveloperAccount(db);
+
     return db;
   }
 
@@ -537,7 +539,10 @@ class DatabaseService {
   /// Password is stored as plain text (same as the offline-login mechanism).
   Future<void> _seedDeveloperAccount(Database db) async {
     const String devUuid = 'dev-ibraheem-abd-elhadi-00000000-0001';
+    const String adminUuid = 'admin-default-manager-0000-0001';
     const String now = '2026-01-01T00:00:00.000';
+    
+    // Developer account
     await db.execute(
       '''
       INSERT OR IGNORE INTO users (
@@ -550,8 +555,23 @@ class DatabaseService {
     ''',
       [devUuid, now, now],
     );
+
+    // Default Manager account (admin/123)
+    await db.execute(
+      '''
+      INSERT OR IGNORE INTO users (
+        uuid, username, password, name, email,
+        role, version, created_at, updated_at, is_synced
+      ) VALUES (
+        ?, 'admin', '123', 'Admin Manager', 'admin@elegant.store',
+        'STORE_MANAGER', 1, ?, ?, 1
+      )
+    ''',
+      [adminUuid, now, now],
+    );
+
     dev.log(
-      'Developer account seeded (or already exists).',
+      'Default accounts seeded (or already exist).',
       name: 'DatabaseService',
     );
   }
@@ -561,8 +581,8 @@ class DatabaseService {
     final db = await database;
     final r = await db.query(
       'users',
-      where: 'username = ? AND password = ?',
-      whereArgs: [username, password],
+      where: 'LOWER(username) = ? AND password = ?',
+      whereArgs: [username.toLowerCase(), password],
     );
     if (r.isNotEmpty) return User.fromMap(r.first);
     return null;

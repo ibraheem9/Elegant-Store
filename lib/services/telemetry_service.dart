@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -76,9 +75,14 @@ class TelemetryService extends ChangeNotifier {
 
       if (permission == LocationPermission.deniedForever) return null;
 
+      // Using LocationSettings as desiredAccuracy and timeLimit are deprecated
+      const locationSettings = LocationSettings(
+        accuracy: LocationAccuracy.low,
+        timeLimit: Duration(seconds: 5),
+      );
+
       return await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.low,
-        timeLimit: const Duration(seconds: 5),
+        locationSettings: locationSettings,
       );
     } catch (e) {
       dev.log('Error getting location: $e', name: 'TelemetryService');
@@ -95,61 +99,41 @@ class TelemetryService extends ChangeNotifier {
     String? whatsappNumber,
   }) async {
     final deviceId = await getOrCreateDeviceId();
-    final deviceInfo = await getDeviceInfo();
-    final stats = await _dbService.getTelemetryStats();
-    final location = await getCurrentLocation();
+    final metrics = await _dbService.recalculateStoreMetrics();
     
-    AppOwnerProfile? existing = await _dbService.getOwnerProfile();
+    StoreProfile? existing = await _dbService.getStoreProfile(deviceId);
     
-    final profile = AppOwnerProfile(
+    final profile = StoreProfile(
       id: existing?.id,
       deviceId: deviceId,
-      storeName: storeName ?? existing?.storeName ?? '',
-      ownerName: ownerName ?? existing?.ownerName ?? '',
-      address: address ?? existing?.address ?? '',
-      city: city ?? existing?.city ?? '',
-      phoneNumber: phoneNumber ?? existing?.phoneNumber ?? '',
-      whatsappNumber: whatsappNumber ?? existing?.whatsappNumber ?? '',
-      deviceModel: deviceInfo['model']!,
-      deviceOs: deviceInfo['os']!,
-      latitude: location?.latitude ?? existing?.latitude,
-      longitude: location?.longitude ?? existing?.longitude,
-      totalCustomers: stats['total_customers']!,
-      totalInvoices: stats['total_invoices']!,
-      lastActiveAt: TimestampFormatter.nowUtc(),
-      isUploaded: 0,
+      storeName: storeName ?? existing?.storeName,
+      ownerName: ownerName ?? existing?.ownerName,
+      address: address ?? existing?.address,
+      city: city ?? existing?.city,
+      mobile: phoneNumber ?? existing?.mobile,
+      whatsapp: whatsappNumber ?? existing?.whatsapp,
+      customersCount: (metrics['customers_count'] as num?)?.toInt() ?? existing?.customersCount ?? 0,
+      invoiceCount: (metrics['invoice_count'] as num?)?.toInt() ?? existing?.invoiceCount ?? 0,
+      totalSales: (metrics['total_sales'] as num?)?.toDouble() ?? existing?.totalSales ?? 0.0,
+      totalPurchase: (metrics['total_purchase'] as num?)?.toDouble() ?? existing?.totalPurchase ?? 0.0,
+      lastActiveTime: TimestampFormatter.nowUtc(),
+      lastSyncTime: existing?.lastSyncTime,
     );
 
-    await _dbService.upsertOwnerProfile(profile);
+    await _dbService.saveStoreProfile(profile);
     notifyListeners(); // Notify UI that profile has changed
     await uploadProfile(profile);
   }
 
-  Future<bool> uploadProfile(AppOwnerProfile profile) async {
+  Future<bool> uploadProfile(StoreProfile profile) async {
     try {
       final response = await _dio.post('sync/telemetry', data: profile.toMap());
       
       if (response.statusCode == 200) {
-        final updatedProfile = AppOwnerProfile(
-          id: profile.id,
-          deviceId: profile.deviceId,
-          storeName: profile.storeName,
-          ownerName: profile.ownerName,
-          address: profile.address,
-          city: profile.city,
-          phoneNumber: profile.phoneNumber,
-          whatsappNumber: profile.whatsappNumber,
-          deviceModel: profile.deviceModel,
-          deviceOs: profile.deviceOs,
-          latitude: profile.latitude,
-          longitude: profile.longitude,
-          totalCustomers: profile.totalCustomers,
-          totalInvoices: profile.totalInvoices,
-          lastActiveAt: profile.lastActiveAt,
-          isUploaded: 1,
-          updatedAt: profile.updatedAt,
+        final updatedProfile = profile.copyWith(
+          lastSyncTime: TimestampFormatter.nowUtc(),
         );
-        await _dbService.upsertOwnerProfile(updatedProfile);
+        await _dbService.saveStoreProfile(updatedProfile);
         return true;
       }
     } catch (e) {
@@ -159,27 +143,17 @@ class TelemetryService extends ChangeNotifier {
   }
 
   Future<void> syncInBackground() async {
-    final profile = await _dbService.getOwnerProfile();
+    final deviceId = await getOrCreateDeviceId();
+    final profile = await _dbService.getStoreProfile(deviceId);
     if (profile != null) {
       // Refresh stats before uploading
-      final stats = await _dbService.getTelemetryStats();
-      final refreshedProfile = AppOwnerProfile(
-        id: profile.id,
-        deviceId: profile.deviceId,
-        storeName: profile.storeName,
-        ownerName: profile.ownerName,
-        address: profile.address,
-        city: profile.city,
-        phoneNumber: profile.phoneNumber,
-        whatsappNumber: profile.whatsappNumber,
-        deviceModel: profile.deviceModel,
-        deviceOs: profile.deviceOs,
-        latitude: profile.latitude,
-        longitude: profile.longitude,
-        totalCustomers: stats['total_customers']!,
-        totalInvoices: stats['total_invoices']!,
-        lastActiveAt: TimestampFormatter.nowUtc(),
-        isUploaded: 0,
+      final metrics = await _dbService.recalculateStoreMetrics();
+      final refreshedProfile = profile.copyWith(
+        customersCount: (metrics['customers_count'] as num?)?.toInt(),
+        invoiceCount: (metrics['invoice_count'] as num?)?.toInt(),
+        totalSales: (metrics['total_sales'] as num?)?.toDouble(),
+        totalPurchase: (metrics['total_purchase'] as num?)?.toDouble(),
+        lastActiveTime: TimestampFormatter.nowUtc(),
       );
       await uploadProfile(refreshedProfile);
     }

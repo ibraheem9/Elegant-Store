@@ -24,10 +24,16 @@ import 'screens/license_gate_screen.dart';
 import 'core/config/app_themes.dart';
 import 'core/config/api_config.dart';
 
+// Import sync services for ChangeNotifierProvider (even if disabled)
+import 'services/sync_service.dart';
+import 'services/sync_manager.dart';
+import 'services/device_sync_service.dart';
+
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 const String syncTaskName = "com.elegantstore.sync_task";
 
+  /* 
   @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
@@ -77,6 +83,7 @@ void callbackDispatcher() {
     }
   });
 }
+*/
 
 void main() async {
   // Disable Impeller renderer to avoid Mali GPU allocator issues
@@ -149,16 +156,20 @@ void main() async {
     debugPrint('initSession failed: $e');
   }
 
+  /* 
   // Initialize Workmanager (Android background tasks) — fire-and-forget to avoid blocking
   if (!Platform.isWindows) {
     _initWorkmanager();
   }
+  */
 
   // Check license before showing the app
   final licenseResult = await LicenseService.instance.checkStoredLicense();
 
+  /*
   // Sync customer tracking data in background
   Future.microtask(() => CustomerTrackingService.instance.syncCustomerData());
+  */
 
   runApp(
     MultiProvider(
@@ -206,33 +217,13 @@ void main() async {
   );
 }
 
+/*
 /// Initialize Workmanager in the background without blocking app startup.
 void _initWorkmanager() {
-  Future.microtask(() async {
-    try {
-      await Workmanager().initialize(
-        callbackDispatcher,
-        isInDebugMode: false,
-      ).timeout(const Duration(seconds: 5), onTimeout: () {
-        debugPrint('Workmanager.initialize timed out');
-      });
-
-      await Workmanager().registerPeriodicTask(
-        "1",
-        syncTaskName,
-        frequency: const Duration(hours: 24),
-        constraints: Constraints(
-          networkType: NetworkType.connected,
-        ),
-        existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
-      ).timeout(const Duration(seconds: 5), onTimeout: () {
-        debugPrint('Workmanager.registerPeriodicTask timed out');
-      });
-    } catch (e) {
-      debugPrint('Workmanager init failed: $e');
-    }
+...
   });
 }
+*/
 
 class ElegantStoreApp extends StatefulWidget {
   final bool isLicensed;

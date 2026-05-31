@@ -85,32 +85,49 @@ class AuthService extends ChangeNotifier {
         _currentUser = User.fromMap(r.first);
         _isLoggedIn = true;
         notifyListeners();
-        // Start background auto-sync every 10 minutes (session resume)
-        // _syncService?.startAutoSync();
-        // Fire-and-forget sync — never block startup
-        /*
-        Future.microtask(() async {
-          try {
-            final isOnline = await _syncService!.checkConnectivity()
-                .timeout(const Duration(seconds: 3), onTimeout: () => false);
-            if (isOnline) {
-              _syncService!.performFullSync().catchError((e) {
-                dev.log('Session init sync failed: $e', name: 'AuthService');
-              });
-            } else {
-              dev.log('Offline, skipping initial sync during session init.', name: 'AuthService');
-            }
-          } catch (e) {
-            dev.log('Connectivity check failed: $e', name: 'AuthService');
-          }
-        });
-        */
       }
     }
   }
 
   Future<LoginResult> login(String username, String password, {bool saveSession = false}) async {
+    // 1. Try offline login first (Instant & Local)
     try {
+      final localUser = await _dbService.authenticate(username, password);
+      if (localUser != null) {
+        if (localUser.role == 'CUSTOMER') {
+          return LoginResult.customerNotAllowed;
+        }
+        
+        dev.log('Local login successful for $username', name: 'AuthService');
+        _currentUser = localUser;
+        _isLoggedIn = true;
+        
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('saved_username', username);
+        await prefs.setString('last_logged_username', username);
+        await prefs.setString('last_logged_password', password);
+        
+        if (saveSession) {
+          final expiry = DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch;
+          await prefs.setInt('session_expiry', expiry);
+        }
+        
+        notifyListeners();
+        return LoginResult.success;
+      }
+    } catch (e) {
+      dev.log('Local login attempt failed with error: $e', name: 'AuthService');
+    }
+
+    // 2. Fallback to online login (For new users or first-time device setup)
+    try {
+      // Check for internet first to avoid long timeouts
+      final bool isOnline = await _syncService?.checkConnectivity() ?? false;
+      if (!isOnline) {
+        _lastLoginError = 'أنت غير متصل بالإنترنت. يرجى التأكد من كتابة بيانات صحيحة أو الاتصال بالشبكة للدخول لأول مرة.';
+        return LoginResult.networkError;
+      }
+
       dev.log('Attempting online login for user: $username', name: 'AuthService');
       final response = await _dio.post('login', data: {
         'username': username,
@@ -144,8 +161,6 @@ class AuthService extends ChangeNotifier {
         final prefs = await SharedPreferences.getInstance();
 
         // Determine the incoming store_manager_id from the server response.
-        // For STORE_MANAGER / SUPER_ADMIN this is their own UUID/id;
-        // for ACCOUNTANT it is their parent's id.
         final incomingStoreManagerId =
             userData['store_manager_id']?.toString() ??
             userData['id']?.toString();
@@ -157,23 +172,14 @@ class AuthService extends ChangeNotifier {
         final bool storeSwitched = lastStoreManagerId != null &&
             incomingStoreManagerId != null &&
             lastStoreManagerId != incomingStoreManagerId;
-        // Also force a full sync when a brand-new user logs in on this device
-        // for the first time (lastUser == null means no prior session).
         final bool freshDevice   = lastUser == null && lastStoreManagerId == null;
 
         if (userSwitched || storeSwitched) {
-          dev.log(
-            'Account/store switched ($lastUser → $username | '
-            'store $lastStoreManagerId → $incomingStoreManagerId). '
-            'Clearing all local data.',
-            name: 'AuthService',
-          );
+          dev.log('Store/User switched. Clearing all local data.', name: 'AuthService');
           await _dbService.clearAllData();
           await prefs.remove('last_sync_time');
         } else if (freshDevice) {
-          // First-ever login on this device — ensure a full sync runs.
           await prefs.remove('last_sync_time');
-          dev.log('Fresh device — cleared last_sync_time to force full sync.', name: 'AuthService');
         }
 
         final now = TimestampFormatter.nowUtc();
@@ -216,71 +222,32 @@ class AuthService extends ChangeNotifier {
         }
 
         notifyListeners();
-        // Start background auto-sync every 10 minutes
-        // _syncService?.startAutoSync();
-        // Initial sync is triggered by LoginScreen on first login so the UI
-        // can display a loading message. Subsequent logins use session init sync.
         return LoginResult.success;
       }
 
-      dev.log(
-        'Server rejected login: HTTP ${response.statusCode} → ${response.data}',
-        name: 'AuthService',
-      );
       return LoginResult.wrongCredentials;
     } on DioException catch (e) {
-      dev.log('Online login failed (Network): ${e.message}', name: 'AuthService');
-      _lastLoginError = 'Network error: ${e.message}';
-
-      // Offline fallback — try to authenticate using local database
-      // This allows both returning users and potentially new users if data was synced
-      final prefs = await SharedPreferences.getInstance();
-
-      // Try offline login for any user (not just last logged user)
-      // This is more flexible and allows new users to login if they were synced locally
-      try {
-        final localUser = await _dbService.authenticate(username, password);
-        if (localUser != null) {
-          // Block CUSTOMER from offline login
-          if (localUser.role == 'CUSTOMER') {
-            return LoginResult.customerNotAllowed;
-          }
-          dev.log('Offline fallback successful for $username', name: 'AuthService');
-          _currentUser = localUser;
-          _isLoggedIn = true;
-          notifyListeners();
-          return LoginResult.success;
-        }
-      } catch (offlineError) {
-        dev.log('Offline fallback also failed: $offlineError', name: 'AuthService');
-      }
-      
-      // If we get here, both online and offline login failed
+      dev.log('Online login fallback failed (Network): ${e.message}', name: 'AuthService');
+      _lastLoginError = 'لا يوجد اتصال بالإنترنت. يرجى المحاولة لاحقاً أو التأكد من إدخال بيانات صحيحة للدخول لأول مرة.';
       return LoginResult.networkError;
-    } catch (e, stackTrace) {
-      dev.log('Login error (Exception): $e\n$stackTrace', name: 'AuthService', error: e);
+    } catch (e) {
+      dev.log('Login error (Exception): $e', name: 'AuthService');
       _lastLoginError = e.toString();
       return LoginResult.unknownError;
     }
   }
 
   /// Holds the last exception message from a failed login attempt.
-  /// Used to surface detailed error info to the UI for debugging.
   String? _lastLoginError;
   String? get lastLoginError => _lastLoginError;
 
   Future<void> logout() async {
-    // 1. Sync any unsynced data before signing out (non-blocking if offline)
-    // await _syncService?.syncBeforeLogout();
-
-    // 2. Invalidate server token
     try {
       if (_token != null) {
         await _dio.post('logout', options: Options(headers: {'Authorization': 'Bearer $_token'}));
       }
     } catch (_) {}
 
-    // 3. Clear local session state
     _currentUser = null;
     _isLoggedIn = false;
     _token = null;
@@ -294,8 +261,17 @@ class AuthService extends ChangeNotifier {
   Future<bool> updateProfile(String name, String username) async {
     if (_currentUser == null) return false;
     try {
-      // Always update locally first — instant and offline-safe.
       final db = await _dbService.database;
+
+      // Check for username uniqueness locally (excluding current user)
+      final existing = await db.query('users',
+          where: 'username = ? AND id != ?',
+          whereArgs: [username, _currentUser!.id]);
+      if (existing.isNotEmpty) {
+        _lastLoginError = 'اسم المستخدم موجود بالفعل، يرجى اختيار اسم آخر.';
+        return false;
+      }
+
       final now = TimestampFormatter.nowUtc();
       await db.update(
         'users',
@@ -303,6 +279,16 @@ class AuthService extends ChangeNotifier {
         where: 'id = ?',
         whereArgs: [_currentUser!.id],
       );
+
+      // Persist to SharedPreferences so the new username is remembered on restart/re-auth
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getString('saved_username') == _currentUser!.username) {
+        await prefs.setString('saved_username', username);
+      }
+      if (prefs.getString('last_logged_username') == _currentUser!.username) {
+        await prefs.setString('last_logged_username', username);
+      }
+
       _currentUser = User(
         id: _currentUser!.id,
         uuid: _currentUser!.uuid,
@@ -318,25 +304,10 @@ class AuthService extends ChangeNotifier {
         phone: _currentUser!.phone,
         notes: _currentUser!.notes,
         creditLimit: _currentUser!.creditLimit,
+        version: _currentUser!.version,
+        isSynced: 0,
       );
       notifyListeners();
-
-      // Attempt remote sync in the background — failure is silent.
-      /*
-      if (_token != null) {
-        _dio.put(
-          'me',
-          data: {'name': name, 'username': username},
-          options: Options(headers: {'Authorization': 'Bearer $_token'}),
-        ).then((response) {
-          if (response.statusCode == 200 && response.data['success'] == true) {
-            dev.log('Profile synced to server', name: 'AuthService');
-          }
-        }).catchError((e) {
-          dev.log('Profile remote sync failed (offline): $e', name: 'AuthService');
-        });
-      }
-      */
       return true;
     } catch (e) {
       dev.log('updateProfile error: $e', name: 'AuthService');
@@ -345,48 +316,91 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<bool> changePassword(String current, String newPass) async {
-    if (_token == null) return false;
+    if (_currentUser == null) return false;
     try {
-      final response = await _dio.put('me/password',
-        data: {
-          'current_password': current,
-          'new_password': newPass,
-          'new_password_confirmation': newPass
-        },
-        options: Options(headers: {'Authorization': 'Bearer $_token'})
+      // 1. Verify current password against local database
+      final db = await _dbService.database;
+      final results = await db.query(
+        'users',
+        where: 'id = ? AND password = ?',
+        whereArgs: [_currentUser!.id, current],
       );
 
-      if (response.statusCode == 200 && response.data['success'] == true) {
-        if (_currentUser != null) {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('last_logged_password', newPass);
-          // Also update local DB
-          final db = await _dbService.database;
-          await db.update('users', {'password': newPass}, where: 'id = ?', whereArgs: [_currentUser!.id]);
-        }
-        return true;
+      if (results.isEmpty) {
+        _lastLoginError = 'كلمة المرور الحالية غير صحيحة.';
+        return false;
       }
-      return false;
+
+      // 2. Update local database and mark as unsynced
+      final now = TimestampFormatter.nowUtc();
+      await db.update(
+        'users',
+        {'password': newPass, 'updated_at': now, 'is_synced': 0},
+        where: 'id = ?',
+        whereArgs: [_currentUser!.id],
+      );
+
+      // 3. Update SharedPreferences for biometric and future sessions
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('last_logged_password', newPass);
+
+      // 4. Update the _currentUser object with new update_at
+      _currentUser = User(
+        id: _currentUser!.id,
+        uuid: _currentUser!.uuid,
+        username: _currentUser!.username,
+        name: _currentUser!.name,
+        role: _currentUser!.role,
+        balance: _currentUser!.balance,
+        isPermanentCustomer: _currentUser!.isPermanentCustomer,
+        createdAt: _currentUser!.createdAt,
+        updatedAt: now,
+        parentId: _currentUser!.parentId,
+        nickname: _currentUser!.nickname,
+        phone: _currentUser!.phone,
+        notes: _currentUser!.notes,
+        creditLimit: _currentUser!.creditLimit,
+        version: _currentUser!.version,
+        isSynced: 0,
+      );
+
+      // 5. Attempt background server update if online
+      if (_token != null && (await _syncService?.checkConnectivity() ?? false)) {
+        _dio.put('me/password',
+            data: {
+              'current_password': current,
+              'new_password': newPass,
+              'new_password_confirmation': newPass
+            },
+            options: Options(headers: {'Authorization': 'Bearer $_token'})
+        ).then((response) {
+          if (response.statusCode == 200 && response.data['success'] == true) {
+            // Mark as synced if the background update was successful
+            db.update('users', {'is_synced': 1}, where: 'id = ?', whereArgs: [_currentUser!.id]);
+          }
+        }).catchError((e) {
+          dev.log('Background password sync failed: $e', name: 'AuthService');
+        });
+      }
+
+      notifyListeners();
+      return true;
     } catch (e) {
+      dev.log('changePassword error: $e', name: 'AuthService');
       return false;
     }
   }
 
-  /// Resets the password using the UUID as a recovery key.
-  /// This is handled locally and will sync to the server on the next successful login/sync.
   Future<bool> resetPassword(String username, String uuid, String newPassword) async {
     try {
-      // 1. Verify username and UUID match
       final user = await _dbService.getUserByUsername(username);
       if (user == null || user.uuid != uuid) {
         return false;
       }
 
-      // 2. Perform the reset in the local database
       final success = await _dbService.resetPasswordWithUuid(uuid, newPassword);
       
       if (success) {
-        // Update shared prefs if this was the last logged user
         final prefs = await SharedPreferences.getInstance();
         final lastUser = prefs.getString('last_logged_username');
         if (lastUser != null && lastUser.toLowerCase() == username.toLowerCase()) {
@@ -406,7 +420,6 @@ class AuthService extends ChangeNotifier {
     try {
       final bool canAuthenticate = await _localAuth.canCheckBiometrics || await _localAuth.isDeviceSupported();
       if (!canAuthenticate) {
-        dev.log('Biometrics not available or device not supported.', name: 'AuthService');
         return LoginResult.unknownError;
       }
 
@@ -414,7 +427,7 @@ class AuthService extends ChangeNotifier {
         localizedReason: 'يرجى تسجيل الدخول باستخدام البصمة أو رمز المرور',
         options: const AuthenticationOptions(
           stickyAuth: true,
-          biometricOnly: false, // Important for Windows to allow Hello PIN
+          biometricOnly: false,
         ),
       );
 
