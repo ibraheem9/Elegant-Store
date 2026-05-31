@@ -247,33 +247,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildMobileDrawer(bool isDark, AuthService auth) {
     return Drawer(
       backgroundColor: const Color(0xFF0F172A),
-      child: ListView(
-        padding: EdgeInsets.zero,
+      child: Column(
         children: [
-          // Logo hidden as requested: اخفي الشعار منها
-          const SizedBox(height: 60),
-          _buildSidebarItem(0, 'لوحة التحكم', Icons.dashboard_rounded),
-          _buildSidebarItem(1, 'شاشة البيع', Icons.receipt_long_rounded),
-          _buildSidebarItem(8, 'الفواتير غير المدفوعة', Icons.unpublished_rounded),
-          _buildSidebarItem(2, 'إحصائيات اليوم', Icons.bar_chart_rounded),
-          _buildSidebarItem(3, 'المشتريات', Icons.shopping_cart_rounded),
-          _buildSidebarItem(4, 'إدارة الزبائن', Icons.people_alt_rounded),
-          if (auth.isManager())
-            _buildSidebarItem(5, 'إدارة الموظفين', Icons.badge_rounded),
-          _buildSidebarItem(6, 'مراجعة المدفوعات', Icons.payments_rounded),
-          _buildSidebarItem(7, 'أرصدة الزبائن', Icons.account_balance_wallet_rounded),
-          const Divider(color: Colors.white10, indent: 20, endIndent: 20),
-          _buildSidebarItem(9, 'طرق دفع المبيعات', Icons.payment_rounded),
-          _buildSidebarItem(10, 'طرق دفع المشتريات', Icons.account_balance_rounded),
-          _buildSidebarItem(11, 'سلة المحذوفات', Icons.delete_sweep_rounded),
-          _buildSidebarItem(15, 'الملف الشخصي للمتجر', Icons.store_rounded),
-          const Divider(color: Colors.white10, indent: 20, endIndent: 20),
-          _buildSidebarItem(12, 'الإعدادات والسمة', Icons.settings_rounded),
-          _buildSidebarItem(13, 'تواصل معنا', Icons.contact_support_rounded),
-          _buildSidebarItem(14, 'عن المطور', Icons.info_outline_rounded),
-          const SizedBox(height: 8),
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                // Logo hidden as requested: اخفي الشعار منها
+                const SizedBox(height: 60),
+                _buildSidebarItem(0, 'لوحة التحكم', Icons.dashboard_rounded),
+                _buildSidebarItem(1, 'شاشة البيع', Icons.receipt_long_rounded),
+                _buildSidebarItem(8, 'الفواتير غير المدفوعة', Icons.unpublished_rounded),
+                _buildSidebarItem(2, 'إحصائيات اليوم', Icons.bar_chart_rounded),
+                _buildSidebarItem(3, 'المشتريات', Icons.shopping_cart_rounded),
+                _buildSidebarItem(4, 'إدارة الزبائن', Icons.people_alt_rounded),
+                if (auth.isManager())
+                  _buildSidebarItem(5, 'إدارة الموظفين', Icons.badge_rounded),
+                _buildSidebarItem(6, 'مراجعة المدفوعات', Icons.payments_rounded),
+                _buildSidebarItem(7, 'أرصدة الزبائن', Icons.account_balance_wallet_rounded),
+                const Divider(color: Colors.white10, indent: 20, endIndent: 20),
+                _buildSidebarItem(9, 'طرق دفع المبيعات', Icons.payment_rounded),
+                _buildSidebarItem(10, 'طرق دفع المشتريات', Icons.account_balance_rounded),
+                _buildSidebarItem(11, 'سلة المحذوفات', Icons.delete_sweep_rounded),
+                _buildSidebarItem(15, 'الملف الشخصي للمتجر', Icons.store_rounded),
+                const Divider(color: Colors.white10, indent: 20, endIndent: 20),
+                _buildSidebarItem(12, 'الإعدادات والسمة', Icons.settings_rounded),
+                _buildSidebarItem(13, 'تواصل معنا', Icons.contact_support_rounded),
+                _buildSidebarItem(14, 'عن المطور', Icons.info_outline_rounded),
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
           _buildUserCard(true, isDark),
-          const SizedBox(height: 20),
+          const SafeArea(top: false, child: SizedBox(height: 10)),
         ],
       ),
     );
@@ -283,35 +289,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       width: 280,
       color: const Color(0xFF0F172A),
-      child: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Column(
         children: [
-          _buildSidebarHeader(),
-          const SizedBox(height: 5),
-          _buildSidebarItem(0, 'لوحة التحكم', Icons.dashboard_rounded),
-          _buildSidebarItem(1, 'شاشة البيع', Icons.receipt_long_rounded),
-          _buildSidebarItem(8, 'الفواتير غير المدفوعة', Icons.unpublished_rounded),
-          _buildSidebarItem(2, 'إحصائيات اليوم', Icons.bar_chart_rounded),
-          _buildSidebarItem(3, 'المشتريات', Icons.shopping_cart_rounded),
-          _buildSidebarItem(4, 'إدارة الزبائن', Icons.people_alt_rounded),
-          if (auth.isManager())
-            _buildSidebarItem(5, 'إدارة الموظفين', Icons.badge_rounded),
-          _buildSidebarItem(6, 'مراجعة المدفوعات', Icons.payments_rounded),
-          _buildSidebarItem(7, 'أرصدة الزبائن', Icons.account_balance_wallet_rounded),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 10, horizontal: 10),
-            child: Divider(color: Colors.white10),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              children: [
+                _buildSidebarHeader(),
+                const SizedBox(height: 5),
+                _buildSidebarItem(0, 'لوحة التحكم', Icons.dashboard_rounded),
+                _buildSidebarItem(1, 'شاشة البيع', Icons.receipt_long_rounded),
+                _buildSidebarItem(8, 'الفواتير غير المدفوعة', Icons.unpublished_rounded),
+                _buildSidebarItem(2, 'إحصائيات اليوم', Icons.bar_chart_rounded),
+                _buildSidebarItem(3, 'المشتريات', Icons.shopping_cart_rounded),
+                _buildSidebarItem(4, 'إدارة الزبائن', Icons.people_alt_rounded),
+                if (auth.isManager())
+                  _buildSidebarItem(5, 'إدارة الموظفين', Icons.badge_rounded),
+                _buildSidebarItem(6, 'مراجعة المدفوعات', Icons.payments_rounded),
+                _buildSidebarItem(7, 'أرصدة الزبائن', Icons.account_balance_wallet_rounded),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+                  child: Divider(color: Colors.white10),
+                ),
+                _buildSidebarItem(9, 'طرق دفع المبيعات', Icons.payment_rounded),
+                _buildSidebarItem(10, 'طرق دفع المشتريات', Icons.account_balance_rounded),
+                _buildSidebarItem(11, 'سلة المحذوفات', Icons.delete_sweep_rounded),
+                _buildSidebarItem(15, 'الملف الشخصي للمتجر', Icons.store_rounded),
+                const Divider(color: Colors.white10, indent: 20, endIndent: 20),
+                _buildSidebarItem(12, 'الإعدادات والسمة', Icons.settings_rounded),
+                _buildSidebarItem(13, 'تواصل معنا', Icons.contact_support_rounded),
+                _buildSidebarItem(14, 'عن المطور', Icons.info_outline_rounded),
+                const SizedBox(height: 20),
+              ],
+            ),
           ),
-          _buildSidebarItem(9, 'طرق دفع المبيعات', Icons.payment_rounded),
-          _buildSidebarItem(10, 'طرق دفع المشتريات', Icons.account_balance_rounded),
-          _buildSidebarItem(11, 'سلة المحذوفات', Icons.delete_sweep_rounded),
-          _buildSidebarItem(15, 'الملف الشخصي للمتجر', Icons.store_rounded),
-          const Divider(color: Colors.white10, indent: 20, endIndent: 20),
-          _buildSidebarItem(12, 'الإعدادات والسمة', Icons.settings_rounded),
-          _buildSidebarItem(13, 'تواصل معنا', Icons.contact_support_rounded),
-          _buildSidebarItem(14, 'عن المطور', Icons.info_outline_rounded),
-          const SizedBox(height: 8),
-          _buildUserCard(false, isDark),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: _buildUserCard(false, isDark),
+          ),
           const SizedBox(height: 20),
         ],
       ),
