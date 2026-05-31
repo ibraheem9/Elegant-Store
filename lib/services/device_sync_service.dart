@@ -1,43 +1,795 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'database_service.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 import 'auth_service.dart';
+import 'database_service.dart';
 
+import '../core/config/api_config.dart';
+import '../utils/timestamp_formatter.dart';
+
+/// DeviceSyncService
+///
+/// Handles timestamp-based device sync with the server.
+/// Each device tracks its own last sync time and time offset.
+/// Device ID is generated once and stored locally.
 class DeviceSyncService {
   final Dio _dio;
   final AuthService _authService;
   final DatabaseService _databaseService;
 
+  String? _deviceId;
+  String? _deviceName;
+  int? _timeOffsetMs;
   bool _isSyncing = false;
-  bool get isSyncing => _isSyncing;
 
+  // Callbacks
   VoidCallback? onSyncStart;
   VoidCallback? onSyncComplete;
   Function(String)? onSyncError;
   Function(int)? onRecordsReceived;
+  Function(double, String)? onProgressUpdate;
 
   DeviceSyncService({
     required Dio dio,
     required AuthService authService,
     required DatabaseService databaseService,
-  })  : _dio = dio,
+  })
+      : _dio = dio,
         _authService = authService,
         _databaseService = databaseService;
 
-  Future<String> getDeviceId() async => '';
-  Future<String> getDeviceName() async => '';
+  /// Get or generate device ID (persisted locally)
+  Future<String> getDeviceId() async {
+    if (_deviceId != null) return _deviceId!;
 
-  Future<bool> initSync() async => false;
-  Future<bool> startSync() async => false;
-  Future<bool> completeSync() async => false;
-  Future<bool> failSync() async => false;
+    try {
+      final prefs = await SharedPreferences.getInstance();
 
-  Future<Map<String, dynamic>?> getSyncStatus() async => null;
-  Future<List<Map<String, dynamic>>> getDevices() async => [];
+      // Check if device ID already exists
+      String? savedDeviceId = prefs.getString('device_id');
 
-  Future<bool> performFullSync(List<String> tables) async => false;
-  Future<bool> performFullSyncDefault() async => false;
+      if (savedDeviceId != null && savedDeviceId.isNotEmpty) {
+        _deviceId = savedDeviceId;
+        debugPrint('[DeviceSync] Using existing device ID: $_deviceId');
+        return _deviceId!;
+      }
 
-  void reset() {}
+      // Generate new device ID
+      final deviceInfo = DeviceInfoPlugin();
+      String deviceId;
+
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        final androidInfo = await deviceInfo.androidInfo;
+        deviceId = androidInfo.id;
+      } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+        final iosInfo = await deviceInfo.iosInfo;
+        deviceId = iosInfo.identifierForVendor ?? const Uuid().v4();
+      } else {
+        deviceId = const Uuid().v4();
+      }
+
+      // Save device ID locally
+      await prefs.setString('device_id', deviceId);
+      _deviceId = deviceId;
+      debugPrint('[DeviceSync] Generated and saved new device ID: $_deviceId');
+      return deviceId;
+    } catch (e) {
+      debugPrint('[DeviceSync] Error getting device ID: $e');
+      final deviceId = const Uuid().v4();
+      _deviceId = deviceId;
+      return _deviceId!;
+    }
+  }
+
+  /// Get device name
+  Future<String> getDeviceName() async {
+    if (_deviceName != null) return _deviceName!;
+
+    try {
+      final deviceInfo = DeviceInfoPlugin();
+      String deviceName;
+
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        final androidInfo = await deviceInfo.androidInfo;
+        deviceName = androidInfo.model;
+      } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+        final iosInfo = await deviceInfo.iosInfo;
+        deviceName = iosInfo.model;
+      } else if (defaultTargetPlatform == TargetPlatform.windows) {
+        final windowsInfo = await deviceInfo.windowsInfo;
+        deviceName = windowsInfo.computerName;
+      } else {
+        deviceName = 'Web Browser';
+      }
+
+      _deviceName = deviceName;
+      return deviceName;
+    } catch (e) {
+      _deviceName = 'Unknown Device';
+      return _deviceName!;
+    }
+  }
+
+  /// Convert Windows timezone name to IANA timezone
+  /// Examples:
+  ///   "West Bank Gaza Daylight Time" -> "Asia/Jerusalem"
+  ///   "Eastern Standard Time" -> "America/New_York"
+  ///   "UTC" -> "UTC"
+  String _convertToIanaTimezone(String windowsTimezone) {
+    // Mapping of Windows/System timezone names to IANA timezone identifiers
+    final Map<String, String> timezoneMap = {
+      // Middle East / Jerusalem / Palestine
+      'West Bank Gaza Daylight Time': 'Asia/Jerusalem',
+      'West Bank Gaza Standard Time': 'Asia/Jerusalem',
+      'Israel Standard Time': 'Asia/Jerusalem',
+      'Israel Daylight Time': 'Asia/Jerusalem',
+      'Jerusalem Standard Time': 'Asia/Jerusalem',
+      'Jerusalem Daylight Time': 'Asia/Jerusalem',
+      'Arabia Standard Time': 'Asia/Riyadh',
+      'Arab Standard Time': 'Asia/Baghdad',
+      'E. Europe Standard Time': 'Europe/Minsk',
+      'Egypt Standard Time': 'Africa/Cairo',
+      'Jordan Standard Time': 'Asia/Amman',
+      'Lebanon Standard Time': 'Asia/Beirut',
+      'Syria Standard Time': 'Asia/Damascus',
+      
+      // US
+      'Eastern Standard Time': 'America/New_York',
+      'Central Standard Time': 'America/Chicago',
+      'Mountain Standard Time': 'America/Denver',
+      'Pacific Standard Time': 'America/Los_Angeles',
+      'Alaskan Standard Time': 'America/Anchorage',
+      'Hawaiian Standard Time': 'Pacific/Honolulu',
+      
+      // Europe
+      'GMT Standard Time': 'Europe/London',
+      'Central Europe Standard Time': 'Europe/Berlin',
+      'Romance Standard Time': 'Europe/Paris',
+      'W. Europe Standard Time': 'Europe/Berlin',
+      
+      // Asia
+      'India Standard Time': 'Asia/Kolkata',
+      'China Standard Time': 'Asia/Shanghai',
+      'Tokyo Standard Time': 'Asia/Tokyo',
+      'Singapore Standard Time': 'Asia/Singapore',
+      'Bangkok Standard Time': 'Asia/Bangkok',
+      
+      // Australia
+      'AUS Eastern Standard Time': 'Australia/Sydney',
+      'AUS Central Standard Time': 'Australia/Adelaide',
+      'W. Australia Standard Time': 'Australia/Perth',
+      
+      // UTC
+      'UTC': 'UTC',
+    };
+    
+    // If exact match found, return it
+    if (timezoneMap.containsKey(windowsTimezone)) {
+      return timezoneMap[windowsTimezone]!;
+    }
+    
+    // If it's already an IANA timezone, return as-is
+    if (windowsTimezone.contains('/')) {
+      return windowsTimezone;
+    }
+    
+    // Default fallback
+    debugPrint('[DeviceSync] Unknown timezone: $windowsTimezone, using UTC');
+    return 'UTC';
+  }
+
+  /// Initialize sync: calculate time offset
+  Future<bool> initSync() async {
+    try {
+      _isSyncing = true;
+      final deviceId = await getDeviceId();
+      final deviceName = await getDeviceName();
+      final localTimeMs = DateTime.now().millisecondsSinceEpoch;
+      
+      // Get device timezone and convert to IANA format if needed
+      final rawTimezone = DateTime.now().timeZoneName;
+      final deviceTimezone = _convertToIanaTimezone(rawTimezone);
+
+      debugPrint(
+          '[DeviceSync] Initializing sync for device: $deviceId ($deviceName), timezone: $deviceTimezone');
+
+      final response = await _dio.post(
+        'sync/device/init',
+        data: {
+          'device_id': deviceId,
+          'device_name': deviceName,
+          'device_local_time_ms': localTimeMs,
+          'device_timezone': deviceTimezone,
+        },
+        options: Options(
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+        ),
+      );
+
+      debugPrint('[DeviceSync] Init sync response: ${response.statusCode}');
+
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        final serverTimeMs = response.data['server_time_ms'] as int?;
+        final timeOffsetMs = response.data['time_offset_ms'] as int?;
+        final deviceTz = response.data['device_timezone'] as String?;
+        final userTz = response.data['user_timezone'] as String?;
+
+        if (serverTimeMs != null && timeOffsetMs != null) {
+          _timeOffsetMs = timeOffsetMs;
+          debugPrint(
+              '[DeviceSync] Time offset calculated: $_timeOffsetMs ms (server: $serverTimeMs, local: $localTimeMs)');
+          debugPrint(
+              '[DeviceSync] Timezone - Device: $deviceTz, User: $userTz');
+          return true;
+        }
+      }
+
+      onSyncError?.call('Failed to initialize sync');
+      return false;
+    } catch (e) {
+      debugPrint('[DeviceSync] Init sync error: $e');
+      onSyncError?.call('Init sync failed: $e');
+      return false;
+    }
+  }
+
+  /// Start sync
+  Future<bool> startSync() async {
+    try {
+      final deviceId = await getDeviceId();
+
+      final response = await _dio.post(
+        'sync/device/start',
+        data: {'device_id': deviceId},
+      );
+
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        debugPrint('[DeviceSync] Sync started for device: $deviceId');
+        onSyncStart?.call();
+        return true;
+      }
+
+      onSyncError?.call('Failed to start sync');
+      return false;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 409) {
+        debugPrint('[DeviceSync] 409 Conflict: Attempting to reset stale session on server...');
+        // Try to mark the old session as failed so we can start a new one
+        await failSync();
+        // Give the server a small moment to process
+        await Future.delayed(const Duration(seconds: 1));
+        
+        // Retry start once
+        try {
+          final deviceId = await getDeviceId();
+          final retryResponse = await _dio.post('sync/device/start', data: {'device_id': deviceId});
+          if (retryResponse.statusCode == 200) return true;
+        } catch (_) {}
+      }
+      
+      debugPrint('[DeviceSync] Start sync error: $e');
+      onSyncError?.call('Start sync failed: $e');
+      return false;
+    } catch (e) {
+      debugPrint('[DeviceSync] Start sync error: $e');
+      onSyncError?.call('Start sync failed: $e');
+      return false;
+    }
+  }
+
+  /// Get changed records since last sync
+  Future<Map<String, dynamic>> getChangedRecords(List<String> tables) async {
+    try {
+      final deviceId = await getDeviceId();
+
+      final response = await _dio.post(
+        'sync/device/changed-records',
+        data: {
+          'device_id': deviceId,
+          'tables': tables,
+        },
+      );
+
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        final changedRecords = _safeMap(response.data['changed_records']);
+        final recordCount = response.data['record_count'] as int? ?? 0;
+
+        debugPrint(
+            '[DeviceSync] Got $recordCount changed records from ${tables.length} tables');
+        onRecordsReceived?.call(recordCount);
+
+        return changedRecords;
+      }
+
+      return {};
+    } catch (e) {
+      debugPrint('[DeviceSync] Get changed records error: $e');
+      onSyncError?.call('Failed to get changed records: $e');
+      return {};
+    }
+  }
+
+  /// Complete sync
+  Future<bool> completeSync() async {
+    try {
+      final deviceId = await getDeviceId();
+
+      final response = await _dio.post(
+        'sync/device/complete',
+        data: {'device_id': deviceId},
+      );
+
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        debugPrint('[DeviceSync] Sync completed for device: $deviceId');
+
+        // Update last sync time in local profile table
+        final db = await _databaseService.database;
+        await db.update(
+          'product_customers',
+          {'last_sync_time': TimestampFormatter.nowUtc()},
+          where: 'device_id = ?',
+          whereArgs: [deviceId],
+        );
+
+        _isSyncing = false;
+        onSyncComplete?.call();
+        return true;
+      }
+
+      onSyncError?.call('Failed to complete sync');
+      return false;
+    } on DioException catch (e) {
+      debugPrint('[DeviceSync] Complete sync error: $e');
+      onSyncError?.call(_mapSyncError(e, 'complete'));
+      return false;
+    } catch (e) {
+      debugPrint('[DeviceSync] Complete sync error: $e');
+      onSyncError?.call('Complete sync failed: $e');
+      return false;
+    }
+  }
+
+  /// Mark sync as failed
+  Future<bool> failSync() async {
+    try {
+      final deviceId = await getDeviceId();
+
+      final response = await _dio.post(
+        'sync/device/fail',
+        data: {'device_id': deviceId},
+      );
+
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        debugPrint('[DeviceSync] Sync marked as failed for device: $deviceId');
+        _isSyncing = false;
+        return true;
+      }
+
+      return false;
+    } on DioException catch (e) {
+      debugPrint('[DeviceSync] Fail sync error: $e');
+      // 404 on failSync means the device is not registered yet — not critical
+      if (e.response?.statusCode == 404) return false;
+      return false;
+    } catch (e) {
+      debugPrint('[DeviceSync] Fail sync error: $e');
+      return false;
+    }
+  }
+
+  /// Get sync status for this device
+  Future<Map<String, dynamic>?> getSyncStatus() async {
+    try {
+      final deviceId = await getDeviceId();
+
+      final response = await _dio.get(
+        'sync/device/status/$deviceId',
+      );
+
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        return response.data as Map<String, dynamic>;
+      }
+
+      return null;
+    } catch (e) {
+      debugPrint('[DeviceSync] Get sync status error: $e');
+      return null;
+    }
+  }
+
+  /// Get all devices for current user
+  Future<List<Map<String, dynamic>>> getDevices() async {
+    try {
+      final response = await _dio.get('sync/device/list');
+
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        final devices = _safeList(response.data['devices']);
+        return devices.cast<Map<String, dynamic>>();
+      }
+
+      return [];
+    } catch (e) {
+      debugPrint('[DeviceSync] Failed to get devices: $e');
+      return [];
+    }
+  }
+
+  /// Convert system timezone name to IANA timezone
+  /// 
+  /// Maps common Windows timezone names to IANA timezone identifiers
+  /// Falls back to UTC if timezone cannot be determined
+  String _getIanaTimezone() {
+    final tzName = DateTime.now().timeZoneName;
+    
+    // Map of common timezone names to IANA identifiers
+    final timezoneMap = {
+      // Middle East / Jerusalem
+      'West Bank Gaza Standard Time': 'Asia/Jerusalem',
+      'West Bank Gaza Daylight Time': 'Asia/Jerusalem',
+      'Israel Standard Time': 'Asia/Jerusalem',
+      'Israel Daylight Time': 'Asia/Jerusalem',
+      'Jerusalem Standard Time': 'Asia/Jerusalem',
+      'Jerusalem Daylight Time': 'Asia/Jerusalem',
+      'Arabia Standard Time': 'Asia/Riyadh',
+      'Arab Standard Time': 'Asia/Baghdad',
+      'E. Europe Standard Time': 'Europe/Bucharest',
+      'Syria Standard Time': 'Asia/Damascus',
+      'Turkey Standard Time': 'Europe/Istanbul',
+      'Jordan Standard Time': 'Asia/Amman',
+      
+      // Europe
+      'Central European Standard Time': 'Europe/Berlin',
+      'Romance Standard Time': 'Europe/Paris',
+      'GMT Standard Time': 'Europe/London',
+      'Greenwich Standard Time': 'Atlantic/Reykjavik',
+      
+      // Asia
+      'China Standard Time': 'Asia/Shanghai',
+      'Tokyo Standard Time': 'Asia/Tokyo',
+      'Singapore Standard Time': 'Asia/Singapore',
+      'India Standard Time': 'Asia/Kolkata',
+      
+      // Americas
+      'Eastern Standard Time': 'America/New_York',
+      'Central Standard Time': 'America/Chicago',
+      'Mountain Standard Time': 'America/Denver',
+      'Pacific Standard Time': 'America/Los_Angeles',
+      
+      // UTC
+      'UTC': 'UTC',
+      'Coordinated Universal Time': 'UTC',
+    };
+    
+    // Try to find exact match
+    if (timezoneMap.containsKey(tzName)) {
+      return timezoneMap[tzName]!;
+    }
+    
+    // Try to find partial match
+    for (final entry in timezoneMap.entries) {
+      if (tzName.contains(entry.key) || entry.key.contains(tzName)) {
+        return entry.value;
+      }
+    }
+    
+    // Default to UTC if no match found
+    return 'UTC';
+  }
+
+  // ── SAFE TYPE HELPERS ───────────────────────────────────────────────────
+
+  Map<String, dynamic> _safeMap(dynamic value) {
+    if (value == null) return {};
+    if (value is Map) return Map<String, dynamic>.from(value);
+    // Laravel/PHP converts empty associative arrays to [] in JSON
+    if (value is List && value.isEmpty) return {};
+    return {};
+  }
+
+  List<dynamic> _safeList(dynamic value) {
+    if (value == null) return [];
+    if (value is List) return value;
+    // Conversely, handle empty objects if they should be lists
+    if (value is Map && value.isEmpty) return [];
+    return [];
+  }
+
+  // ────────────────────────────────────────────────────────────────────────
+
+  /// Perform full sync cycle. Returns stats map on success.
+  Future<Map<String, int>?> performFullSync(List<String> tables) async {
+    try {
+      final deviceId = await getDeviceId();
+      onProgressUpdate?.call(0.1, "جاري تحديث البيانات المحلية...");
+      // Update local metrics and last_active before sync starts
+      await _databaseService.updateStoreProfileMetrics(deviceId);
+
+      // Step 1: Initialize sync (registers device on server if new)
+      onProgressUpdate?.call(0.2, "جاري الاتصال بالسيرفر...");
+      if (!await initSync()) {
+        return null;
+      }
+
+      // Step 2: Start sync
+      onProgressUpdate?.call(0.3, "بدء جلسة المزامنة...");
+      if (!await startSync()) {
+        return null;
+      }
+
+      // Step 3: Get changed records
+      onProgressUpdate?.call(0.4, "جاري طلب البيانات الجديدة...");
+      final changedRecords = await _getChangedRecordsInternal(tables);
+      if (changedRecords == null) {
+        // 404 during changed-records: device not registered — re-init and retry once
+        debugPrint('[DeviceSync] Device not found during changed-records, re-initializing...');
+        if (await initSync() && await startSync()) {
+          final retryRecords = await getChangedRecords(tables);
+          Map<String, int> stats = {};
+          if (retryRecords.isNotEmpty) stats = await _saveChangedRecords(retryRecords);
+          if (!await completeSync()) { await failSync(); return null; }
+          return stats;
+        }
+        onSyncError?.call('جهازك غير مسجل على السيرفر. سيتم إعادة التسجيل تلقائياً في المحاولة التالية.');
+        return null;
+      }
+
+      // Step 4: Save records to local database
+      Map<String, int> finalStats = {'inserted': 0, 'updated': 0, 'skipped': 0};
+      if (changedRecords.isNotEmpty) {
+        onProgressUpdate?.call(0.6, "جاري حفظ التحديثات في قاعدة البيانات...");
+        finalStats = await _saveChangedRecords(changedRecords);
+      }
+
+      // Step 5: Complete sync
+      onProgressUpdate?.call(0.9, "جاري إنهاء عملية المزامنة...");
+      if (!await completeSync()) {
+        await failSync();
+        return null;
+      }
+
+      onProgressUpdate?.call(1.0, "اكتملت المزامنة بنجاح");
+      return finalStats;
+    } on DioException catch (e) {
+      debugPrint('[DeviceSync] Full sync DioException: $e');
+      await failSync();
+      onSyncError?.call(_mapSyncError(e, 'sync'));
+      return null;
+    } catch (e) {
+      await failSync();
+      onSyncError?.call('Full sync failed: $e');
+      return null;
+    }
+  }
+
+  /// Syncs only the store profile and metrics to its own separate endpoint.
+  Future<bool> syncStoreProfileOnly() async {
+    try {
+      final deviceId = await getDeviceId();
+      await _databaseService.updateStoreProfileMetrics(deviceId);
+      
+      final profile = await _databaseService.getStoreProfile(deviceId);
+      final info = await _databaseService.getDeviceInfo(deviceId);
+      
+      if (profile == null) return false;
+
+      final response = await _dio.post(
+        ApiConfig.profileSyncEndpoint,
+        data: {
+          'profile': profile.toMap(),
+          'device_info': info?.toMap(),
+          'device_id': deviceId,
+        },
+      );
+
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        debugPrint('[DeviceSync] Profile synced successfully to separate endpoint');
+        return true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('[DeviceSync] Profile sync error: $e');
+      return false;
+    }
+  }
+
+  /// Internal version of getChangedRecords that returns null on 404
+  Future<Map<String, dynamic>?> _getChangedRecordsInternal(List<String> tables) async {
+    try {
+      final deviceId = await getDeviceId();
+      final response = await _dio.post(
+        'sync/device/changed-records',
+        data: {'device_id': deviceId, 'tables': tables},
+      );
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        final changedRecords = _safeMap(response.data['changed_records']);
+        final recordCount = response.data['record_count'] as int? ?? 0;
+        onRecordsReceived?.call(recordCount);
+        return changedRecords;
+      }
+      return {};
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null; // Signal re-init needed
+      rethrow;
+    }
+  }
+
+  /// Map a DioException to a user-friendly Arabic error message
+  String _mapSyncError(DioException e, String step) {
+    final status = e.response?.statusCode;
+    final serverMsg = e.response?.data is Map
+        ? (e.response!.data as Map)['error'] as String?
+        : null;
+
+    if (status == 404) {
+      return 'جهازك غير مسجل على السيرفر بعد. '
+          'سيتم التسجيل تلقائياً عند المحاولة التالية.';
+    }
+
+    if (status == 401) {
+      return 'انتهت صلاحية الجلسة. يرجى تسجيل الدخول مجدداً.';
+    }
+
+    if (status == 409) {
+      return 'جلسة مزامنة أخرى نشطة. سيتم إعادة المحاولة تلقائياً.';
+    }
+
+    if (status == 429) {
+      // Rate limited — try to extract retry-after header
+      final retryAfter = e.response?.headers.value('retry-after');
+      final seconds = int.tryParse(retryAfter ?? '');
+      if (seconds != null && seconds > 0) {
+        final minutes = (seconds / 60).ceil();
+        return 'تم تجاوز الحد المسموح من الطلبات. '
+            'يرجى الانتظار $minutes دقيقة قبل المزامنة.';
+      }
+      return 'تم تجاوز الحد المسموح من الطلبات. يرجى الانتظار قليلاً.';
+    }
+
+    if (status != null && status >= 500) {
+      return 'خطأ في السيرفر ($status). يرجى المحاولة لاحقاً.';
+    }
+
+    if (e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.receiveTimeout ||
+        e.type == DioExceptionType.sendTimeout) {
+      return 'انتهت مهلة الاتصال. تحقق من الإنترنت وأعد المحاولة.';
+    }
+
+    if (e.type == DioExceptionType.connectionError) {
+      return 'لا يوجد اتصال بالإنترنت. تحقق من الشبكة.';
+    }
+
+    return serverMsg ?? 'خطأ في المزامنة ($step). يرجى المحاولة لاحقاً.';
+  }
+
+  /// Save changed records to local database
+  Future<Map<String, int>> _saveChangedRecords(Map<String, dynamic> changedRecords) async {
+    try {
+      final db = await _databaseService.database;
+      final Map<String, int> stats = {
+        'inserted': 0,
+        'updated': 0,
+        'skipped': 0,
+      };
+
+      // Define table order to respect foreign keys (parents first)
+      const List<String> parentTables = ['payment_methods', 'users'];
+      const List<String> childTables = [
+        'invoices',
+        'transactions',
+        'purchases',
+        'daily_statistics',
+        'edit_history',
+      ];
+
+      // Use a single transaction for all tables to ensure atomicity and speed
+      await db.transaction((txn) async {
+        // Pass 1: Parents
+        for (final tableName in parentTables) {
+          final records = _safeList(changedRecords[tableName]);
+          for (final record in records) {
+            if (record is! Map) continue;
+            final item = Map<String, dynamic>.from(record);
+            final result = await _databaseService.upsertFromSyncInTxn(tableName, item, txn);
+            _updateStats(stats, result['status'] as String?);
+          }
+        }
+
+        // Pass 2: Children
+        for (final tableName in childTables) {
+          final records = _safeList(changedRecords[tableName]);
+          for (final record in records) {
+            if (record is! Map) continue;
+            final item = Map<String, dynamic>.from(record);
+            
+            // Resolve UUID relations to local IDs (CRITICAL for fixing ID jump and FK mismatch)
+            final resolved = await _databaseService.resolveRelationsInTxn(tableName, item, txn);
+            
+            final result = await _databaseService.upsertFromSyncInTxn(tableName, resolved, txn);
+            _updateStats(stats, result['status'] as String?);
+          }
+        }
+      });
+
+      debugPrint('[DeviceSync] Saved all changed records successfully. Stats: $stats');
+      return stats;
+    } catch (e) {
+      debugPrint('[DeviceSync] Error saving changed records: $e');
+      rethrow;
+    }
+  }
+
+  void _updateStats(Map<String, int> stats, String? status) {
+    if (status == 'INSERT') stats['inserted'] = (stats['inserted'] ?? 0) + 1;
+    if (status == 'UPDATE') stats['updated'] = (stats['updated'] ?? 0) + 1;
+    if (status == 'SKIP') stats['skipped'] = (stats['skipped'] ?? 0) + 1;
+  }
+
+  /// Get localized timestamp with device timezone
+  DateTime getLocalizedTimestamp(int timestampMs) {
+    // Convert milliseconds to DateTime in UTC
+    final utcDateTime =
+        DateTime.fromMillisecondsSinceEpoch(timestampMs, isUtc: false);
+
+    // Convert to local timezone
+    final localDateTime = utcDateTime;
+
+    return localDateTime;
+  }
+
+  /// Get last sync time localized to device timezone
+  DateTime? getLocalizedLastSyncTime() {
+    if (_timeOffsetMs == null) return null;
+
+    // Get current time and apply offset to get last sync time
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final lastSyncMs = now - _timeOffsetMs!;
+
+    return getLocalizedTimestamp(lastSyncMs);
+  }
+
+  /// Format timestamp for display (localized)
+  String formatLocalizedTime(int timestampMs) {
+    final localDateTime = getLocalizedTimestamp(timestampMs);
+    return localDateTime.toString();
+  }
+
+  /// Check if sync is in progress
+  bool get isSyncing => _isSyncing;
+
+  /// Get current time offset
+  int? get timeOffsetMs => _timeOffsetMs;
+
+  /// Get adjusted timestamp (applying time offset)
+  int getAdjustedTimestamp(int timestamp) {
+    if (_timeOffsetMs == null) return timestamp;
+    return timestamp + _timeOffsetMs!;
+  }
+
+  /// Reset sync state
+  void reset() {
+    _isSyncing = false;
+    _timeOffsetMs = null;
+  }
+
+  /// Perform full sync with default tables
+  Future<bool> performFullSyncDefault() async {
+    final stats = await performFullSync([
+      'users',
+      'invoices',
+      'transactions',
+      'purchases',
+      'payment_methods',
+      'daily_statistics',
+      'edit_history',
+    ]);
+    return stats != null;
+  }
 }

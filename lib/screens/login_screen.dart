@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
-// import '../services/sync_service.dart';
+import '../services/database_service.dart';
+import '../utils/app_snackbar.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+  const LoginScreen({super.key});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -52,12 +53,6 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  /// Returns true if this is the very first login (no previous sync has completed).
-  Future<bool> _isFirstLogin() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('last_sync_time') == null;
-  }
-
   Future<void> _login() async {
     if (_usernameController.text.isEmpty || _passwordController.text.isEmpty) {
       _showError('يرجى إدخال اسم المستخدم وكلمة المرور');
@@ -71,7 +66,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
-      // final syncService = Provider.of<SyncService>(context, listen: false);
 
       // Step 1: Online API authentication
       // NOTE: _isFirstLogin() is intentionally checked AFTER authService.login()
@@ -105,9 +99,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
       // Step 2: Check AFTER login() — login() may have cleared last_sync_time
       // for a new user/store, so we must re-read it here, not before login().
-      final bool firstLogin = await _isFirstLogin();
+      // final bool firstLogin = await _isFirstLogin();
 
-      // Step 3: On first login (or after user/store switch), run full sync
+      // Step 3: REMOVED automatic sync after login. 
+      // Users should start the sync manually from the dashboard.
       /*
       if (firstLogin && mounted) {
         setState(() => _syncStatusMessage = 'جاري تحميل بيانات المتجر...');
@@ -158,11 +153,196 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _showError(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
-      SnackBar(
-        content: Text(message),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: Colors.redAccent,
+    AppSnackBar.error(context, message);
+  }
+
+  Future<void> _showForgotPasswordDialog() async {
+    final usernameCtrl = TextEditingController();
+    final recoveryKeyCtrl = TextEditingController();
+    final newPasswordCtrl = TextEditingController();
+    final confirmPasswordCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    int step = 1;
+    bool isResetting = false;
+    bool obscureNew = true;
+    bool obscureConfirm = true;
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('استعادة كلمة المرور', style: TextStyle(fontWeight: FontWeight.bold)),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: isResetting ? null : () => Navigator.pop(context),
+              ),
+            ],
+          ),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (step == 1) ...[
+                    const Text('الخطوة 1: أدخل اسم المستخدم الخاص بك'),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: usernameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'اسم المستخدم',
+                        prefixIcon: Icon(Icons.person_outline),
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (v) => v == null || v.isEmpty ? 'يرجى إدخال اسم المستخدم' : null,
+                    ),
+                  ] else if (step == 2) ...[
+                    const Text('الخطوة 2: أدخل مفتاح الاستعادة (UUID)'),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'أدخل مفتاح الاستعادة الخاص بك لإعادة تعيين كلمة المرور.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: recoveryKeyCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'مفتاح الاستعادة',
+                        prefixIcon: Icon(Icons.vpn_key_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (v) => v == null || v.isEmpty ? 'يرجى إدخال مفتاح الاستعادة' : null,
+                    ),
+                  ] else if (step == 3) ...[
+                    const Text('الخطوة 3: تعيين كلمة مرور جديدة'),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'يرجى كتابة كلمة المرور الجديدة مرتين والتأكد من حفظها في مكان آمن.',
+                      style: TextStyle(fontSize: 12, color: Colors.orange, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: newPasswordCtrl,
+                      obscureText: obscureNew,
+                      decoration: InputDecoration(
+                        labelText: 'كلمة المرور الجديدة',
+                        prefixIcon: const Icon(Icons.lock_reset),
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          icon: Icon(obscureNew ? Icons.visibility_off : Icons.visibility),
+                          onPressed: () => setDialogState(() => obscureNew = !obscureNew),
+                        ),
+                      ),
+                      validator: (v) => v == null || v.length < 3 ? 'كلمة المرور قصيرة جداً' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: confirmPasswordCtrl,
+                      obscureText: obscureConfirm,
+                      decoration: InputDecoration(
+                        labelText: 'تأكيد كلمة المرور',
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          icon: Icon(obscureConfirm ? Icons.visibility_off : Icons.visibility),
+                          onPressed: () => setDialogState(() => obscureConfirm = !obscureConfirm),
+                        ),
+                      ),
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return 'يرجى تأكيد كلمة المرور';
+                        if (v != newPasswordCtrl.text) return 'كلمات المرور غير متطابقة';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: newPasswordCtrl.text));
+                          AppSnackBar.success(context, 'تم نسخ كلمة المرور الجديدة');
+                        },
+                        icon: const Icon(Icons.copy_rounded, size: 18),
+                        label: const Text('نسخ كلمة المرور لحفظها'),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            if (step > 1)
+              TextButton(
+                onPressed: isResetting ? null : () => setDialogState(() => step--),
+                child: const Text('السابق'),
+              ),
+            ElevatedButton(
+              onPressed: isResetting ? null : () async {
+                if (!formKey.currentState!.validate()) return;
+
+                if (step < 3) {
+                  // Verify user exists in step 1
+                  if (step == 1) {
+                    setDialogState(() => isResetting = true);
+                    final user = await context.read<DatabaseService>().getUserByUsername(usernameCtrl.text.trim());
+                    setDialogState(() => isResetting = false);
+                    if (user == null) {
+                      if (context.mounted) AppSnackBar.error(context, 'اسم المستخدم غير موجود');
+                      return;
+                    }
+                  }
+                  setDialogState(() => step++);
+                } else {
+                  // Final step: Reset password
+                  setDialogState(() => isResetting = true);
+                  final success = await context.read<AuthService>().resetPassword(
+                    usernameCtrl.text.trim(),
+                    recoveryKeyCtrl.text.trim(),
+                    newPasswordCtrl.text,
+                  );
+                  setDialogState(() => isResetting = false);
+
+                  if (success) {
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('تم بنجاح ✓', textAlign: TextAlign.right),
+                          content: const Text(
+                            'تم تغيير كلمة المرور بنجاح.\n\nيرجى التأكد من حفظ كلمة المرور في مكان آمن وعدم مشاركتها مع أحد.',
+                            textAlign: TextAlign.right,
+                          ),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('فهمت، شكراً')),
+                          ],
+                        ),
+                      );
+                    }
+                  } else {
+                    if (context.mounted) AppSnackBar.error(context, 'مفتاح الاستعادة غير صحيح لهذا المستخدم');
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1E3A8A),
+                foregroundColor: Colors.white,
+              ),
+              child: isResetting
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : Text(step == 3 ? 'تعيين كلمة المرور' : 'التالي'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -285,6 +465,18 @@ class _LoginScreenState extends State<LoginScreen> {
                             child: _isLoading
                                 ? const CircularProgressIndicator(color: Colors.white)
                                 : const Text('دخول للنظام', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextButton(
+                          onPressed: _isLoading ? null : _showForgotPasswordDialog,
+                          child: const Text(
+                            'هل نسيت كلمة المرور؟',
+                            style: TextStyle(
+                              color: Color(0xFF1E3A8A),
+                              fontWeight: FontWeight.bold,
+                              decoration: TextDecoration.underline,
+                            ),
                           ),
                         ),
                         // Show sync progress on first login

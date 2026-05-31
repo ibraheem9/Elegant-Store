@@ -570,45 +570,42 @@ class UnpaidRow {
   });
 }
 
-// App Owner Profile Model (Telemetry)
-class AppOwnerProfile {
+// --- NEW MODELS FOR SYNC & PROFILE ---
+
+/// Represents the store manager's profile and aggregated business metrics.
+/// Maps to the `product_customers` table.
+class StoreProfile {
   final int? id;
   final String deviceId;
-  final String storeName;
-  final String ownerName;
-  final String address;
-  final String city;
-  final String phoneNumber;
-  final String whatsappNumber;
-  final String deviceModel;
-  final String deviceOs;
-  final double? latitude;
-  final double? longitude;
-  final int totalCustomers;
-  final int totalInvoices;
-  final String lastActiveAt;
-  final int isUploaded;
-  final String updatedAt;
+  final String? storeName;
+  final String? ownerName;
+  final String? address;
+  final String? city;
+  final String? mobile;
+  final String? whatsapp;
+  final int invoiceCount;
+  final int customersCount;
+  final double totalSales;
+  final double totalPurchase;
+  final String? lastSyncTime;
+  final String? lastActiveTime;
 
-  AppOwnerProfile({
+  StoreProfile({
     this.id,
     required this.deviceId,
-    required this.storeName,
-    required this.ownerName,
-    required this.address,
-    required this.city,
-    required this.phoneNumber,
-    required this.whatsappNumber,
-    required this.deviceModel,
-    required this.deviceOs,
-    this.latitude,
-    this.longitude,
-    this.totalCustomers = 0,
-    this.totalInvoices = 0,
-    required this.lastActiveAt,
-    this.isUploaded = 0,
-    String? updatedAt,
-  }) : this.updatedAt = updatedAt ?? TimestampFormatter.nowUtc();
+    this.storeName,
+    this.ownerName,
+    this.address,
+    this.city,
+    this.mobile,
+    this.whatsapp,
+    this.invoiceCount = 0,
+    this.customersCount = 0,
+    this.totalSales = 0.0,
+    this.totalPurchase = 0.0,
+    this.lastSyncTime,
+    this.lastActiveTime,
+  });
 
   Map<String, dynamic> toMap() {
     return {
@@ -618,39 +615,103 @@ class AppOwnerProfile {
       'owner_name': ownerName,
       'address': address,
       'city': city,
-      'phone_number': phoneNumber,
-      'whatsapp_number': whatsappNumber,
-      'device_model': deviceModel,
-      'device_os': deviceOs,
-      'latitude': latitude,
-      'longitude': longitude,
-      'total_customers': totalCustomers,
-      'total_invoices': totalInvoices,
-      'last_active_at': lastActiveAt,
-      'is_uploaded': isUploaded,
-      'updated_at': updatedAt,
+      'mobile': mobile,
+      'whatsapp': whatsapp,
+      'invoice_count': invoiceCount,
+      'customers_count': customersCount,
+      'total_sales': _roundMoney(totalSales),
+      'total_purchase': _roundMoney(totalPurchase),
+      'last_sync_time': lastSyncTime,
+      'last_active_time': lastActiveTime,
     };
   }
 
-  factory AppOwnerProfile.fromMap(Map<String, dynamic> map) {
-    return AppOwnerProfile(
+  factory StoreProfile.fromMap(Map<String, dynamic> map) {
+    return StoreProfile(
       id: map['id'],
       deviceId: map['device_id'] ?? '',
-      storeName: map['store_name'] ?? '',
-      ownerName: map['owner_name'] ?? '',
-      address: map['address'] ?? '',
-      city: map['city'] ?? '',
-      phoneNumber: map['phone_number'] ?? '',
-      whatsappNumber: map['whatsapp_number'] ?? '',
-      deviceModel: map['device_model'] ?? '',
-      deviceOs: map['device_os'] ?? '',
-      latitude: map['latitude'] != null ? (map['latitude'] as num).toDouble() : null,
-      longitude: map['longitude'] != null ? (map['longitude'] as num).toDouble() : null,
-      totalCustomers: map['total_customers'] ?? 0,
-      totalInvoices: map['total_invoices'] ?? 0,
-      lastActiveAt: map['last_active_at'] ?? '',
-      isUploaded: map['is_uploaded'] ?? 0,
-      updatedAt: map['updated_at'] ?? '',
+      storeName: map['store_name'],
+      ownerName: map['owner_name'],
+      address: map['address'],
+      city: map['city'],
+      mobile: map['mobile'],
+      whatsapp: map['whatsapp'],
+      invoiceCount: map['invoice_count'] ?? 0,
+      customersCount: map['customers_count'] ?? 0,
+      totalSales: _toDouble(map['total_sales']),
+      totalPurchase: _toDouble(map['total_purchase']),
+      lastSyncTime: map['last_sync_time'],
+      lastActiveTime: map['last_active_time'],
+    );
+  }
+
+  StoreProfile copyWith({
+    String? storeName,
+    String? ownerName,
+    String? address,
+    String? city,
+    String? mobile,
+    String? whatsapp,
+    int? invoiceCount,
+    int? customersCount,
+    double? totalSales,
+    double? totalPurchase,
+    String? lastSyncTime,
+    String? lastActiveTime,
+  }) {
+    return StoreProfile(
+      id: id,
+      deviceId: deviceId,
+      storeName: storeName ?? this.storeName,
+      ownerName: ownerName ?? this.ownerName,
+      address: address ?? this.address,
+      city: city ?? this.city,
+      mobile: mobile ?? this.mobile,
+      whatsapp: whatsapp ?? this.whatsapp,
+      invoiceCount: invoiceCount ?? this.invoiceCount,
+      customersCount: customersCount ?? this.customersCount,
+      totalSales: totalSales ?? this.totalSales,
+      totalPurchase: totalPurchase ?? this.totalPurchase,
+      lastSyncTime: lastSyncTime ?? this.lastSyncTime,
+      lastActiveTime: lastActiveTime ?? this.lastActiveTime,
+    );
+  }
+}
+
+/// Tracks technical details about the device.
+/// Maps to the `product_device_info` table.
+class DeviceInfoModel {
+  final String deviceId;
+  final String? deviceName;
+  final String? deviceModel;
+  final double? locationLat;
+  final double? locationLong;
+
+  DeviceInfoModel({
+    required this.deviceId,
+    this.deviceName,
+    this.deviceModel,
+    this.locationLat,
+    this.locationLong,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'device_id': deviceId,
+      'device_name': deviceName,
+      'device_model': deviceModel,
+      'location_lat': locationLat,
+      'location_long': locationLong,
+    };
+  }
+
+  factory DeviceInfoModel.fromMap(Map<String, dynamic> map) {
+    return DeviceInfoModel(
+      deviceId: map['device_id'] ?? '',
+      deviceName: map['device_name'],
+      deviceModel: map['device_model'],
+      locationLat: map['location_lat'] != null ? (map['location_lat'] as num).toDouble() : null,
+      locationLong: map['location_long'] != null ? (map['location_long'] as num).toDouble() : null,
     );
   }
 }

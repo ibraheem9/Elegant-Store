@@ -93,6 +93,27 @@ class ExportService {
   /// custom save flows).
   Future<String> exportToJsonString() => _buildExportJson();
 
+  /// Exports filtered data within a date range to a JSON file.
+  Future<String?> exportFilteredAndShare({
+    required DateTime startDate,
+    required DateTime endDate,
+    required Set<String> tablesToInclude,
+  }) async {
+    final jsonString = await _buildFilteredExportJson(
+      startDate: startDate,
+      endDate: endDate,
+      tablesToInclude: tablesToInclude,
+    );
+
+    if (Platform.isWindows) {
+      return _exportWindows(jsonString);
+    }
+
+    final filePath = await _writeToFile(jsonString);
+    await _shareFile(filePath);
+    return filePath;
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   // PUBLIC: EXCEL EXPORT
   // ─────────────────────────────────────────────────────────────────────────
@@ -394,6 +415,76 @@ class ExportService {
     };
 
     // Use a JsonEncoder with indentation for human-readable output
+    const encoder = JsonEncoder.withIndent('  ');
+    return encoder.convert(payload);
+  }
+
+  Future<String> _buildFilteredExportJson({
+    required DateTime startDate,
+    required DateTime endDate,
+    required Set<String> tablesToInclude,
+  }) async {
+    _uuidCache.clear();
+    final db = await _dbService.database;
+
+    // Pre-populate UUID cache for ALL tables that might be referenced as FKs,
+    // regardless of whether they are being exported, because FK resolution
+    // needs them.
+    for (final table in _tableOrder) {
+      final rows = await db.query(table, columns: ['id', 'uuid']);
+      _uuidCache[table] = {
+        for (final r in rows) (r['id'] as int): r['uuid'] as String,
+      };
+    }
+
+    final Map<String, dynamic> exportData = {};
+    final String startStr = TimestampFormatter.toUtcString(startDate.copyWith(hour: 0, minute: 0, second: 0));
+    final String endStr = TimestampFormatter.toUtcString(endDate.copyWith(hour: 23, minute: 59, second: 59));
+
+    for (final table in tablesToInclude) {
+      if (!_tableOrder.contains(table)) continue;
+
+      String? where;
+      List<dynamic>? whereArgs;
+
+      // Filter by date where applicable
+      if (table == 'invoices') {
+        where = 'invoice_date >= ? AND invoice_date <= ?';
+        whereArgs = [startStr, endStr];
+      } else if (table == 'transactions' || table == 'purchases' || table == 'daily_statistics' || table == 'edit_history') {
+        where = 'created_at >= ? AND created_at <= ?';
+        whereArgs = [startStr, endStr];
+      } else if (table == 'users') {
+        // For users, we export customers created in the range
+        where = "role = 'CUSTOMER' AND created_at >= ? AND created_at <= ?";
+        whereArgs = [startStr, endStr];
+      }
+
+      final rows = await db.query(table, where: where, whereArgs: whereArgs);
+      exportData[table] = rows
+          .map((row) =>
+              _resolveRowForeignKeys(table, Map<String, dynamic>.from(row)))
+          .toList();
+    }
+
+    final payload = {
+      'meta': {
+        'app': 'Elegant Store',
+        'exported_at':
+            DateFormat("yyyy-MM-dd'T'HH:mm:ss").format(DateTime.now()),
+        'filter': {
+          'start_date': startStr,
+          'end_date': endStr,
+        },
+        'schema_version': 4,
+        'tables': tablesToInclude.toList(),
+        'record_counts': {
+          for (final t in tablesToInclude) t: (exportData[t] as List?)?.length ?? 0,
+        },
+      },
+      'data': exportData,
+    };
+
     const encoder = JsonEncoder.withIndent('  ');
     return encoder.convert(payload);
   }

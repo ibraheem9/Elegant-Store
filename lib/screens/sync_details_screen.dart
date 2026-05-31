@@ -1,3 +1,4 @@
+import '../widgets/notification_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -5,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../services/sync_service.dart';
+import '../services/sync_manager.dart';
 
 class SyncDetailsScreen extends StatefulWidget {
   const SyncDetailsScreen({Key? key}) : super(key: key);
@@ -14,7 +16,6 @@ class SyncDetailsScreen extends StatefulWidget {
 }
 
 class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
-  bool _isResetting = false;
   bool _isRestoring = false;
 
   Map<String, int> _unsyncedCounts = {};
@@ -98,72 +99,32 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
         );
       },
     );
-    // if (confirmed != true) return;
-    // setState(() => _isRestoring = true);
-    // try {
-    //   final syncService = context.read<SyncService>();
-    //   await syncService.performFullRestore();
-    //   await _loadStats();
-    //   if (mounted) {
-    //     ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
-    //       const SnackBar(
-    //         content: Text('تمت الاستعادة الكاملة من السيرفر بنجاح ✓'),
-    //         backgroundColor: Colors.teal,
-    //         duration: Duration(seconds: 4),
-    //       ),
-    //     );
-    //   }
-    // } catch (e) {
-    //   if (mounted) {
-    //     ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
-    //       SnackBar(
-    //         content: Text('فشلت الاستعادة: $e'),
-    //         backgroundColor: Colors.red,
-    //       ),
-    //     );
-    //   }
-    // } finally {
-    //   if (mounted) setState(() => _isRestoring = false);
-    // }
-  }
-
-  Future<void> _confirmAndReset() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => _buildResetConfirmDialog(ctx),
-    );
     if (confirmed != true) return;
-
-    setState(() => _isResetting = true);
+    setState(() => _isRestoring = true);
     try {
-      final db = context.read<DatabaseService>();
-      final prefs = await SharedPreferences.getInstance();
-
-      await db.clearAllDataAndReset();
-      await prefs.remove('last_sync_time');
-
+      final syncService = context.read<SyncService>();
+      await syncService.performFullRestore();
+      await _loadStats();
       if (mounted) {
         ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
           const SnackBar(
-            content: Text('تم مسح جميع البيانات المحلية. سيتم تحميل البيانات عند المزامنة التالية.'),
-            backgroundColor: Colors.orange,
+            content: Text('تمت الاستعادة الكاملة من السيرفر بنجاح ✓'),
+            backgroundColor: Colors.teal,
             duration: Duration(seconds: 4),
           ),
         );
-        await _loadStats();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
           SnackBar(
-            content: Text('فشل إعادة التهيئة: $e'),
+            content: Text('فشلت الاستعادة: $e'),
             backgroundColor: Colors.red,
           ),
         );
       }
     } finally {
-      if (mounted) setState(() => _isResetting = false);
+      if (mounted) setState(() => _isRestoring = false);
     }
   }
 
@@ -196,6 +157,8 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
           foregroundColor: isDark ? Colors.white : Colors.black87,
           elevation: 0,
           actions: [
+            NotificationBadge(isDark: isDark),
+            const SizedBox(width: 8),
             IconButton(
               icon: const Icon(Icons.refresh_rounded),
               tooltip: 'تحديث الإحصائيات',
@@ -239,6 +202,43 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
                                   Expanded(child: _buildCountTile('محمّل — فواتير', details.invoicesDownloaded, Colors.blue, isDark)),
                                 ],
                               ),
+                              if (details.recordsUpdated > 0 || details.recordsOverwritten > 0) ...[
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    if (details.recordsUpdated > 0)
+                                      Expanded(child: _buildCountTile('سجلات محدّثة', details.recordsUpdated, Colors.orange, isDark)),
+                                    if (details.recordsUpdated > 0 && details.recordsOverwritten > 0)
+                                      const SizedBox(width: 12),
+                                    if (details.recordsOverwritten > 0)
+                                      Expanded(child: _buildCountTile('سجلات مستبدلة', details.recordsOverwritten, Colors.redAccent, isDark)),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.info_outline_rounded, color: Colors.orange, size: 18),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'تم تحديث ${details.recordsUpdated + details.recordsOverwritten} سجل بناءً على قاعدة "الأحدث يربح".',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: isDark ? Colors.orange.shade200 : Colors.orange.shade800,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ],
                           ],
                         ),
@@ -625,26 +625,29 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
   }
 
   Widget _buildActionButtons(bool isDark) {
-    return Consumer<SyncService>(
-      builder: (context, syncService, _) {
-        // final isRestoring = _isRestoring || (syncService.isSyncing && syncService.restoreProgress > 0);
-        // final progress = syncService.restoreProgress;
-        // final statusText = syncService.restoreStatus;
+    return Consumer2<SyncService, SyncManager>(
+      builder: (context, syncService, syncManager, _) {
+        final isRestoring = _isRestoring || (syncService.isSyncing && syncService.restoreProgress > 0);
+        final isSyncing = syncManager.isSyncing;
+        
+        final restoreProgress = syncService.restoreProgress;
+        final syncProgress = syncManager.syncProgress;
+        
+        final statusText = isRestoring ? syncService.restoreStatus : syncManager.syncStatusText;
+        final currentProgress = isRestoring ? restoreProgress : syncProgress;
 
-        return const SizedBox.shrink();
-        /*
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // ── Progress bar (visible only during restore) ─────────────────
-            if (isRestoring) ...[
+            // ── Progress bar (visible during restore OR manual sync) ────────
+            if (isRestoring || isSyncing) ...[
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: isDark ? const Color(0xFF1E293B) : Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: Colors.teal.withOpacity(0.3),
+                    color: (isRestoring ? Colors.teal : Colors.blue).withOpacity(0.3),
                   ),
                 ),
                 child: Column(
@@ -652,11 +655,15 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.cloud_download_rounded, color: Colors.teal, size: 18),
+                        Icon(
+                          isRestoring ? Icons.cloud_download_rounded : Icons.sync_rounded,
+                          color: isRestoring ? Colors.teal : Colors.blue,
+                          size: 18,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            statusText.isNotEmpty ? statusText : 'جاري الاستعادة…',
+                            statusText.isNotEmpty ? statusText : (isRestoring ? 'جاري الاستعادة…' : 'جاري المزامنة…'),
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
@@ -665,11 +672,11 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
                           ),
                         ),
                         Text(
-                          '${(progress * 100).toStringAsFixed(0)}%',
-                          style: const TextStyle(
+                          '${(currentProgress * 100).toStringAsFixed(0)}%',
+                          style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
-                            color: Colors.teal,
+                            color: isRestoring ? Colors.teal : Colors.blue,
                           ),
                         ),
                       ],
@@ -678,12 +685,12 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: LinearProgressIndicator(
-                        value: progress > 0 ? progress : null,
+                        value: currentProgress > 0 ? currentProgress : null,
                         minHeight: 8,
                         backgroundColor: isDark
                             ? Colors.white.withOpacity(0.08)
-                            : Colors.teal.withOpacity(0.12),
-                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.teal),
+                            : (isRestoring ? Colors.teal : Colors.blue).withOpacity(0.12),
+                        valueColor: AlwaysStoppedAnimation<Color>(isRestoring ? Colors.teal : Colors.blue),
                       ),
                     ),
                   ],
@@ -694,7 +701,7 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
 
             // ── Full Restore from Server button ────────────────────────────
             ElevatedButton.icon(
-              onPressed: (_isResetting || isRestoring) ? null : _handleRestore,
+              onPressed: (isRestoring || isSyncing) ? null : _handleRestore,
               icon: isRestoring
                   ? const SizedBox(
                       width: 18,
@@ -716,116 +723,9 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
             const SizedBox(height: 12),
           ],
         );
-        */
       },
     );
   }
-  Widget _buildResetConfirmDialog(BuildContext ctx) {
-    final isDark = Theme.of(ctx).brightness == Brightness.dark;
-    return AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 22),
-            ),
-            const SizedBox(width: 12),
-            const Text('تأكيد مسح البيانات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'سيتم حذف جميع البيانات المحلية من الجهاز، بما في ذلك:',
-              style: TextStyle(fontSize: 13),
-            ),
-            const SizedBox(height: 12),
-            ...[
-              'جميع الزبائن والمحاسبين',
-              'جميع الفواتير والمعاملات',
-              'جميع المشتريات والإحصائيات',
-              'طرق الدفع والسجل التاريخي',
-            ].map(
-              (item) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Row(
-                  children: [
-                    const Icon(Icons.remove_circle_outline, size: 14, color: Colors.red),
-                    const SizedBox(width: 8),
-                    Text(item, style: const TextStyle(fontSize: 12)),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.orange.withOpacity(0.3)),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.info_outline, size: 16, color: Colors.orange),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'البيانات على السيرفر لن تُحذف. ستُستعاد عند المزامنة التالية.',
-                      style: TextStyle(fontSize: 11, color: Colors.orange),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue.withOpacity(0.3)),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.developer_mode_rounded, size: 16, color: Colors.blue),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'حساب المطور (ibraheem / 123) سيُعاد زرعه تلقائياً بعد المسح.',
-                      style: TextStyle(fontSize: 11, color: Colors.blue),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('إلغاء', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: const Text('نعم، امسح البيانات', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-        ],
-    );
-  }
-
   // ─────────────────────────────────────────────────────────────────────────
   // HELPERS
   // ─────────────────────────────────────────────────────────────────────────

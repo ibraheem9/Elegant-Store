@@ -28,14 +28,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
   // ── Manual inputs ──────────────────────────────────────────────────────────
   final _todayCashController = TextEditingController();
-
   // ── Auto-calculated from DB ───────────────────────────────────────────────
   // Sales
-  double _appSales            = 0.0;  // SALE + PAID + pm.type='app'
+  double _appSales            = 0.0;  // (SALE + PAID + pm.type='app') + (DEPOSIT + PAID + pm.type='app')
   double _appSalesDeposit     = 0.0;  // DEPOSIT + PAID + pm.type='app'
   double _cashSalesInvoice    = 0.0;  // SALE + PAID + pm.type='cash'
+  double _cashSalesDeposit    = 0.0;  // DEPOSIT + PAID + pm.type='cash'
   double _cashWithdrawalTotal = 0.0;  // all WITHDRAWAL invoices (for cash sales formula)
-  double _cashSalesDeposit    = 0.0;  // DEPOSIT + PAID + pm.type='cash' (deducted)
   // Debts
   double _appDebt             = 0.0;  // SALE + UNPAID/DEFERRED
   double _cashDebt            = 0.0;  // WITHDRAWAL + UNPAID
@@ -44,6 +43,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   double _appPurchases        = 0.0;  // purchases APP
   // Credits
   double _totalCredits        = 0.0;  // global sum of abs(balance) for balance < 0
+  double _netCustomerBalance  = 0.0;  // sum(balance) for all customers
   // Cash box
   double _yesterdayCash       = 0.0;
   bool   _isLoading           = false;
@@ -140,18 +140,18 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     if (_isSingleDay) {
       savedStats = await db.getTodayStatistics(date: _selectedDate);
     }
-
     setState(() {
       _appSales            = detailedStats['app_sales']             ?? 0.0;
       _appSalesDeposit     = detailedStats['app_sales_deposit']     ?? 0.0;
-      _cashSalesInvoice    = detailedStats['cash_sales_invoice']    ?? 0.0;
-      _cashWithdrawalTotal = detailedStats['cash_withdrawal_total'] ?? 0.0;
+      _cashSalesInvoice    = detailedStats["cash_sales_invoice"]    ?? 0.0;
+      _cashWithdrawalTotal = detailedStats["cash_withdrawal_total"] ?? 0.0;
       _cashSalesDeposit    = detailedStats['cash_sales_deposit']    ?? 0.0;
       _appDebt             = detailedStats['app_debt']              ?? 0.0;
       _cashDebt            = detailedStats['cash_debt']             ?? 0.0;
       _cashPurchases       = detailedStats['cash_purchases']        ?? 0.0;
       _appPurchases        = detailedStats['app_purchases']         ?? 0.0;
       _totalCredits        = detailedStats['total_credits']         ?? 0.0;
+      _netCustomerBalance  = detailedStats['net_balance']           ?? 0.0;
       _yesterdayCash       = yesterdayCash;
       _monthlyData         = monthly;
       if (savedStats != null) {
@@ -225,49 +225,29 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   // ── Derived values (User Formulas) ────────────────────────────────────────
   bool get _cashEntered => _todayCashController.text.trim().isNotEmpty;
 
-  /// x = all invoice that have type deposit and payment status paid and payment method app
-  ///     - all invoice that have payment status unpaid or deferred and type sale
-  double get _x => _appSalesDeposit - _appDebt;
+  /// Total app sales = total invoice that have payment status paid and type sale and payment method app
+  ///                 + all invoice that have type deposit and payment status paid and payment method app
+  double get _totalAppSales => _appSales;
 
-  /// credit = all invoice that have payment status unpaid or deferred and type sale
-  ///          - all invoice that have type deposit and payment status paid and payment method app
-  /// (must be positive)
-  double get _credit {
-    final val = _appDebt - _appSalesDeposit;
-    return val > 0 ? val : 0.0;
-  }
-
-  /// Total app sales = total invoice that have payment status paid and type sale and payment method app + x
-  /// if x > 0: Total app sales = total invoice that have payment status paid and type sale and payment method app + x - credit
-  double get _totalAppSales {
-    if (_x <= 0) {
-      return _appSales + _x;
-    } else {
-      return _appSales + _x - _credit;
-    }
-  }
-
-  /// 1b. Total Deposit App = all invoice that have type deposit and payment status paid and payment method app
+  /// 1b. Total Deposit App = DEPOSIT + PAID + app
   double get _totalDepositApp => _appSalesDeposit;
 
   /// 1c. Total Deposit Cash = all invoice that have type deposit and payment status paid and payment method cash
   double get _totalDepositCash => _cashSalesDeposit;
 
   /// 2. total cash sales = total cash in box today
-  ///                      + total invoices that have payment status paid and type sale and payment method cash
-  ///                      + total cash dept
-  ///                      + total purchase in cash
-  ///                      – total invoice that have type deposit and payment status paid and payment method cash
+  ///                      + total cash purchases
+  ///                      + total cash withdrawals
   ///                      – total cash in box yesterday
+  ///                      – total cash debt repayments (deposits)
   double get _totalCashSales {
     if (!_cashEntered) return 0.0;
     final todayCash = double.tryParse(_todayCashController.text) ?? 0.0;
     return todayCash
-        + _cashSalesInvoice
-        + _totalCashDebt
-        + _totalCashPurchases
-        - _cashSalesDeposit
-        - _yesterdayCash;
+        + _cashPurchases
+        + _cashWithdrawalTotal
+        - _yesterdayCash
+        - _cashSalesDeposit;
   }
 
   /// 3. total sales = total app sales + total cash sales
@@ -291,6 +271,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   /// 9. total purchase = total app purchase + cash purchase
   double get _totalPurchases => _totalAppPurchases + _totalCashPurchases;
 
+  /// net customer balance for display
+  double get _x => _netCustomerBalance;
+
   // ── Save ───────────────────────────────────────────────────────────────────
   Future<void> _saveStats() async {
     if (_cashPurchases == 0 && _appPurchases == 0) {
@@ -303,9 +286,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       statisticDate:          DateFormat('yyyy-MM-dd').format(_cashBoxDate),
       yesterdayCashInBox:     _yesterdayCash,
       todayCashInBox:         double.tryParse(_todayCashController.text) ?? 0.0,
-      totalCashDebtRepayment: _cashSalesDeposit,   // DEPOSIT+PAID+cash deducted from cash sales
-      totalAppDebtRepayment:  _appDebt,
-      totalCashPurchases:     _cashPurchases,       // real cash purchases only (excl. withdrawals)
+      totalCashDebtRepayment: _cashSalesDeposit,   // DEPOSIT+PAID+cash
+      totalAppDebtRepayment:  _appSalesDeposit,    // DEPOSIT+PAID+app
+      totalCashPurchases:     _cashPurchases,
       totalAppPurchases:      _appPurchases,
       totalSalesCash:         _totalCashSales,
       totalSalesCredit:       _appSales,
@@ -528,7 +511,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           mainAxisSpacing: 16,
           childAspectRatio: isSmall ? 2.8 : 3.5,
           children: [
-            _buildAutoDisplay('إجمالي مبيعات التطبيق', _totalAppSales, Icons.phonelink_ring_rounded, Colors.blue, isDark),
+            _buildAutoDisplay('إجمالي المبيعات على التطبيق', _totalAppSales, Icons.phonelink_ring_rounded, Colors.blue, isDark),
             _buildAutoDisplay('إجمالي مبيعات الكاش', _totalCashSales, Icons.local_atm_rounded, Colors.green, isDark),
             _buildAutoDisplay('إجمالي المبيعات', _totalSales, Icons.trending_up_rounded, Colors.teal, isDark),
             _buildAutoDisplay('إجمالي ديون التطبيق', _totalAppDebt, Icons.account_balance_rounded, Colors.purple, isDark),
@@ -542,62 +525,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           ],
         ),
         const SizedBox(height: 16),
-        _buildDebtStatusInfo(isDark),
       ],
-    );
-  }
-
-  Widget _buildDebtStatusInfo(bool isDark) {
-    String message;
-    Color color;
-    IconData icon;
-
-    if (_x == 0) {
-      message = 'جميع ديون التطبيق مسددة';
-      color = Colors.green;
-      icon = Icons.check_circle_outline;
-    } else if (_x > 0) {
-      message = 'يوجد رصيد دائن (رصيد إضافي)';
-      color = Colors.blue;
-      icon = Icons.info_outline;
-    } else {
-      message = 'لا تزال هناك ديون تطبيق غير مسددة';
-      color = Colors.red;
-      icon = Icons.warning_amber_rounded;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.4)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              message,
-              style: TextStyle(
-                color: color,
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
-            ),
-          ),
-          if (_x != 0)
-            Text(
-              '${_x.abs().toStringAsFixed(2)}',
-              style: TextStyle(
-                color: color,
-                fontWeight: FontWeight.w900,
-                fontSize: 16,
-              ),
-            ),
-        ],
-      ),
     );
   }
 

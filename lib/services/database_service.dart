@@ -3,6 +3,7 @@ import 'package:path/path.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/models.dart';
 import '../utils/timestamp_formatter.dart';
@@ -10,6 +11,7 @@ import 'dart:developer' as dev;
 import 'notification_repository.dart';
 
 class DatabaseService {
+  static final DatabaseService instance = DatabaseService();
   static Database? _database;
   static const String dbName = 'elegant_store_v300.db'; // HQ Sync Version
   final _uuid = const Uuid();
@@ -22,6 +24,20 @@ class DatabaseService {
   /// Prevents repeated full rebuilds on every hot-reload / widget rebuild.
   bool _notificationsSeedDone = false;
 
+  /// Reactive notifier for the total unread notification count.
+  /// Widgets can listen to this to update badges instantly.
+  final ValueNotifier<int> notificationCountNotifier = ValueNotifier<int>(0);
+
+  /// Refreshes the notification count from the database and notifies listeners.
+  Future<void> refreshNotificationCount() async {
+    try {
+      final count = await notificationRepo.getTotalCount();
+      notificationCountNotifier.value = count;
+    } catch (e) {
+      dev.log('Error refreshing notification count: $e', name: 'DatabaseService');
+    }
+  }
+
   Future<Database> get database async {
     if (_database != null) {
       // Seed notifications once per app session, AFTER the DB is fully open.
@@ -31,6 +47,7 @@ class DatabaseService {
         Future.microtask(() async {
           try {
             await notificationRepo.rebuildAll();
+            await refreshNotificationCount();
             dev.log('Notification seed completed.', name: 'DatabaseService');
           } catch (e) {
             dev.log('Notification seed error: $e', name: 'DatabaseService');
@@ -186,59 +203,33 @@ class DatabaseService {
           await db.execute(NotificationRepository.createTableSql);
           await db.execute(NotificationRepository.createIndexSql);
         }
-        if (oldVersion < 8) {
-          // v8: Correct balance formula — payment_status now drives the balance.
-          //   DEPOSIT  PAID                  → -amount  (credit)
-          //   SALE     UNPAID|DEFERRED       → +amount  (debt)
-          //   WITHDRAWAL UNPAID              → +amount  (debt)
-          //   All other combinations         → 0  (settled, no effect)
-          try {
-            await db.execute('DROP TRIGGER IF EXISTS trg_invoice_insert');
-          } catch (_) {}
-          try {
-            await db.execute('DROP TRIGGER IF EXISTS trg_invoice_update');
-          } catch (_) {}
-          try {
-            await db.execute('DROP TRIGGER IF EXISTS trg_invoice_delete');
-          } catch (_) {}
-          await _createTriggers(db);
-          // Recalculate all customer balances with the corrected formula.
-          await db.rawUpdate('''
-            UPDATE users SET balance = (
-              SELECT COALESCE(SUM(
-                CASE
-                  WHEN i.type = 'DEPOSIT'    AND i.payment_status IN ('PAID','paid')                          THEN -i.amount
-                  WHEN i.type = 'SALE'       AND i.payment_status IN ('UNPAID','DEFERRED','unpaid','deferred') THEN  i.amount
-                  WHEN i.type = 'WITHDRAWAL' AND i.payment_status IN ('UNPAID','unpaid')                      THEN  i.amount
-                  ELSE 0
-                END
-              ), 0)
-              FROM invoices i
-              WHERE i.user_id = users.id AND i.deleted_at IS NULL
-            )
-            WHERE role = 'CUSTOMER' AND deleted_at IS NULL
-          ''');
-        }
         if (oldVersion < 10) {
+          // v10: Add product_customers and product_device_info for profile & sync metrics.
           await db.execute('''
-            CREATE TABLE IF NOT EXISTS app_owner_profile (
+            CREATE TABLE IF NOT EXISTS product_customers (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               device_id TEXT UNIQUE NOT NULL,
               store_name TEXT,
               owner_name TEXT,
               address TEXT,
               city TEXT,
-              phone_number TEXT,
-              whatsapp_number TEXT,
+              mobile TEXT,
+              whatsapp TEXT,
+              invoice_count INTEGER DEFAULT 0,
+              customers_count INTEGER DEFAULT 0,
+              total_sales REAL DEFAULT 0.0,
+              total_purchase REAL DEFAULT 0.0,
+              last_sync_time TEXT,
+              last_active_time TEXT
+            )''');
+
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS product_device_info (
+              device_id TEXT PRIMARY KEY,
+              device_name TEXT,
               device_model TEXT,
-              device_os TEXT,
-              latitude REAL,
-              longitude REAL,
-              total_customers INTEGER DEFAULT 0,
-              total_invoices INTEGER DEFAULT 0,
-              last_active_at TEXT,
-              is_uploaded INTEGER DEFAULT 0,
-              updated_at TEXT NOT NULL
+              location_lat REAL,
+              location_long REAL
             )''');
         }
       },
@@ -407,24 +398,30 @@ class DatabaseService {
     await db.execute(NotificationRepository.createIndexSql);
 
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS app_owner_profile (
+      CREATE TABLE IF NOT EXISTS product_customers (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         device_id TEXT UNIQUE NOT NULL,
         store_name TEXT,
         owner_name TEXT,
         address TEXT,
         city TEXT,
-        phone_number TEXT,
-        whatsapp_number TEXT,
+        mobile TEXT,
+        whatsapp TEXT,
+        invoice_count INTEGER DEFAULT 0,
+        customers_count INTEGER DEFAULT 0,
+        total_sales REAL DEFAULT 0.0,
+        total_purchase REAL DEFAULT 0.0,
+        last_sync_time TEXT,
+        last_active_time TEXT
+      )''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS product_device_info (
+        device_id TEXT PRIMARY KEY,
+        device_name TEXT,
         device_model TEXT,
-        device_os TEXT,
-        latitude REAL,
-        longitude REAL,
-        total_customers INTEGER DEFAULT 0,
-        total_invoices INTEGER DEFAULT 0,
-        last_active_at TEXT,
-        is_uploaded INTEGER DEFAULT 0,
-        updated_at TEXT NOT NULL
+        location_lat REAL,
+        location_long REAL
       )''');
   }
 
@@ -569,6 +566,53 @@ class DatabaseService {
     );
     if (r.isNotEmpty) return User.fromMap(r.first);
     return null;
+  }
+
+  /// Fetches a user by username (case-insensitive for comparison).
+  Future<User?> getUserByUsername(String username) async {
+    final db = await database;
+    final r = await db.query(
+      'users',
+      where: 'LOWER(username) = ? AND deleted_at IS NULL',
+      whereArgs: [username.toLowerCase()],
+      limit: 1,
+    );
+    if (r.isNotEmpty) return User.fromMap(r.first);
+    return null;
+  }
+
+  /// Updates the password for a user identified by their unique UUID.
+  /// This acts as a "Recovery Key" reset.
+  Future<bool> resetPasswordWithUuid(String uuid, String newPassword) async {
+    final db = await database;
+    final now = TimestampFormatter.nowUtc();
+    
+    // Check if user exists first to get version
+    final existing = await db.query(
+      'users',
+      columns: ['id', 'version'],
+      where: 'uuid = ? AND deleted_at IS NULL',
+      whereArgs: [uuid],
+    );
+    
+    if (existing.isEmpty) return false;
+    
+    final id = existing.first['id'] as int;
+    final currentVersion = (existing.first['version'] as int?) ?? 0;
+    
+    final rowsAffected = await db.update(
+      'users',
+      {
+        'password': newPassword,
+        'version': currentVersion + 1,
+        'is_synced': 0,
+        'updated_at': now,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    
+    return rowsAffected > 0;
   }
 
   Future<List<User>> getCustomers() async {
@@ -927,6 +971,7 @@ class DatabaseService {
     }).then((invoiceId) async {
       // Option 2: refresh notifications after the balance trigger has fired.
       await notificationRepo.refreshAllForCustomer(inv.userId);
+      await refreshNotificationCount();
       return invoiceId;
     });
   }
@@ -994,6 +1039,7 @@ class DatabaseService {
     // Always recalculate balance after delete so the customer's balance
     // reflects the removal of this invoice's financial effect.
     await recalculateUserBalance(inv.userId);
+    await refreshNotificationCount();
   }
 
   /// Restores a soft-deleted invoice and immediately recalculates the owner's balance.
@@ -1016,6 +1062,7 @@ class DatabaseService {
     // Always recalculate balance after restore so the customer's balance
     // reflects the re-inclusion of this invoice's financial effect.
     await recalculateUserBalance(inv.userId);
+    await refreshNotificationCount();
   }
 
   /// SAFE-HOUSE: Marks the invoice as unsynced (is_synced = 0) so the next
@@ -1092,6 +1139,7 @@ class DatabaseService {
     });
     // Hard-delete all notifications for this customer since they are now gone.
     await notificationRepo.deleteAllForCustomer(customerId);
+    await refreshNotificationCount();
   }
 
   Future<List<Invoice>> getCustomerInvoices(
@@ -1178,6 +1226,7 @@ class DatabaseService {
     );
     // Option 2: refresh persisted notifications for this customer immediately.
     await notificationRepo.refreshAllForCustomer(userId);
+    await refreshNotificationCount();
   }
 
   /// Recalculates balances for ALL customers.
@@ -1207,6 +1256,7 @@ class DatabaseService {
     ''');
     // Option 3: rebuild all notifications after a bulk balance recalculation.
     await notificationRepo.rebuildAll();
+    await refreshNotificationCount();
   }
 
   /// Returns global stats in a **single SQL query** instead of loading all customers into RAM.
@@ -1717,6 +1767,7 @@ class DatabaseService {
     });
     // Option 2: refresh notifications after invoice update (amount/status may have changed).
     await notificationRepo.refreshAllForCustomer(newInv.userId);
+    await refreshNotificationCount();
   }
 
   Future<List<Map<String, dynamic>>> getEditHistory(
@@ -1752,14 +1803,14 @@ class DatabaseService {
     final invRows = await db.rawQuery(
       '''
       SELECT
-        -- app_sales: SALE + PAID + payment_method type = app
+        -- app_sales: (SALE + PAID + payment_method type = app)
         COALESCE(SUM(CASE
           WHEN i.type = 'SALE'
             AND i.payment_status IN ('PAID','paid')
             AND pm.type = 'app'
-          THEN i.amount ELSE 0 END), 0) AS app_sales,
+          THEN i.amount ELSE 0 END), 0) AS app_sales_invoice,
 
-        -- app_sales_deposit: DEPOSIT + PAID + payment_method type = app
+        -- app_sales_deposit: DEPOSIT + PAID + app
         COALESCE(SUM(CASE
           WHEN i.type = 'DEPOSIT'
             AND i.payment_status IN ('PAID','paid')
@@ -1835,8 +1886,7 @@ class DatabaseService {
     final cred = creditsRows.first;
 
     return {
-      'app_sales':             (inv['app_sales']             as num?)?.toDouble() ?? 0.0,
-      'app_sales_deposit':     (inv['app_sales_deposit']     as num?)?.toDouble() ?? 0.0,
+      'app_sales':             ((inv['app_sales_invoice'] as num?)?.toDouble() ?? 0.0) + ((inv['app_sales_deposit'] as num?)?.toDouble() ?? 0.0),
       'app_debt':              (inv['app_debt']              as num?)?.toDouble() ?? 0.0,
       'cash_debt':             (inv['cash_debt']             as num?)?.toDouble() ?? 0.0,
       'cash_withdrawals':      (inv['cash_debt']             as num?)?.toDouble() ?? 0.0,
@@ -1875,14 +1925,14 @@ class DatabaseService {
     final invRows = await db.rawQuery(
       '''
       SELECT
-        -- app_sales: SALE + PAID + payment_method type = app
+        -- app_sales: (SALE + PAID + payment_method type = app)
         COALESCE(SUM(CASE
           WHEN i.type = 'SALE'
             AND i.payment_status IN ('PAID','paid')
             AND pm.type = 'app'
-          THEN i.amount ELSE 0 END), 0) AS app_sales,
+          THEN i.amount ELSE 0 END), 0) AS app_sales_invoice,
 
-        -- app_sales_deposit: DEPOSIT + PAID + payment_method type = app
+        -- app_sales_deposit: DEPOSIT + PAID + app
         COALESCE(SUM(CASE
           WHEN i.type = 'DEPOSIT'
             AND i.payment_status IN ('PAID','paid')
@@ -1944,21 +1994,23 @@ class DatabaseService {
       [startStr, endStr],
     );
 
-    // Get total credits
-    final creditsRows = await db.rawQuery(
+    // Get total credits and net balance
+    final balanceRows = await db.rawQuery(
       '''
-      SELECT COALESCE(SUM(ABS(balance)), 0) AS total_credits
+      SELECT 
+        COALESCE(SUM(ABS(balance)), 0) AS total_credits,
+        COALESCE(SUM(balance), 0) AS net_balance
       FROM users
-      WHERE role = 'CUSTOMER' AND deleted_at IS NULL AND balance < 0
+      WHERE role = 'CUSTOMER' AND deleted_at IS NULL
       '''
     );
 
     final inv = invRows.first;
     final pur = purRows.first;
-    final cred = creditsRows.first;
+    final bal = balanceRows.first;
 
     return {
-      'app_sales':             (inv['app_sales']             as num?)?.toDouble() ?? 0.0,
+      'app_sales':             ((inv['app_sales_invoice'] as num?)?.toDouble() ?? 0.0) + ((inv['app_sales_deposit'] as num?)?.toDouble() ?? 0.0),
       'app_sales_deposit':     (inv['app_sales_deposit']     as num?)?.toDouble() ?? 0.0,
       'app_debt':              (inv['app_debt']              as num?)?.toDouble() ?? 0.0,
       'cash_debt':             (inv['cash_debt']             as num?)?.toDouble() ?? 0.0,
@@ -1968,7 +2020,8 @@ class DatabaseService {
       'cash_withdrawal_total': (inv['cash_withdrawal_total'] as num?)?.toDouble() ?? 0.0,
       'cash_purchases':        (pur['cash_purchases']        as num?)?.toDouble() ?? 0.0,
       'app_purchases':         (pur['app_purchases']         as num?)?.toDouble() ?? 0.0,
-      'total_credits':         (cred['total_credits']        as num?)?.toDouble() ?? 0.0,
+      'total_credits':         (bal['total_credits']         as num?)?.toDouble() ?? 0.0,
+      'net_balance':           (bal['net_balance']           as num?)?.toDouble() ?? 0.0,
       'cash_debt_repayment':   (inv['cash_sales_deposit']    as num?)?.toDouble() ?? 0.0,
     };
   }
@@ -2530,6 +2583,7 @@ class DatabaseService {
       // Clear all notifications — rebuildAll() will be called after data is restored.
       await txn.rawDelete('DELETE FROM app_notifications');
     });
+    await refreshNotificationCount();
     dev.log(
       'clearAllDataForRestore: all tables cleared except user id=$keepUserId.',
       name: 'DatabaseService',
@@ -2553,6 +2607,7 @@ class DatabaseService {
       }
       await txn.rawDelete('DELETE FROM app_notifications');
     });
+    await refreshNotificationCount();
     dev.log('All data cleared from mobile database.', name: 'DatabaseService');
   }
 
@@ -2577,6 +2632,7 @@ class DatabaseService {
       // Reset all AUTOINCREMENT counters
       await txn.rawDelete('DELETE FROM sqlite_sequence');
     });
+    await refreshNotificationCount();
     // Reclaim disk space outside of transaction
     await db.rawQuery('VACUUM');
     // Re-seed the developer account so the developer can log in immediately
@@ -2666,21 +2722,23 @@ class DatabaseService {
     );
   }
 
-  Future<int> upsertFromSync(String table, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> upsertFromSync(String table, Map<String, dynamic> data) async {
     final db = await database;
     return await db.transaction((txn) async {
       return await upsertFromSyncInTxn(table, data, txn);
     });
   }
 
-  Future<int> upsertFromSyncInTxn(
+  /// Performs a version-gated upsert for records incoming from server sync.
+  /// Returns a map: {'id': localId, 'status': 'INSERT'|'UPDATE'|'SKIP'|'ERROR'}
+  Future<Map<String, dynamic>> upsertFromSyncInTxn(
     String table,
     Map<String, dynamic> data,
     dynamic txn, {
     bool allowSoftDeleted = false,
   }) async {
     final uuid = data['uuid'];
-    if (uuid == null) return -1;
+    if (uuid == null) return {'id': -1, 'status': 'ERROR'};
 
     final sanitizedData = Map<String, dynamic>.from(data);
     sanitizedData.remove('id');
@@ -2731,25 +2789,31 @@ class DatabaseService {
           where: 'id = ?',
           whereArgs: [existingId],
         );
+        // Status UPDATE if versions same, or status might be considered "OVERWRITE" if newer.
+        // We'll return UPDATE for any successful version-gated update.
+        return {'id': existingId, 'status': 'UPDATE'};
       }
-      return existingId;
+      return {'id': existingId, 'status': 'SKIP'};
     } else {
       // 2. For users: also try matching by username to handle UUID changes
       if (table == 'users') {
-        final byUsername = await txn.rawQuery(
-          'SELECT * FROM $table WHERE username = ? LIMIT 1',
-          [sanitizedData['username']],
-        );
-        if (byUsername.isNotEmpty) {
-          final existingId = byUsername.first['id'] as int;
-          sanitizedData.remove('password');
-          await txn.update(
-            table,
-            sanitizedData,
-            where: 'id = ?',
-            whereArgs: [existingId],
+        final username = sanitizedData['username'];
+        if (username != null) {
+          final byUsername = await txn.rawQuery(
+            'SELECT * FROM $table WHERE username = ? LIMIT 1',
+            [username],
           );
-          return existingId;
+          if (byUsername.isNotEmpty) {
+            final existingId = byUsername.first['id'] as int;
+            sanitizedData.remove('password');
+            await txn.update(
+              table,
+              sanitizedData,
+              where: 'id = ?',
+              whereArgs: [existingId],
+            );
+            return {'id': existingId, 'status': 'UPDATE'};
+          }
         }
       }
 
@@ -2785,8 +2849,9 @@ class DatabaseService {
                 where: 'id = ?',
                 whereArgs: [existingId],
               );
+              return {'id': existingId, 'status': 'UPDATE'};
             }
-            return existingId;
+            return {'id': existingId, 'status': 'SKIP'};
           }
         }
       }
@@ -2795,14 +2860,66 @@ class DatabaseService {
       // (no point creating a record locally that is already deleted on server)
       // Exception: during a full restore, we MUST insert soft-deleted records
       // so that FK references from child records (invoices → users) can be resolved.
-      if (isDeletedOnServer && !allowSoftDeleted) return -1;
+      if (isDeletedOnServer && !allowSoftDeleted) return {'id': -1, 'status': 'SKIP'};
 
       if (table == 'users') {
         // Assign a safe local password; real auth goes through the server token
         sanitizedData['password'] = sanitizedData['password'] ?? '***';
       }
-      return await txn.insert(table, sanitizedData);
+      final newId = await txn.insert(table, sanitizedData);
+      return {'id': newId, 'status': 'INSERT'};
     }
+  }
+
+  /// Resolves UUID relationships to local integer IDs within a transaction.
+  /// Used by sync processes to map 'user_uuid' to 'user_id', etc.
+  Future<Map<String, dynamic>> resolveRelationsInTxn(
+      String table, Map<String, dynamic> data, dynamic txn) async {
+    final map = Map<String, dynamic>.from(data);
+
+    // Map of UUID column name -> [Target Table, Local ID column name]
+    const Map<String, List<String>> relations = {
+      'user_uuid':           ['users',           'user_id'],
+      'buyer_uuid':          ['users',           'buyer_id'],
+      'invoice_uuid':        ['invoices',        'invoice_id'],
+      'payment_method_uuid': ['payment_methods', 'payment_method_id'],
+      'parent_uuid':         ['users',           'parent_id'],
+      'edited_by_uuid':      ['users',           'edited_by_id'],
+      'target_uuid':         ['users',           'target_id'], // Default to users, logic below handles INVOICE target_type
+    };
+
+    for (final entry in relations.entries) {
+      final uuidKey = entry.key;
+      if (!map.containsKey(uuidKey)) continue;
+
+      final targetUuid  = map[uuidKey];
+      var targetTable = entry.value[0];
+      final idKey       = entry.value[1];
+
+      // Special handling for edit_history polymorphic target_id
+      if (table == 'edit_history' && uuidKey == 'target_uuid') {
+        final targetType = map['target_type'] as String?;
+        if (targetType == 'INVOICE') {
+          targetTable = 'invoices';
+        } else if (targetType == 'USER') {
+          targetTable = 'users';
+        }
+      }
+
+      if (targetUuid != null && targetUuid.toString().isNotEmpty) {
+        final rows = await txn.rawQuery(
+          'SELECT id FROM $targetTable WHERE uuid = ? LIMIT 1',
+          [targetUuid],
+        );
+        map[idKey] = rows.isNotEmpty ? rows.first['id'] as int : null;
+      } else {
+        map[idKey] = null;
+      }
+
+      map.remove(uuidKey);
+    }
+
+    return map;
   }
 
   // Smart Notifications
@@ -2925,31 +3042,138 @@ class DatabaseService {
     return statsCount > 0;
   }
 
-  // ── App Owner Profile (Telemetry) ───────────────────────────────────────────
+  // --- Profile & Device Info Methods ---
 
-  Future<AppOwnerProfile?> getOwnerProfile() async {
+  Future<StoreProfile?> getStoreProfile(String deviceId) async {
     final db = await database;
-    final r = await db.query('app_owner_profile', limit: 1);
-    if (r.isNotEmpty) return AppOwnerProfile.fromMap(r.first);
+    final r = await db.query(
+      'product_customers',
+      where: 'device_id = ?',
+      whereArgs: [deviceId],
+    );
+    if (r.isNotEmpty) return StoreProfile.fromMap(r.first);
     return null;
   }
 
-  Future<void> upsertOwnerProfile(AppOwnerProfile profile) async {
+  Future<void> saveStoreProfile(StoreProfile profile) async {
     final db = await database;
     await db.insert(
-      'app_owner_profile',
+      'product_customers',
       profile.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 
-  Future<Map<String, int>> getTelemetryStats() async {
+  Future<DeviceInfoModel?> getDeviceInfo(String deviceId) async {
     final db = await database;
-    final customers = Sqflite.firstIntValue(await db.rawQuery("SELECT COUNT(*) FROM users WHERE role = 'CUSTOMER' AND deleted_at IS NULL")) ?? 0;
-    final invoices = Sqflite.firstIntValue(await db.rawQuery("SELECT COUNT(*) FROM invoices WHERE deleted_at IS NULL")) ?? 0;
+    final r = await db.query(
+      'product_device_info',
+      where: 'device_id = ?',
+      whereArgs: [deviceId],
+    );
+    if (r.isNotEmpty) return DeviceInfoModel.fromMap(r.first);
+    return null;
+  }
+
+  Future<void> saveDeviceInfo(DeviceInfoModel info) async {
+    final db = await database;
+    await db.insert(
+      'product_device_info',
+      info.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Recalculates store metrics: invoice count, customer count, total sales, and total purchases.
+  Future<Map<String, dynamic>> recalculateStoreMetrics() async {
+    final db = await database;
+
+    // Total customers
+    final customerResult = await db.rawQuery(
+      "SELECT COUNT(*) as cnt FROM users WHERE role = 'CUSTOMER' AND deleted_at IS NULL",
+    );
+    final customersCount = Sqflite.firstIntValue(customerResult) ?? 0;
+
+    // Total invoices
+    final invoiceResult = await db.rawQuery(
+      "SELECT COUNT(*) as cnt FROM invoices WHERE deleted_at IS NULL",
+    );
+    final invoiceCount = Sqflite.firstIntValue(invoiceResult) ?? 0;
+
+    // Total sales (amount of all SALE invoices)
+    final salesResult = await db.rawQuery(
+      "SELECT SUM(amount) as total FROM invoices WHERE type = 'SALE' AND deleted_at IS NULL",
+    );
+    final totalSales = (salesResult.first['total'] as num?)?.toDouble() ?? 0.0;
+
+    // Total purchases
+    final purchaseResult = await db.rawQuery(
+      "SELECT SUM(amount) as total FROM purchases WHERE deleted_at IS NULL",
+    );
+    final totalPurchase = (purchaseResult.first['total'] as num?)?.toDouble() ?? 0.0;
+
     return {
-      'total_customers': customers,
-      'total_invoices': invoices,
+      'customers_count': customersCount,
+      'invoice_count': invoiceCount,
+      'total_sales': totalSales,
+      'total_purchase': totalPurchase,
     };
+  }
+
+  Future<void> updateStoreProfileMetrics(String deviceId) async {
+    final metrics = await recalculateStoreMetrics();
+    final db = await database;
+
+    // Check if profile exists first
+    final existing = await db.query('product_customers', where: 'device_id = ?', whereArgs: [deviceId]);
+    if (existing.isEmpty) {
+      await db.insert('product_customers', {
+        'device_id': deviceId,
+        'customers_count': metrics['customers_count'],
+        'invoice_count': metrics['invoice_count'],
+        'total_sales': metrics['total_sales'],
+        'total_purchase': metrics['total_purchase'],
+        'last_active_time': TimestampFormatter.nowUtc(),
+      });
+    } else {
+      await db.update(
+        'product_customers',
+        {
+          'customers_count': metrics['customers_count'],
+          'invoice_count': metrics['invoice_count'],
+          'total_sales': metrics['total_sales'],
+          'total_purchase': metrics['total_purchase'],
+          'last_active_time': TimestampFormatter.nowUtc(),
+        },
+        where: 'device_id = ?',
+        whereArgs: [deviceId],
+      );
+    }
+  }
+
+  // --- Helper methods for CustomerTrackingService ---
+
+  Future<int> getTotalInvoicesCount() async {
+    final db = await database;
+    final r = await db.rawQuery("SELECT COUNT(*) as cnt FROM invoices WHERE deleted_at IS NULL");
+    return Sqflite.firstIntValue(r) ?? 0;
+  }
+
+  Future<int> getTotalCustomersCount() async {
+    final db = await database;
+    final r = await db.rawQuery("SELECT COUNT(*) as cnt FROM users WHERE role = 'CUSTOMER' AND deleted_at IS NULL");
+    return Sqflite.firstIntValue(r) ?? 0;
+  }
+
+  Future<double> getTotalSalesAmount() async {
+    final db = await database;
+    final r = await db.rawQuery("SELECT SUM(amount) as total FROM invoices WHERE type = 'SALE' AND deleted_at IS NULL");
+    return (r.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  Future<double> getTotalPurchaseAmount() async {
+    final db = await database;
+    final r = await db.rawQuery("SELECT SUM(amount) as total FROM purchases WHERE deleted_at IS NULL");
+    return (r.first['total'] as num?)?.toDouble() ?? 0.0;
   }
 }

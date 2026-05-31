@@ -1,7 +1,10 @@
+import '../utils/app_snackbar.dart';
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/timestamp_formatter.dart';
+import '../widgets/notification_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../services/sync_service.dart';
@@ -21,9 +24,9 @@ import 'accountants_screen.dart';
 import 'sync_details_screen.dart';
 import 'customer_balances_screen.dart';
 import 'unpaid_invoices_screen.dart';
-import 'store_profile_screen.dart';
 import 'contact_us_screen.dart';
 import 'about_us_screen.dart';
+import 'profile_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -38,6 +41,123 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final GlobalKey<PaymentMethodsScreenState> _paymentMethodsKey = GlobalKey<PaymentMethodsScreenState>();
   final GlobalKey<PurchasesMethodsScreenState> _purchasesMethodsKey = GlobalKey<PurchasesMethodsScreenState>();
+
+  @override
+  void initState() {
+    super.initState();
+    _checkRecoveryKeyConfirmation();
+  }
+
+  Future<void> _checkRecoveryKeyConfirmation() async {
+    final auth = context.read<AuthService>();
+    final user = auth.currentUser;
+    if (user == null) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final bool isConfirmed = prefs.getBool('recovery_confirmed_${user.id}') ?? false;
+
+    if (!isConfirmed && mounted) {
+      // Small delay to ensure the context is ready
+      Future.delayed(const Duration(seconds: 1), () {
+        if (mounted) _showRecoveryKeyConfirmationDialog(user);
+      });
+    }
+  }
+
+  void _showRecoveryKeyConfirmationDialog(User user) {
+    bool isChecked = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            title: const Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text('تنبيه أمان هام', style: TextStyle(fontWeight: FontWeight.bold)),
+                SizedBox(width: 10),
+                Icon(Icons.security_rounded, color: Colors.orange, size: 28),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                const Text(
+                  'هذا هو "مفتاح الاستعادة" الخاص بك. ستحتاجه لاستعادة حسابك في حال نسيان كلمة المرور.',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(fontSize: 14),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                  ),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.copy_rounded, color: Colors.blue, size: 20),
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: user.uuid));
+                          AppSnackBar.success(context, 'تم نسخ مفتاح الاستعادة');
+                        },
+                        tooltip: 'نسخ',
+                      ),
+                      Expanded(
+                        child: Text(
+                          user.uuid,
+                          style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, fontSize: 13),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'يرجى نسخ هذا الرمز وحفظه في مكان آمن جداً (خارج الهاتف). لن يتمكن أحد من استعادة حسابك بدونه.',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(fontSize: 13, color: Colors.red, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 20),
+                CheckboxListTile(
+                  value: isChecked,
+                  onChanged: (val) => setDialogState(() => isChecked = val ?? false),
+                  title: const Text('أقر بأنني قمت بحفظ هذا المفتاح في مكان آمن ولن أفقده.', textAlign: TextAlign.right, style: TextStyle(fontSize: 12)),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  activeColor: Colors.blue,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ],
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: !isChecked ? null : () async {
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setBool('recovery_confirmed_${user.id}', true);
+                  if (context.mounted) Navigator.pop(context);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  minimumSize: const Size(double.infinity, 50),
+                ),
+                child: const Text('تأكيد وحفظ', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _getScreen(int index) {
     switch (index) {
@@ -54,9 +174,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 10: return PurchasesMethodsScreen(key: _purchasesMethodsKey);
       case 11: return const RecycleBinScreen();
       case 12: return const SettingsScreen();
-      case 13: return const StoreProfileScreen();
-      case 14: return const ContactUsScreen();
-      case 15: return const AboutUsScreen();
+      case 13: return const ContactUsScreen();
+      case 14: return const AboutUsScreen();
+      case 15: return const ProfileScreen();
       default: return const DashboardHomeScreen();
     }
   }
@@ -76,9 +196,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 10: return 'طرق دفع المشتريات';
       case 11: return 'سلة المحذوفات';
       case 12: return 'الإعدادات والسمة';
-      case 13: return 'ملف المتجر';
-      case 14: return 'تواصل معنا';
-      case 15: return 'عن المطور';
+      case 13: return 'تواصل معنا';
+      case 14: return 'عن المطور';
+      case 15: return 'الملف الشخصي للمتجر';
       default: return 'Elegant Store';
     }
   }
@@ -90,14 +210,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final isDark = theme.brightness == Brightness.dark;
     final auth = context.read<AuthService>();
 
-    final bool isMobile = width < 650;
-    final bool isTablet = width >= 650 && width < 1100;
+    final bool isMobile = width < 700;
+    final bool isTablet = width >= 700 && width < 1100;
     final bool isDesktop = width >= 1100;
 
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: theme.scaffoldBackgroundColor,
-      drawer: isMobile ? _buildMobileDrawer(isDark, auth) : null,
+      drawer: _buildMobileDrawer(isDark, auth),
       body: Row(
         children: [
           if (isDesktop) _buildFullSidebar(theme, isDark, auth),
@@ -105,7 +225,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Expanded(
             child: Column(
               children: [
-                _buildAdaptiveAppBar(theme, width, isMobile, isDark),
+                _buildAdaptiveAppBar(theme, width, !isDesktop && !isTablet, isDark),
                 Expanded(
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 300),
@@ -129,12 +249,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       backgroundColor: const Color(0xFF0F172A),
       child: Column(
         children: [
-          // Logo hidden as requested: اخفي الشعار منها
-          const SizedBox(height: 60), 
           Expanded(
             child: ListView(
               padding: EdgeInsets.zero,
               children: [
+                // Logo hidden as requested: اخفي الشعار منها
+                const SizedBox(height: 60),
                 _buildSidebarItem(0, 'لوحة التحكم', Icons.dashboard_rounded),
                 _buildSidebarItem(1, 'شاشة البيع', Icons.receipt_long_rounded),
                 _buildSidebarItem(8, 'الفواتير غير المدفوعة', Icons.unpublished_rounded),
@@ -149,18 +269,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _buildSidebarItem(9, 'طرق دفع المبيعات', Icons.payment_rounded),
                 _buildSidebarItem(10, 'طرق دفع المشتريات', Icons.account_balance_rounded),
                 _buildSidebarItem(11, 'سلة المحذوفات', Icons.delete_sweep_rounded),
+                _buildSidebarItem(15, 'الملف الشخصي للمتجر', Icons.store_rounded),
+                const Divider(color: Colors.white10, indent: 20, endIndent: 20),
                 _buildSidebarItem(12, 'الإعدادات والسمة', Icons.settings_rounded),
-                _buildSidebarItem(13, 'ملف المتجر', Icons.store_rounded),
-                _buildSidebarItem(14, 'تواصل معنا', Icons.contact_support_rounded),
-                _buildSidebarItem(15, 'عن المطور', Icons.info_outline_rounded),
+                _buildSidebarItem(13, 'تواصل معنا', Icons.contact_support_rounded),
+                _buildSidebarItem(14, 'عن المطور', Icons.info_outline_rounded),
+                const SizedBox(height: 20),
               ],
             ),
           ),
-          // Raised to be fully visible: رفع لاعلى لانه لا يظهر بشكل كامل
-          SafeArea(
-            top: false,
-            child: _buildUserCard(true, isDark),
-          ),
+          _buildUserCard(true, isDark),
+          const SafeArea(top: false, child: SizedBox(height: 10)),
         ],
       ),
     );
@@ -172,12 +291,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       color: const Color(0xFF0F172A),
       child: Column(
         children: [
-          _buildSidebarHeader(),
-          const SizedBox(height: 5),
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               children: [
+                _buildSidebarHeader(),
+                const SizedBox(height: 5),
                 _buildSidebarItem(0, 'لوحة التحكم', Icons.dashboard_rounded),
                 _buildSidebarItem(1, 'شاشة البيع', Icons.receipt_long_rounded),
                 _buildSidebarItem(8, 'الفواتير غير المدفوعة', Icons.unpublished_rounded),
@@ -185,7 +304,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _buildSidebarItem(3, 'المشتريات', Icons.shopping_cart_rounded),
                 _buildSidebarItem(4, 'إدارة الزبائن', Icons.people_alt_rounded),
                 if (auth.isManager())
-                   _buildSidebarItem(5, 'إدارة الموظفين', Icons.badge_rounded),
+                  _buildSidebarItem(5, 'إدارة الموظفين', Icons.badge_rounded),
                 _buildSidebarItem(6, 'مراجعة المدفوعات', Icons.payments_rounded),
                 _buildSidebarItem(7, 'أرصدة الزبائن', Icons.account_balance_wallet_rounded),
                 const Padding(
@@ -195,42 +314,112 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _buildSidebarItem(9, 'طرق دفع المبيعات', Icons.payment_rounded),
                 _buildSidebarItem(10, 'طرق دفع المشتريات', Icons.account_balance_rounded),
                 _buildSidebarItem(11, 'سلة المحذوفات', Icons.delete_sweep_rounded),
+                _buildSidebarItem(15, 'الملف الشخصي للمتجر', Icons.store_rounded),
+                const Divider(color: Colors.white10, indent: 20, endIndent: 20),
                 _buildSidebarItem(12, 'الإعدادات والسمة', Icons.settings_rounded),
-                _buildSidebarItem(13, 'ملف المتجر', Icons.store_rounded),
-                _buildSidebarItem(14, 'تواصل معنا', Icons.contact_support_rounded),
-                _buildSidebarItem(15, 'عن المطور', Icons.info_outline_rounded),
+                _buildSidebarItem(13, 'تواصل معنا', Icons.contact_support_rounded),
+                _buildSidebarItem(14, 'عن المطور', Icons.info_outline_rounded),
+                const SizedBox(height: 20),
               ],
             ),
           ),
-          _buildUserCard(false, isDark),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: _buildUserCard(false, isDark),
+          ),
+          const SizedBox(height: 20),
         ],
       ),
     );
   }
 
   Widget _buildNavigationRail(ThemeData theme, bool isDark, AuthService auth) {
+    int getRailIndex() {
+      bool isManager = auth.isManager();
+      // Map all indices to rail indices
+      switch (_selectedIndex) {
+        case 0: return 0;
+        case 1: return 1;
+        case 2: return 2;
+        case 3: return 3;
+        case 4: return 4;
+        case 5: return 5; // Accountants (Manager only)
+        case 6: return isManager ? 6 : 5;
+        case 9: return isManager ? 7 : 6;
+        case 10: return isManager ? 7 : 6;
+        case 11: return isManager ? 8 : 7;
+        case 12: return isManager ? 9 : 8;
+        case 13: return isManager ? 10 : 9;
+        case 14: return isManager ? 11 : 10;
+        case 15: return isManager ? 12 : 11;
+        default: return 0;
+      }
+    }
+
     return NavigationRail(
       backgroundColor: const Color(0xFF0F172A),
-      selectedIndex: _selectedIndex,
-      onDestinationSelected: (int index) => setState(() => _selectedIndex = index),
+      selectedIndex: getRailIndex(),
+      onDestinationSelected: (int index) {
+        bool isManager = auth.isManager();
+        int targetScreen;
+        
+        // Dynamic mapping based on manager status
+        if (isManager) {
+          switch (index) {
+            case 0: targetScreen = 0; break;
+            case 1: targetScreen = 1; break;
+            case 2: targetScreen = 2; break;
+            case 3: targetScreen = 3; break;
+            case 4: targetScreen = 4; break;
+            case 5: targetScreen = 5; break;
+            case 6: targetScreen = 6; break;
+            case 7: targetScreen = 9; break;
+            case 8: targetScreen = 11; break;
+            case 9: targetScreen = 12; break;
+            case 10: targetScreen = 13; break;
+            case 11: targetScreen = 14; break;
+            case 12: targetScreen = 15; break;
+            default: targetScreen = 0;
+          }
+        } else {
+          switch (index) {
+            case 0: targetScreen = 0; break;
+            case 1: targetScreen = 1; break;
+            case 2: targetScreen = 2; break;
+            case 3: targetScreen = 3; break;
+            case 4: targetScreen = 4; break;
+            case 5: targetScreen = 6; break;
+            case 6: targetScreen = 9; break;
+            case 7: targetScreen = 11; break;
+            case 8: targetScreen = 12; break;
+            case 9: targetScreen = 13; break;
+            case 10: targetScreen = 14; break;
+            case 11: targetScreen = 15; break;
+            default: targetScreen = 0;
+          }
+        }
+        setState(() => _selectedIndex = targetScreen);
+      },
       labelType: NavigationRailLabelType.none,
       leading: Padding(
         padding: const EdgeInsets.symmetric(vertical: 20),
-        child: Image.asset('assets/logo.png', height: 40),
+        child: Image.asset('assets/icon.png', height: 32),
       ),
       destinations: [
-        const NavigationRailDestination(icon: Icon(Icons.dashboard_rounded, color: Colors.white60), selectedIcon: Icon(Icons.dashboard_rounded, color: Colors.blue), label: Text('لوحة التحكم')),
-        const NavigationRailDestination(icon: Icon(Icons.receipt_long_rounded, color: Colors.white60), selectedIcon: Icon(Icons.receipt_long_rounded, color: Colors.blue), label: Text('شاشة البيع')),
-        const NavigationRailDestination(icon: Icon(Icons.bar_chart_rounded, color: Colors.white60), selectedIcon: Icon(Icons.bar_chart_rounded, color: Colors.blue), label: Text('إحصائيات اليوم')),
-        const NavigationRailDestination(icon: Icon(Icons.shopping_cart_rounded, color: Colors.white60), selectedIcon: Icon(Icons.shopping_cart_rounded, color: Colors.blue), label: Text('المشتريات')),
-        const NavigationRailDestination(icon: Icon(Icons.people_alt_rounded, color: Colors.white60), selectedIcon: Icon(Icons.people_alt_rounded, color: Colors.blue), label: Text('إدارة الزبائن')),
+        const NavigationRailDestination(icon: Icon(Icons.dashboard_rounded, color: Colors.white60), selectedIcon: Icon(Icons.dashboard_rounded), label: Text('لوحة التحكم')),
+        const NavigationRailDestination(icon: Icon(Icons.receipt_long_rounded, color: Colors.white60), selectedIcon: Icon(Icons.receipt_long_rounded), label: Text('شاشة البيع')),
+        const NavigationRailDestination(icon: Icon(Icons.bar_chart_rounded, color: Colors.white60), selectedIcon: Icon(Icons.bar_chart_rounded), label: Text('إحصائيات اليوم')),
+        const NavigationRailDestination(icon: Icon(Icons.shopping_cart_rounded, color: Colors.white60), selectedIcon: Icon(Icons.shopping_cart_rounded), label: Text('المشتريات')),
+        const NavigationRailDestination(icon: Icon(Icons.people_alt_rounded, color: Colors.white60), selectedIcon: Icon(Icons.people_alt_rounded), label: Text('إدارة الزبائن')),
         if (auth.isManager())
-          const NavigationRailDestination(icon: Icon(Icons.badge_rounded, color: Colors.white60), selectedIcon: Icon(Icons.badge_rounded, color: Colors.blue), label: Text('إدارة الموظفين')),
-        const NavigationRailDestination(icon: Icon(Icons.payments_rounded, color: Colors.white60), selectedIcon: Icon(Icons.payments_rounded, color: Colors.blue), label: Text('مراجعة المدفوعات')),
-        const NavigationRailDestination(icon: Icon(Icons.payment_rounded, color: Colors.white60), selectedIcon: Icon(Icons.payment_rounded, color: Colors.blue), label: Text('طرق الدفع')),
-        const NavigationRailDestination(icon: Icon(Icons.delete_sweep_rounded, color: Colors.white60), selectedIcon: Icon(Icons.delete_sweep_rounded, color: Colors.blue), label: Text('المحذوفات')),
-        const NavigationRailDestination(icon: Icon(Icons.settings_rounded, color: Colors.white60), selectedIcon: Icon(Icons.settings_rounded, color: Colors.blue), label: Text('الإعدادات')),
-        const NavigationRailDestination(icon: Icon(Icons.store_rounded, color: Colors.white60), selectedIcon: Icon(Icons.store_rounded, color: Colors.blue), label: Text('ملف المتجر')),
+          const NavigationRailDestination(icon: Icon(Icons.badge_rounded, color: Colors.white60), selectedIcon: Icon(Icons.badge_rounded), label: Text('إدارة الموظفين')),
+        const NavigationRailDestination(icon: Icon(Icons.payments_rounded, color: Colors.white60), selectedIcon: Icon(Icons.payments_rounded), label: Text('مراجعة المدفوعات')),
+        const NavigationRailDestination(icon: Icon(Icons.payment_rounded, color: Colors.white60), selectedIcon: Icon(Icons.payment_rounded), label: Text('طرق الدفع')),
+        const NavigationRailDestination(icon: Icon(Icons.delete_sweep_rounded, color: Colors.white60), selectedIcon: Icon(Icons.delete_sweep_rounded), label: Text('المحذوفات')),
+        const NavigationRailDestination(icon: Icon(Icons.settings_rounded, color: Colors.white60), selectedIcon: Icon(Icons.settings_rounded), label: Text('الإعدادات')),
+        const NavigationRailDestination(icon: Icon(Icons.contact_support_rounded, color: Colors.white60), selectedIcon: Icon(Icons.contact_support_rounded), label: Text('تواصل معنا')),
+        const NavigationRailDestination(icon: Icon(Icons.info_outline_rounded, color: Colors.white60), selectedIcon: Icon(Icons.info_outline_rounded), label: Text('عن المطور')),
+        const NavigationRailDestination(icon: Icon(Icons.store_rounded, color: Colors.white60), selectedIcon: Icon(Icons.store_rounded), label: Text('الملف الشخصي')),
       ],
     );
   }
@@ -330,10 +519,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (MediaQuery.of(context).size.width < 650) Navigator.pop(context);
         },
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        leading: Icon(icon, color: isSelected ? Colors.blue : Colors.white60, size: 22),
+        leading: Icon(icon, color: isSelected ? Colors.white : Colors.white60, size: 22),
         title: Text(title, style: TextStyle(color: isSelected ? Colors.white : Colors.white70, fontSize: 14, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
         selected: isSelected,
-        selectedTileColor: Colors.blue.withOpacity(0.15),
+        selectedTileColor: Colors.white.withOpacity(0.15),
       ),
     );
   }
@@ -428,60 +617,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildNotificationIcon(bool isDark) {
-    return Consumer<DatabaseService>(
-      builder: (context, db, _) => FutureBuilder<int>(
-        future: db.notificationRepo.getTotalCount(),
-        builder: (context, snap) {
-          final count = snap.data ?? 0;
-          return Stack(
-            children: [
-              InkWell(
-                onTap: () async {
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const NotificationsScreen()),
-                  );
-                  // Rebuild badge after returning from notifications
-                  if (mounted) setState(() {});
-                },
-                borderRadius: BorderRadius.circular(20),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1E293B) : Colors.grey[100],
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    count > 0 ? Icons.notifications_rounded : Icons.notifications_none_rounded,
-                    color: count > 0 ? Colors.orange : (isDark ? const Color(0xFF00E5FF) : const Color(0xFF64748B)),
-                    size: 22,
-                  ),
-                ),
-              ),
-              if (count > 0)
-                Positioned(
-                  right: 2,
-                  top: 2,
-                  child: Container(
-                    padding: const EdgeInsets.all(2),
-                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 1.5),
-                    ),
-                    child: Text(
-                      count > 99 ? '99+' : '$count',
-                      style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-            ],
-          );
-        },
-      ),
-    );
+    return NotificationBadge(isDark: isDark);
   }
 
   /// Shows a confirmation dialog, runs a pre-logout sync with a progress
@@ -523,10 +659,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
 
-    // if (confirmed != true || !mounted) return;
+    if (confirmed != true || !mounted) return;
 
     // Show a non-dismissible sync progress dialog
-    /*
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -557,14 +692,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ),
     );
-    */
 
     // Run sync then logout (non-blocking if offline)
     final auth = context.read<AuthService>();
     await auth.logout();
 
     // Close the progress dialog if still open
-    // if (mounted) Navigator.of(context, rootNavigator: true).pop();
+    if (mounted) Navigator.of(context, rootNavigator: true).pop();
   }
 }
 
@@ -577,25 +711,23 @@ class DashboardHomeScreen extends StatefulWidget {
 
 class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
   String _syncStatus = "جاهز للمزامنة";
-  // SyncService? _syncService;
+  SyncService? _syncService;
 
   @override
   void initState() {
     super.initState();
     
-    /*
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _syncService = context.read<SyncService>();
         _syncService!.addListener(_onSyncStatusChanged);
       }
     });
-    */
   }
 
   @override
   void dispose() {
-    // _syncService?.removeListener(_onSyncStatusChanged);
+    _syncService?.removeListener(_onSyncStatusChanged);
     super.dispose();
   }
 
@@ -604,7 +736,6 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
   }
 
   Future<void> _handleSync() async {
-    /*
     final syncService = context.read<SyncService>();
     final syncManager = context.read<SyncManager>();
 
@@ -621,6 +752,10 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
       final success = await syncManager.forceSyncNow();
       if (mounted) {
         setState(() => _syncStatus = success ? "تمت المزامنة بنجاح" : "فشلت المزامنة");
+        
+        if (success) {
+          _showSyncSummaryAlert();
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -637,13 +772,72 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
         });
       }
     }
-    */
   }
 
   void _openSyncDetails() {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const SyncDetailsScreen()),
+    );
+  }
+
+  void _showSyncSummaryAlert() {
+    final syncService = context.read<SyncService>();
+    final details = syncService.lastSyncDetails;
+    if (details == null) return;
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded, color: Colors.green, size: 28),
+            const SizedBox(width: 12),
+            const Text('اكتملت المزامنة', style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('تم تحديث البيانات بنجاح مع السيرفر:'),
+            const SizedBox(height: 16),
+            _buildSummaryRow(Icons.upload_rounded, 'سجلات مرفوعة', '${details.customersUploaded + details.invoicesUploaded}'),
+            _buildSummaryRow(Icons.download_rounded, 'سجلات محمّلة', '${details.customersDownloaded + details.invoicesDownloaded}'),
+            _buildSummaryRow(Icons.update_rounded, 'سجلات محدّثة', '${details.recordsUpdated}'),
+            if (details.mergedCustomers.isNotEmpty) ...[
+              const Divider(height: 24),
+              Text('تم دمج ${details.mergedCustomers.length} زبائن مكررين.', 
+                style: const TextStyle(fontSize: 12, color: Colors.orange, fontWeight: FontWeight.bold)),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('حسنًا', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: Colors.blue),
+          const SizedBox(width: 8),
+          Text('$label:', style: const TextStyle(fontSize: 13)),
+          const Spacer(),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+        ],
+      ),
     );
   }
 
@@ -656,27 +850,27 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
     int crossAxisCount = (size.width > 1400) ? 4 : 2;
     final db = context.read<DatabaseService>();
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(isMobile ? 16 : 32),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          /*
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+    return Consumer<SyncService>(
+      builder: (context, syncService, _) {
+        return SingleChildScrollView(
+          padding: EdgeInsets.all(isMobile ? 16 : 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildSyncButton(isDark, syncService.isSyncing || context.read<SyncManager>().isSyncing),
-            ],
-          ),
-          if (syncService.isSyncing || context.read<SyncManager>().isSyncing || _syncStatus.contains('فشلت') || _syncStatus.contains('نجاح')) ...[
-            const SizedBox(height: 16),
-            _buildSyncProgress(isDark, syncService.isSyncing || context.read<SyncManager>().isSyncing),
-          ],
-          const SizedBox(height: 24),
-          _buildLastSyncDetails(isDark, isMobile),
-          const SizedBox(height: 32),
-          */
-          FutureBuilder<Map<String, dynamic>>(
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  _buildSyncButton(isDark, syncService.isSyncing || context.read<SyncManager>().isSyncing),
+                ],
+              ),
+              if (syncService.isSyncing || context.read<SyncManager>().isSyncing || _syncStatus.contains('فشلت') || _syncStatus.contains('نجاح')) ...[
+                const SizedBox(height: 16),
+                _buildSyncProgress(isDark, syncService.isSyncing || context.read<SyncManager>().isSyncing),
+              ],
+              const SizedBox(height: 24),
+              _buildLastSyncDetails(isDark, isMobile),
+              const SizedBox(height: 32),
+              FutureBuilder<Map<String, dynamic>>(
                 future: db.getGlobalStats(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) return const LinearProgressIndicator();
@@ -718,6 +912,8 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
             ],
           ),
         );
+      }
+    );
   }
 
   Widget _buildSyncButton(bool isDark, bool isSyncing) {
@@ -736,6 +932,10 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
   }
 
   Widget _buildSyncProgress(bool isDark, bool isSyncing) {
+    final syncManager = context.watch<SyncManager>();
+    final progress = syncManager.syncProgress;
+    final statusText = syncManager.syncStatusText.isNotEmpty ? syncManager.syncStatusText : _syncStatus;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -750,14 +950,36 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
             children: [
               const Icon(Icons.cloud_sync_rounded, color: Colors.blue, size: 20),
               const SizedBox(width: 12),
-              Expanded(child: Text(_syncStatus, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: isDark ? Colors.white : Colors.blue[900]), overflow: TextOverflow.ellipsis)),
+              Expanded(
+                child: Text(
+                  statusText,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: isDark ? Colors.white : Colors.blue[900],
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (isSyncing)
+                Text(
+                  '${(progress * 100).toStringAsFixed(0)}%',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.blue[300] : Colors.blue[800],
+                  ),
+                ),
             ],
           ),
           if (isSyncing) ...[
             const SizedBox(height: 12),
-            const ClipRRect(
-              borderRadius: BorderRadius.all(Radius.circular(10)),
-              child: LinearProgressIndicator(minHeight: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: LinearProgressIndicator(
+                value: progress > 0 ? progress : null,
+                minHeight: 6,
+              ),
             ),
           ],
         ],

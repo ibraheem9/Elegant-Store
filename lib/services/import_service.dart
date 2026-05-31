@@ -245,6 +245,7 @@ class ImportService {
 
               if (incomingVersion >= localVersion) {
                 row.remove('id'); // never overwrite the local auto-increment id
+                row['is_synced'] = 0; // Mark as unsynced so it gets pushed to server
                 await txn.update(
                   table,
                   row,
