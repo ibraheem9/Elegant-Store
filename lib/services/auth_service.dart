@@ -73,7 +73,8 @@ class AuthService extends ChangeNotifier {
     final String? username = prefs.getString('saved_username');
     final int? expiry = prefs.getInt('session_expiry');
     
-    if (_token != null && username != null) {
+    // Allow session restoration if username is present, even without a token (offline support)
+    if (username != null) {
       if (expiry != null && DateTime.now().millisecondsSinceEpoch > expiry) {
         await logout();
         return;
@@ -107,10 +108,10 @@ class AuthService extends ChangeNotifier {
         await prefs.setString('last_logged_username', username);
         await prefs.setString('last_logged_password', password);
         
-        if (saveSession) {
-          final expiry = DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch;
-          await prefs.setInt('session_expiry', expiry);
-        }
+        // Always save session expiry for 30 days unless explicitly logged out.
+        // This fulfills the user request for a month-long session.
+        final expiry = DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch;
+        await prefs.setInt('session_expiry', expiry);
         
         notifyListeners();
         return LoginResult.success;
@@ -216,10 +217,10 @@ class AuthService extends ChangeNotifier {
         }
         await prefs.setString('last_logged_password', password);
 
-        if (saveSession) {
-          final expiry = DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch;
-          await prefs.setInt('session_expiry', expiry);
-        }
+        // Always save session expiry for 30 days unless explicitly logged out.
+        // This fulfills the user request for a month-long session.
+        final expiry = DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch;
+        await prefs.setInt('session_expiry', expiry);
 
         notifyListeners();
         return LoginResult.success;

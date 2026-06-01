@@ -18,7 +18,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _focusNodePassword = FocusNode();
   bool _isLoading = false;
   bool _obscurePassword = true;
-  bool _keepMeLoggedIn = false;
+  bool _keepMeLoggedIn = true;
   bool _showBiometricIcon = false;
 
   /// Status message shown while the initial sync runs after first login
