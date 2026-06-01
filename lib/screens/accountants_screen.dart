@@ -174,16 +174,6 @@ class _AccountantsScreenState extends State<AccountantsScreen> {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      appBar: AppBar(
-        title: const Text('إدارة الموظفين', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
-        foregroundColor: isDark ? Colors.white : Colors.black87,
-        elevation: 0,
-        actions: [
-          NotificationBadge(isDark: isDark),
-          const SizedBox(width: 8),
-        ],
-      ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

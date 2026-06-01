@@ -21,12 +21,12 @@ class AppThemes {
     ),
     scaffoldBackgroundColor: AppColors.lightBackground,
     appBarTheme: const AppBarTheme(
-      color: AppColors.lightPrimary,
-      foregroundColor: AppColors.lightOnPrimary,
+      backgroundColor: Colors.white,
+      foregroundColor: Color(0xFF0F172A),
       elevation: 0,
       centerTitle: true,
       titleTextStyle: TextStyle(
-        color: AppColors.lightOnPrimary,
+        color: Color(0xFF0F172A),
         fontSize: 20,
         fontWeight: FontWeight.bold,
       ),
@@ -124,7 +124,7 @@ class AppThemes {
     ),
     scaffoldBackgroundColor: AppColors.darkBackground,
     appBarTheme: const AppBarTheme(
-      color: AppColors.darkSurface,
+      backgroundColor: AppColors.darkSurface,
       foregroundColor: AppColors.darkOnSurface,
       elevation: 0,
       centerTitle: true,

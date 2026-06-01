@@ -248,39 +248,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                       const SizedBox(height: 32),
 
-                      // ── Business Metrics (Visible only to Manager/Developer) ───────
-                      if (isManager) ...[
-                        _buildSection('إحصائيات العمل', isDark, [
-                          GridView.count(
-                            crossAxisCount: isMobile ? 2 : 4,
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            mainAxisSpacing: 12,
-                            crossAxisSpacing: 12,
-                            childAspectRatio: isMobile ? 1.5 : 2,
-                            children: [
-                              _buildMetricCard('إجمالي المبيعات', '${_profile?.totalSales.toStringAsFixed(2) ?? "0.00"} ₪', Icons.trending_up_rounded, Colors.green),
-                              _buildMetricCard('إجمالي المشتريات', '${_profile?.totalPurchase.toStringAsFixed(2) ?? "0.00"} ₪', Icons.shopping_cart_rounded, Colors.orange),
-                              _buildMetricCard('عدد الفواتير', '${_profile?.invoiceCount ?? 0}', Icons.receipt_long_rounded, Colors.blue),
-                              _buildMetricCard('عدد الزبائن', '${_profile?.customersCount ?? 0}', Icons.people_alt_rounded, Colors.purple),
-                            ],
-                          ),
-                        ]),
-                        const SizedBox(height: 32),
-                      ],
-
-                      // ── Device Information (Visible only to Manager/Developer) ──────
-                      if (isManager) ...[
-                        _buildSection('معلومات الجهاز والمزامنة', isDark, [
-                          _buildInfoRow('معرف الجهاز (Device ID)', _deviceInfo?.deviceId ?? '-', isDark),
-                          const Divider(),
-                          _buildInfoRow('اسم الجهاز', _deviceInfo?.deviceName ?? '-', isDark),
-                          const Divider(),
-                          _buildInfoRow('آخر مزامنة', _profile?.lastSyncTime?.toLocalArabic() ?? 'لم تتم المزامنة بعد', isDark),
-                        ]),
-                        const SizedBox(height: 32),
-                      ],
-
                       if (canEdit)
                         SizedBox(
                           width: double.infinity,

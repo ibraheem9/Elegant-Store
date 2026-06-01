@@ -27,6 +27,7 @@ import 'unpaid_invoices_screen.dart';
 import 'contact_us_screen.dart';
 import 'about_us_screen.dart';
 import 'profile_screen.dart';
+import 'general_statistics_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -177,6 +178,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 13: return const ContactUsScreen();
       case 14: return const AboutUsScreen();
       case 15: return const ProfileScreen();
+      case 16: return const GeneralStatisticsScreen();
       default: return const DashboardHomeScreen();
     }
   }
@@ -199,6 +201,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 13: return 'تواصل معنا';
       case 14: return 'عن المطور';
       case 15: return 'الملف الشخصي للمتجر';
+      case 16: return 'الإحصائيات العامة';
       default: return 'Elegant Store';
     }
   }
@@ -259,6 +262,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _buildSidebarItem(1, 'شاشة البيع', Icons.receipt_long_rounded),
                 _buildSidebarItem(8, 'الفواتير غير المدفوعة', Icons.unpublished_rounded),
                 _buildSidebarItem(2, 'إحصائيات اليوم', Icons.bar_chart_rounded),
+                _buildSidebarItem(16, 'الإحصائيات العامة', Icons.analytics_rounded),
                 _buildSidebarItem(3, 'المشتريات', Icons.shopping_cart_rounded),
                 _buildSidebarItem(4, 'إدارة الزبائن', Icons.people_alt_rounded),
                 if (auth.isManager())
@@ -301,6 +305,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _buildSidebarItem(1, 'شاشة البيع', Icons.receipt_long_rounded),
                 _buildSidebarItem(8, 'الفواتير غير المدفوعة', Icons.unpublished_rounded),
                 _buildSidebarItem(2, 'إحصائيات اليوم', Icons.bar_chart_rounded),
+                _buildSidebarItem(16, 'الإحصائيات العامة', Icons.analytics_rounded),
                 _buildSidebarItem(3, 'المشتريات', Icons.shopping_cart_rounded),
                 _buildSidebarItem(4, 'إدارة الزبائن', Icons.people_alt_rounded),
                 if (auth.isManager())
@@ -341,17 +346,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
         case 0: return 0;
         case 1: return 1;
         case 2: return 2;
-        case 3: return 3;
-        case 4: return 4;
-        case 5: return 5; // Accountants (Manager only)
-        case 6: return isManager ? 6 : 5;
-        case 9: return isManager ? 7 : 6;
-        case 10: return isManager ? 7 : 6;
-        case 11: return isManager ? 8 : 7;
-        case 12: return isManager ? 9 : 8;
-        case 13: return isManager ? 10 : 9;
-        case 14: return isManager ? 11 : 10;
-        case 15: return isManager ? 12 : 11;
+        case 16: return 3; // General Statistics
+        case 3: return 4;
+        case 4: return 5;
+        case 5: return 6; // Accountants (Manager only)
+        case 6: return isManager ? 7 : 6;
+        case 9: return isManager ? 8 : 7;
+        case 10: return isManager ? 8 : 7;
+        case 11: return isManager ? 9 : 8;
+        case 12: return isManager ? 10 : 9;
+        case 13: return isManager ? 11 : 10;
+        case 14: return isManager ? 12 : 11;
+        case 15: return isManager ? 13 : 12;
         default: return 0;
       }
     }
@@ -369,16 +375,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
             case 0: targetScreen = 0; break;
             case 1: targetScreen = 1; break;
             case 2: targetScreen = 2; break;
-            case 3: targetScreen = 3; break;
-            case 4: targetScreen = 4; break;
-            case 5: targetScreen = 5; break;
-            case 6: targetScreen = 6; break;
-            case 7: targetScreen = 9; break;
-            case 8: targetScreen = 11; break;
-            case 9: targetScreen = 12; break;
-            case 10: targetScreen = 13; break;
-            case 11: targetScreen = 14; break;
-            case 12: targetScreen = 15; break;
+            case 3: targetScreen = 16; break;
+            case 4: targetScreen = 3; break;
+            case 5: targetScreen = 4; break;
+            case 6: targetScreen = 5; break;
+            case 7: targetScreen = 6; break;
+            case 8: targetScreen = 9; break;
+            case 9: targetScreen = 11; break;
+            case 10: targetScreen = 12; break;
+            case 11: targetScreen = 13; break;
+            case 12: targetScreen = 14; break;
+            case 13: targetScreen = 15; break;
             default: targetScreen = 0;
           }
         } else {
@@ -386,15 +393,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
             case 0: targetScreen = 0; break;
             case 1: targetScreen = 1; break;
             case 2: targetScreen = 2; break;
-            case 3: targetScreen = 3; break;
-            case 4: targetScreen = 4; break;
-            case 5: targetScreen = 6; break;
-            case 6: targetScreen = 9; break;
-            case 7: targetScreen = 11; break;
-            case 8: targetScreen = 12; break;
-            case 9: targetScreen = 13; break;
-            case 10: targetScreen = 14; break;
-            case 11: targetScreen = 15; break;
+            case 3: targetScreen = 16; break;
+            case 4: targetScreen = 3; break;
+            case 5: targetScreen = 4; break;
+            case 6: targetScreen = 6; break;
+            case 7: targetScreen = 9; break;
+            case 8: targetScreen = 11; break;
+            case 9: targetScreen = 12; break;
+            case 10: targetScreen = 13; break;
+            case 11: targetScreen = 14; break;
+            case 12: targetScreen = 15; break;
             default: targetScreen = 0;
           }
         }
@@ -409,6 +417,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         const NavigationRailDestination(icon: Icon(Icons.dashboard_rounded, color: Colors.white60), selectedIcon: Icon(Icons.dashboard_rounded), label: Text('لوحة التحكم')),
         const NavigationRailDestination(icon: Icon(Icons.receipt_long_rounded, color: Colors.white60), selectedIcon: Icon(Icons.receipt_long_rounded), label: Text('شاشة البيع')),
         const NavigationRailDestination(icon: Icon(Icons.bar_chart_rounded, color: Colors.white60), selectedIcon: Icon(Icons.bar_chart_rounded), label: Text('إحصائيات اليوم')),
+        const NavigationRailDestination(icon: Icon(Icons.analytics_rounded, color: Colors.white60), selectedIcon: Icon(Icons.analytics_rounded), label: Text('الإحصائيات العامة')),
         const NavigationRailDestination(icon: Icon(Icons.shopping_cart_rounded, color: Colors.white60), selectedIcon: Icon(Icons.shopping_cart_rounded), label: Text('المشتريات')),
         const NavigationRailDestination(icon: Icon(Icons.people_alt_rounded, color: Colors.white60), selectedIcon: Icon(Icons.people_alt_rounded), label: Text('إدارة الزبائن')),
         if (auth.isManager())

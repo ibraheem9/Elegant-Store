@@ -184,7 +184,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             'التنبيهات',
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white : Colors.black87,
+              color: isDark ? Colors.white : const Color(0xFF0F172A),
             ),
           ),
           if (_totalCount > 0) ...[

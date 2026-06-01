@@ -151,10 +151,16 @@ class _AddAccountantScreenState extends State<AddAccountantScreen> {
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.grey[50],
       appBar: AppBar(
-        title: const Text('إضافة موظف جديد'),
+        title: Text(
+          'إضافة موظف جديد',
+          style: TextStyle(
+            color: isDark ? Colors.white : const Color(0xFF0F172A),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        foregroundColor: isDark ? Colors.white : Colors.black,
+        foregroundColor: isDark ? Colors.white : const Color(0xFF0F172A),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(32, 32, 32, 56),

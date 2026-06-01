@@ -154,7 +154,7 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
         appBar: AppBar(
           title: const Text('تفاصيل المزامنة', style: TextStyle(fontWeight: FontWeight.bold)),
           backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
-          foregroundColor: isDark ? Colors.white : Colors.black87,
+          foregroundColor: isDark ? Colors.white : const Color(0xFF0F172A),
           elevation: 0,
           actions: [
             NotificationBadge(isDark: isDark),

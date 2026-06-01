@@ -154,17 +154,6 @@ class _GeneralStatisticsScreenState extends State<GeneralStatisticsScreen> {
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-      appBar: AppBar(
-        title: const Text('الإحصائيات العامة', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        actions: [
-          IconButton(
-            onPressed: _loadData,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
-      ),
       body: _isLoading
           ? ShimmerLoading(isDark: isDark, itemCount: 6)
           : SingleChildScrollView(

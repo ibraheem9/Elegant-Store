@@ -612,6 +612,7 @@ class _AddEditCustomerPage extends StatelessWidget {
           : const Color(0xFFF1F5F9),
       appBar: AppBar(
         backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+        foregroundColor: isDark ? Colors.white : const Color(0xFF0F172A),
         elevation: 0,
         leading: IconButton(
           icon: Icon(

@@ -301,6 +301,8 @@ class _PurchasesRecycleBinScreenState
       backgroundColor:
           isDark ? const Color(0xFF0B1120) : const Color(0xFFF1F5F9),
       appBar: AppBar(
+        foregroundColor: isDark ? Colors.white : const Color(0xFF0F172A),
+        backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -313,13 +315,11 @@ class _PurchasesRecycleBinScreenState
                   fontSize: 12,
                   color: isDark
                       ? Colors.white.withOpacity(0.6)
-                      : Colors.black.withOpacity(0.5),
+                      : const Color(0xFF0F172A).withOpacity(0.5),
                 ),
               ),
           ],
         ),
-        backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
-        foregroundColor: isDark ? Colors.white : Colors.black87,
         elevation: 0,
         actions: [
           if (_items.isNotEmpty)

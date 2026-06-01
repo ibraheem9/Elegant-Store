@@ -104,11 +104,17 @@ class _ExportDataScreenState extends State<ExportDataScreen> {
     return Scaffold(
       backgroundColor: isDark ? Colors.transparent : const Color(0xFFF1F5F9),
       appBar: AppBar(
-        title: const Text('تصدير مخصص للبيانات'),
+        title: Text(
+          'تصدير مخصص للبيانات',
+          style: TextStyle(
+            color: isDark ? Colors.white : const Color(0xFF0F172A),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        foregroundColor: isDark ? Colors.white : Colors.black,
+        foregroundColor: isDark ? Colors.white : const Color(0xFF0F172A),
       ),
       body: Center(
         child: Container(

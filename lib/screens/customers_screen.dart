@@ -1346,7 +1346,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                       _currentCustomer.name,
                       style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : Colors.black,
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
                           fontSize: isMobile ? 16 : 20),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -1366,7 +1366,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                     _currentCustomer.name,
                     style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : Colors.black,
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
                         fontSize: isMobile ? 16 : 20),
                     overflow: TextOverflow.ellipsis,
                   ),
