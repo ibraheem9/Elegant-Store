@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/database_service.dart';
@@ -18,8 +19,12 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
   final _cityController = TextEditingController();
   final _phoneController = TextEditingController();
   final _whatsappController = TextEditingController();
+  String _selectedCountryCode = '+970';
   bool _isLoading = false;
   bool _isSaving = false;
+  bool _isDataRealConfirmed = true; // Default to true if they already filled it, or false if not.
+  // Actually, better to keep it true for existing profiles unless they change something.
+  // Or just make it mandatory for saving.
 
   @override
   void initState() {
@@ -40,7 +45,20 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
       _addressController.text = profile.address ?? '';
       _cityController.text = profile.city ?? '';
       _phoneController.text = profile.mobile ?? '';
-      _whatsappController.text = profile.whatsapp ?? '';
+      
+      final String whatsapp = profile.whatsapp ?? '';
+      if (whatsapp.startsWith('+972')) {
+        _selectedCountryCode = '+972';
+        _whatsappController.text = whatsapp.substring(4);
+      } else if (whatsapp.startsWith('+970')) {
+        _selectedCountryCode = '+970';
+        _whatsappController.text = whatsapp.substring(4);
+      } else {
+        _whatsappController.text = whatsapp;
+      }
+      
+      // If profile is already complete, we can assume they confirmed it before
+      _isDataRealConfirmed = profile.storeName != null && profile.storeName!.isNotEmpty;
     }
     if (mounted) setState(() => _isLoading = false);
   }
@@ -66,8 +84,8 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
 
   String? _validateWhatsapp(String? value) {
     if (value == null || value.isEmpty) return 'يرجى إدخال رقم واتساب';
-    if (!RegExp(r'^\+(970|972)\d{9}$').hasMatch(value)) {
-      return 'يرجى البدء بـ +970 أو +972 متبوعاً بـ 9 أرقام';
+    if (!RegExp(r'^\d{9}$').hasMatch(value)) {
+      return 'يرجى إدخال 9 أرقام بعد رمز الدولة';
     }
     return null;
   }
@@ -78,13 +96,14 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
     setState(() => _isSaving = true);
     try {
       final telemetry = context.read<TelemetryService>();
+      final fullWhatsapp = '$_selectedCountryCode${_whatsappController.text.trim()}';
       await telemetry.updateAndUploadProfile(
         storeName: _storeNameController.text.trim(),
         ownerName: _ownerNameController.text.trim(),
         address: _addressController.text.trim(),
         city: _cityController.text.trim(),
         phoneNumber: _phoneController.text.trim(),
-        whatsappNumber: _whatsappController.text.trim(),
+        whatsappNumber: fullWhatsapp,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -149,14 +168,69 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                   ]),
                   const SizedBox(height: 16),
                   _buildResponsiveRow(isMobile, [
-                    _buildTextField('رقم الهاتف', _phoneController, Icons.phone_android_rounded, validator: _validatePhone),
-                    _buildTextField('رقم الواتساب', _whatsappController, Icons.chat_rounded, validator: _validateWhatsapp),
+                    _buildTextField('رقم الهاتف', _phoneController, Icons.phone_android_rounded, validator: _validatePhone, textAlign: TextAlign.left),
+                    Directionality(
+                      textDirection: ui.TextDirection.ltr,
+                      child: IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String>(
+                                  value: _selectedCountryCode,
+                                  dropdownColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+                                  items: const [
+                                    DropdownMenuItem(value: '+970', child: Text('+970', style: TextStyle(fontWeight: FontWeight.bold))),
+                                    DropdownMenuItem(value: '+972', child: Text('+972', style: TextStyle(fontWeight: FontWeight.bold))),
+                                  ],
+                                  onChanged: (v) => setState(() => _selectedCountryCode = v!),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _buildTextField('رقم الواتساب', _whatsappController, Icons.chat_rounded, validator: _validateWhatsapp, textAlign: TextAlign.left),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ]),
+                  const SizedBox(height: 24),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                    ),
+                    child: Row(
+                      children: [
+                        Checkbox(
+                          value: _isDataRealConfirmed,
+                          onChanged: (v) => setState(() => _isDataRealConfirmed = v ?? false),
+                          activeColor: Colors.blue,
+                        ),
+                        const Expanded(
+                          child: Text(
+                            'أؤكد أن هذه البيانات حقيقية وتخص متجري. هذه البيانات مهمة جداً لضمان استمرارية عمل التطبيق والحصول على التحديثات المستقبلية والاحتفاظ بنسخة احتياطية آمنة.',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 32),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: _isSaving ? null : _submit,
+                      onPressed: (_isSaving || !_isDataRealConfirmed) ? null : _submit,
                       icon: _isSaving 
                           ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                           : const Icon(Icons.save_rounded, color: Colors.white),
@@ -189,10 +263,12 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
     );
   }
 
-  Widget _buildTextField(String label, TextEditingController controller, IconData icon, {String? Function(String?)? validator}) {
+  Widget _buildTextField(String label, TextEditingController controller, IconData icon, {String? Function(String?)? validator, TextAlign textAlign = TextAlign.start}) {
     return TextFormField(
       controller: controller,
       validator: validator ?? (v) => v == null || v.isEmpty ? 'هذا الحقل مطلوب' : null,
+      textAlign: textAlign,
+      textDirection: textAlign == TextAlign.left ? ui.TextDirection.ltr : null,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: Colors.blue),

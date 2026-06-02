@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -269,7 +270,7 @@ class AboutUsScreen extends StatelessWidget {
         title: Text(
           label,
           style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-          textDirection: TextDirection.ltr,
+          textDirection: ui.TextDirection.ltr,
           textAlign: TextAlign.right,
         ),
         trailing: const Icon(Icons.open_in_new_rounded, size: 18, color: Colors.grey),

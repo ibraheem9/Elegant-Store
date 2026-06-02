@@ -35,12 +35,18 @@ class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
 
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
+  State<DashboardScreen> createState() => DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
   int _previousIndex = 0;
+
+  void setSelectedIndex(int index) {
+    if (mounted) {
+      setState(() => _selectedIndex = index);
+    }
+  }
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final GlobalKey<PaymentMethodsScreenState> _paymentMethodsKey = GlobalKey<PaymentMethodsScreenState>();
   final GlobalKey<PurchasesMethodsScreenState> _purchasesMethodsKey = GlobalKey<PurchasesMethodsScreenState>();

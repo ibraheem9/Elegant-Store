@@ -1,5 +1,6 @@
 import '../utils/timestamp_formatter.dart';
 import '../widgets/notification_badge.dart';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -864,6 +865,8 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 keyboardType: TextInputType.number,
+                textAlign: TextAlign.left,
+                textDirection: ui.TextDirection.ltr,
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<PaymentMethod>(
@@ -1020,6 +1023,8 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
               TextField(
                 controller: amountController,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                textAlign: TextAlign.left,
+                textDirection: ui.TextDirection.ltr,
                 inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
                 decoration: InputDecoration(
                   labelText: 'المبلغ الجديد',

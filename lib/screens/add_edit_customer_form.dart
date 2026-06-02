@@ -1,4 +1,5 @@
 import '../utils/timestamp_formatter.dart';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -269,6 +270,7 @@ class _CustomerFormBodyState extends State<_CustomerFormBody> {
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
+                  textAlign: TextAlign.left,
                   errorText: _limitError,
                   onChanged: (_) => setState(() => _limitError = null),
                 ),
@@ -292,6 +294,7 @@ class _CustomerFormBodyState extends State<_CustomerFormBody> {
                   decimal: true,
                   signed: true,
                 ),
+                textAlign: TextAlign.left,
                 inputFormatters: [
                   // Allow: optional leading minus, digits, one decimal point
                   FilteringTextInputFormatter.allow(RegExp(r'^-?\d*\.?\d*')),
@@ -381,6 +384,7 @@ class _CustomerFormBodyState extends State<_CustomerFormBody> {
     String? errorText,
     int maxLines = 1,
     TextInputType? keyboardType,
+    TextAlign textAlign = TextAlign.start,
     ValueChanged<String>? onChanged,
     List<TextInputFormatter>? inputFormatters,
   }) {
@@ -393,6 +397,8 @@ class _CustomerFormBodyState extends State<_CustomerFormBody> {
             controller: controller,
             maxLines: maxLines,
             keyboardType: keyboardType,
+            textAlign: textAlign,
+            textDirection: textAlign == TextAlign.left ? ui.TextDirection.ltr : null,
             inputFormatters: inputFormatters,
             onChanged: onChanged,
             style: TextStyle(color: isDark ? Colors.white : Colors.black),

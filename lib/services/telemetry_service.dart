@@ -26,6 +26,15 @@ class TelemetryService extends ChangeNotifier {
 
   TelemetryService(this._dbService);
 
+  bool _isProfileComplete = true; // Default to true to avoid flash of setup screen
+  bool get isProfileComplete => _isProfileComplete;
+
+  Future<void> checkProfileCompletion() async {
+    final deviceId = await getOrCreateDeviceId();
+    _isProfileComplete = await _dbService.isProfileComplete(deviceId);
+    notifyListeners();
+  }
+
   Future<String> getOrCreateDeviceId() async {
     final prefs = await SharedPreferences.getInstance();
     String? deviceId = prefs.getString('device_id');
@@ -121,6 +130,7 @@ class TelemetryService extends ChangeNotifier {
     );
 
     await _dbService.saveStoreProfile(profile);
+    _isProfileComplete = await _dbService.isProfileComplete(deviceId);
     notifyListeners(); // Notify UI that profile has changed
     await uploadProfile(profile);
   }

@@ -1,4 +1,5 @@
 import '../utils/timestamp_formatter.dart';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -660,6 +661,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       child: TextField(
         controller: controller,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        textAlign: TextAlign.left,
+        textDirection: ui.TextDirection.ltr,
         onChanged: onChanged,
         style: TextStyle(
           fontSize: 24,

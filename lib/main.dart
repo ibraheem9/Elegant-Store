@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:workmanager/workmanager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
 import 'package:window_manager/window_manager.dart';
@@ -17,17 +16,15 @@ import 'services/sync_service.dart';
 import 'services/device_sync_service.dart';
 import 'services/sync_manager.dart';
 import 'services/license_service.dart';
-import 'services/customer_tracking_service.dart';
+import 'services/telemetry_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/license_gate_screen.dart';
+import 'screens/profile_setup_screen.dart';
 import 'core/config/app_themes.dart';
 import 'core/config/api_config.dart';
 
 // Import sync services for ChangeNotifierProvider (even if disabled)
-import 'services/sync_service.dart';
-import 'services/sync_manager.dart';
-import 'services/device_sync_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -90,7 +87,7 @@ void main() async {
   // This forces Skia rendering which is more compatible
   // See: https://github.com/flutter/flutter/issues/...
   // Impeller causes "Format allocation info not found" errors on Mali GPUs
-  final binding = WidgetsFlutterBinding.ensureInitialized();
+  WidgetsFlutterBinding.ensureInitialized();
   // Note: For Android, Impeller can be disabled in AndroidManifest.xml or via native code
   // For now, we rely on the device's GPU compatibility
 
@@ -145,6 +142,7 @@ void main() async {
 
   final syncService = SyncService(dbService, prefs);
   final authService = AuthService(dbService, syncService);
+  final telemetryService = TelemetryService(dbService);
   
   // initSession with timeout to prevent splash screen hang
   try {
@@ -152,8 +150,16 @@ void main() async {
       const Duration(seconds: 8),
       onTimeout: () => debugPrint('initSession timed out, continuing with cached state...'),
     );
+    
+    // Also check profile completion if logged in
+    if (authService.isLoggedIn) {
+      await telemetryService.checkProfileCompletion().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => debugPrint('checkProfileCompletion timed out'),
+      );
+    }
   } catch (e) {
-    debugPrint('initSession failed: $e');
+    debugPrint('initSession/telemetry check failed: $e');
   }
 
   /* 
@@ -178,6 +184,7 @@ void main() async {
         ChangeNotifierProvider<SyncService>(create: (_) => syncService),
         ChangeNotifierProvider<AuthService>(create: (_) => authService),
         ChangeNotifierProvider<ThemeNotifier>(create: (_) => ThemeNotifier()),
+        ChangeNotifierProvider<TelemetryService>(create: (_) => telemetryService),
         // Add DeviceSyncService provider
         ProxyProvider<AuthService, DeviceSyncService>(
           update: (_, authService, __) {
@@ -302,6 +309,9 @@ class _AppHomeState extends State<_AppHome> with WidgetsBindingObserver {
 
     _postLoginSyncTriggered = true;
 
+    // Check if store profile is complete
+    context.read<TelemetryService>().checkProfileCompletion();
+
     // We no longer trigger automatic sync on login as requested.
     // SyncManager is now manual.
   }
@@ -311,16 +321,35 @@ class _AppHomeState extends State<_AppHome> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       final authService = context.read<AuthService>();
       if (authService.isLoggedIn) {
-        // We no longer trigger automatic sync on app resume as requested.
+        // Refresh profile completion check on resume
+        context.read<TelemetryService>().checkProfileCompletion();
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AuthService>(
-      builder: (context, authService, _) {
-        return authService.isLoggedIn ? const DashboardScreen() : const LoginScreen();
+    return Consumer2<AuthService, TelemetryService>(
+      builder: (context, authService, telemetryService, _) {
+        if (!authService.isLoggedIn) {
+          // Reset sync trigger when logged out so it runs again on next login
+          _postLoginSyncTriggered = false;
+          return const LoginScreen();
+        }
+
+        // If logged in but sync not triggered yet, trigger it
+        if (!_postLoginSyncTriggered) {
+          // Use microtask to avoid calling notifyListeners during build
+          Future.microtask(() => _triggerPostLoginSync());
+        }
+
+        // If logged in, check if profile is complete (only for managers)
+        // We only show setup screen if we are SURE it's not complete
+        if (authService.isManager() && !telemetryService.isProfileComplete) {
+          return const ProfileSetupScreen();
+        }
+
+        return const DashboardScreen();
       },
     );
   }

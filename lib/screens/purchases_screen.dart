@@ -1,4 +1,5 @@
 import '../utils/timestamp_formatter.dart';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -8,6 +9,9 @@ import '../services/database_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/shimmer_loading.dart';
 import 'purchases_recycle_bin_screen.dart';
+
+import '../widgets/empty_methods_alert.dart';
+import 'dashboard_screen.dart';
 
 class PurchasesScreen extends StatefulWidget {
   const PurchasesScreen({Key? key}) : super(key: key);
@@ -233,6 +237,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
               TextField(
                 controller: amountCtrl,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                textAlign: TextAlign.left,
+                textDirection: ui.TextDirection.ltr,
                 inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
                 decoration: const InputDecoration(labelText: 'المبلغ الجديد', prefixIcon: Icon(Icons.payments, size: 18)),
               ),
@@ -531,10 +537,32 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     final size    = MediaQuery.of(context).size;
     final isMobile = size.width < 700;
 
+    if (_isInitialLoading && _purchaseMethods.isEmpty) {
+      return ShimmerLoading(isDark: isDark, itemCount: 5);
+    }
+
     return Scaffold(
       backgroundColor: isDark ? Colors.transparent : const Color(0xFFF1F5F9),
-      body: _isInitialLoading
-          ? ShimmerLoading(isDark: isDark, itemCount: 5)
+      body: _purchaseMethods.isEmpty && !_isInitialLoading
+          ? Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(32),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 600),
+                  child: EmptyMethodsAlert(
+                    title: 'لا توجد وسائل دفع للمشتريات!',
+                    message: 'لتسجيل المشتريات، يجب أولاً إضافة وسيلة دفع من نوع (مشتريات) من شاشة إدارة وسائل الدفع.',
+                    isDark: isDark,
+                    onActionPressed: () {
+                      final dashboard = context.findAncestorStateOfType<DashboardScreenState>();
+                      if (dashboard != null) {
+                        dashboard.setSelectedIndex(10); // Index 10 is PurchasesMethodsScreen
+                      }
+                    },
+                  ),
+                ),
+              ),
+            )
           : Column(
               children: [
                 Expanded(
@@ -769,6 +797,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     return TextField(
       controller: ctrl,
       keyboardType: isNumeric ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
+      textAlign: isNumeric ? TextAlign.left : TextAlign.start,
+      textDirection: isNumeric ? ui.TextDirection.ltr : null,
       inputFormatters: isNumeric ? [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))] : null,
       style: TextStyle(fontSize: 14, color: isDark ? Colors.white : Colors.black),
       decoration: InputDecoration(

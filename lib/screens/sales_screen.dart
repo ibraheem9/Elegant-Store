@@ -6,11 +6,13 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../widgets/shimmer_loading.dart';
+import '../widgets/empty_methods_alert.dart';
 import '../services/database_service.dart';
 import '../services/auth_service.dart';
 import '../core/constants/app_colors.dart';
 import 'customers_screen.dart';
 import 'recycle_bin_screen.dart';
+import 'dashboard_screen.dart';
 
 class SalesScreen extends StatefulWidget {
   const SalesScreen({Key? key}) : super(key: key);
@@ -601,6 +603,8 @@ class _SalesScreenState extends State<SalesScreen> {
                 controller: amountController,
                 decoration: const InputDecoration(labelText: 'المبلغ الجديد'),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                textAlign: TextAlign.left,
+                textDirection: ui.TextDirection.ltr,
                 inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
               ),
               const SizedBox(height: 12),
@@ -1020,22 +1024,46 @@ class _SalesScreenState extends State<SalesScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final size = MediaQuery.of(context).size;
     final bool isMobile = size.width < 900;
+    final auth = context.read<AuthService>();
+
+    if (_isDataLoading && _paymentMethods.isEmpty) {
+      return ShimmerLoading(isDark: isDark, itemCount: 6);
+    }
 
     return Scaffold(
       backgroundColor: isDark ? Colors.transparent : const Color(0xFFF1F5F9),
-      body: _isDataLoading
-        ? ShimmerLoading(isDark: isDark, itemCount: 6)
-        : SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(isMobile ? 16 : 32, isMobile ? 16 : 32, isMobile ? 16 : 32, 40),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildInvoiceForm(isMobile, isDark),
-                const SizedBox(height: 32),
-                _buildInvoiceSection(isMobile, isDark),
-              ],
+      body: _paymentMethods.isEmpty && !_isDataLoading
+          ? Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(32),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 600),
+                  child: EmptyMethodsAlert(
+                    title: 'لا توجد وسائل دفع!',
+                    message: 'للبدء في تسجيل المبيعات، يجب إضافة وسيلة دفع واحدة على الأقل (مثلاً: كاش، تطبيق، إلخ).',
+                    isDark: isDark,
+                    onActionPressed: () {
+                      // Navigate to payment methods screen via Dashboard provider
+                      final dashboard = context.findAncestorStateOfType<DashboardScreenState>();
+                      if (dashboard != null) {
+                        dashboard.setSelectedIndex(9); // Index 9 is PaymentMethodsScreen
+                      }
+                    },
+                  ),
+                ),
+              ),
+            )
+          : SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(isMobile ? 16 : 32, isMobile ? 16 : 32, isMobile ? 16 : 32, 40),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildInvoiceForm(isMobile, isDark),
+                  const SizedBox(height: 32),
+                  _buildInvoiceSection(isMobile, isDark),
+                ],
+              ),
             ),
-          ),
     );
   }
 
@@ -1167,6 +1195,8 @@ class _SalesScreenState extends State<SalesScreen> {
     return TextField(
       controller: _amountController,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      textAlign: TextAlign.left,
+      textDirection: ui.TextDirection.ltr,
       inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
       decoration: const InputDecoration(
         labelText: 'المبلغ (NIS)',

@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
@@ -18,7 +19,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final _cityController = TextEditingController();
   final _phoneController = TextEditingController();
   final _whatsappController = TextEditingController();
+  String _selectedCountryCode = '+970';
   bool _isLoading = false;
+  bool _isDataRealConfirmed = false;
 
   @override
   void initState() {
@@ -48,8 +51,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
   String? _validateWhatsapp(String? value) {
     if (value == null || value.isEmpty) return 'يرجى إدخال رقم واتساب';
-    if (!RegExp(r'^\+(970|972)\d{9}$').hasMatch(value)) {
-      return 'يرجى البدء بـ +970 أو +972 متبوعاً بـ 9 أرقام';
+    if (!RegExp(r'^\d{9}$').hasMatch(value)) {
+      return 'يرجى إدخال 9 أرقام بعد رمز الدولة';
     }
     return null;
   }
@@ -60,18 +63,19 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     setState(() => _isLoading = true);
     try {
       final telemetry = context.read<TelemetryService>();
+      final fullWhatsapp = '$_selectedCountryCode${_whatsappController.text.trim()}';
       await telemetry.updateAndUploadProfile(
         storeName: _storeNameController.text.trim(),
         ownerName: _ownerNameController.text.trim(),
         address: _addressController.text.trim(),
         city: _cityController.text.trim(),
         phoneNumber: _phoneController.text.trim(),
-        whatsappNumber: _whatsappController.text.trim(),
+        whatsappNumber: fullWhatsapp,
       );
       // Navigation will be handled by main.dart because we notify listeners or state changes
       if (mounted) {
-        // Just trigger a rebuild of the app home
-        setState(() {});
+        // Trigger a refresh of the profile completion status in TelemetryService
+        await telemetry.checkProfileCompletion();
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -161,19 +165,75 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                         hint: '059xxxxxxx',
                         validator: _validatePhone,
                         keyboardType: TextInputType.phone,
+                        textAlign: TextAlign.left,
                       ),
                       const SizedBox(height: 16),
-                      _buildTextField(
-                        controller: _whatsappController,
-                        label: 'رقم الواتساب',
-                        icon: Icons.chat_rounded,
-                        hint: '+970xxxxxxxxx',
-                        validator: _validateWhatsapp,
-                        keyboardType: TextInputType.phone,
+                      Directionality(
+                        textDirection: ui.TextDirection.ltr,
+                        child: IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.grey),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    value: _selectedCountryCode,
+                                    items: const [
+                                      DropdownMenuItem(value: '+970', child: Text('+970', style: TextStyle(fontWeight: FontWeight.bold))),
+                                      DropdownMenuItem(value: '+972', child: Text('+972', style: TextStyle(fontWeight: FontWeight.bold))),
+                                    ],
+                                    onChanged: (v) => setState(() => _selectedCountryCode = v!),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _buildTextField(
+                                  controller: _whatsappController,
+                                  label: 'رقم الواتساب',
+                                  icon: Icons.chat_rounded,
+                                  hint: '9 أرقام',
+                                  validator: _validateWhatsapp,
+                                  keyboardType: TextInputType.phone,
+                                  textAlign: TextAlign.left,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            Checkbox(
+                              value: _isDataRealConfirmed,
+                              onChanged: (v) => setState(() => _isDataRealConfirmed = v ?? false),
+                              activeColor: Colors.blue,
+                            ),
+                            const Expanded(
+                              child: Text(
+                                'أؤكد أن هذه البيانات حقيقية وتخص متجري. هذه البيانات مهمة جداً لضمان استمرارية عمل التطبيق والحصول على التحديثات المستقبلية.',
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 32),
                       ElevatedButton(
-                        onPressed: _isLoading ? null : _submit,
+                        onPressed: (_isLoading || !_isDataRealConfirmed) ? null : _submit,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.blue,
                           foregroundColor: Colors.white,
@@ -202,11 +262,14 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     String? hint,
     String? Function(String?)? validator,
     TextInputType? keyboardType,
+    TextAlign textAlign = TextAlign.start,
   }) {
     return TextFormField(
       controller: controller,
       validator: validator ?? (v) => v == null || v.isEmpty ? 'هذا الحقل مطلوب' : null,
       keyboardType: keyboardType,
+      textAlign: textAlign,
+      textDirection: textAlign == TextAlign.left ? ui.TextDirection.ltr : null,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,

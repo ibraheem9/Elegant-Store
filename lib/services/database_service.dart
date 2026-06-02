@@ -3247,6 +3247,17 @@ class DatabaseService {
     return null;
   }
 
+  Future<bool> isProfileComplete(String deviceId) async {
+    final profile = await getStoreProfile(deviceId);
+    return profile != null &&
+        profile.storeName != null &&
+        profile.storeName!.trim().isNotEmpty &&
+        profile.ownerName != null &&
+        profile.ownerName!.trim().isNotEmpty &&
+        profile.mobile != null &&
+        profile.mobile!.trim().isNotEmpty;
+  }
+
   Future<void> saveStoreProfile(StoreProfile profile) async {
     final db = await database;
     await db.insert(
