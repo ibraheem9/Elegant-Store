@@ -1,3 +1,5 @@
+import 'tutorial_screen.dart';
+import 'help_screen.dart';
 import '../utils/app_snackbar.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -47,6 +49,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _checkRecoveryKeyConfirmation();
+    _checkTutorial();
+  }
+
+  Future<void> _checkTutorial() async {
+    final prefs = await SharedPreferences.getInstance();
+    final bool hasSeenTutorial = prefs.getBool('has_seen_tutorial') ?? false;
+
+    if (!hasSeenTutorial && mounted) {
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          // Tutorial removed as requested
+          prefs.setBool('has_seen_tutorial', true);
+        }
+      });
+    }
   }
 
   Future<void> _checkRecoveryKeyConfirmation() async {
@@ -179,6 +196,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 14: return const AboutUsScreen();
       case 15: return const ProfileScreen();
       case 16: return const GeneralStatisticsScreen();
+      case 17: return const HelpScreen();
       default: return const DashboardHomeScreen();
     }
   }
@@ -202,6 +220,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 14: return 'عن المطور';
       case 15: return 'الملف الشخصي للمتجر';
       case 16: return 'الإحصائيات العامة';
+      case 17: return 'دليل الاستخدام';
       default: return 'Elegant Store';
     }
   }
@@ -278,6 +297,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _buildSidebarItem(12, 'الإعدادات والسمة', Icons.settings_rounded),
                 _buildSidebarItem(13, 'تواصل معنا', Icons.contact_support_rounded),
                 _buildSidebarItem(14, 'عن المطور', Icons.info_outline_rounded),
+                const Divider(color: Colors.white10, indent: 20, endIndent: 20),
+                _buildSidebarItem(17, 'دليل الاستخدام', Icons.help_outline_rounded),
                 const SizedBox(height: 20),
               ],
             ),
@@ -324,6 +345,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _buildSidebarItem(12, 'الإعدادات والسمة', Icons.settings_rounded),
                 _buildSidebarItem(13, 'تواصل معنا', Icons.contact_support_rounded),
                 _buildSidebarItem(14, 'عن المطور', Icons.info_outline_rounded),
+                const Divider(color: Colors.white10, indent: 20, endIndent: 20),
+                _buildSidebarItem(17, 'دليل الاستخدام', Icons.help_outline_rounded),
                 const SizedBox(height: 20),
               ],
             ),

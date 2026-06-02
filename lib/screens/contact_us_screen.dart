@@ -152,6 +152,18 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: isDark ? Colors.transparent : const Color(0xFFF1F5F9),
+        appBar: AppBar(
+          title: const Text('تواصل معنا', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          centerTitle: true,
+          backgroundColor: isDark ? const Color(0xFF071028) : Colors.white,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded),
+            onPressed: () => Navigator.pop(context),
+            tooltip: 'رجوع',
+          ),
+          foregroundColor: isDark ? Colors.white : Colors.black87,
+        ),
         body: _submitted ? _buildSuccessState(theme) : _buildForm(theme, isDark),
       ),
     );
