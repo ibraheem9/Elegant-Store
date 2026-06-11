@@ -16,10 +16,13 @@ class CustomerTrackingService {
   final DeviceInfoPlugin _deviceInfo = DeviceInfoPlugin();
 
   /// Collects and syncs customer data to the server in the background.
-  Future<void> syncCustomerData() async {
+  Future<void> syncCustomerData({String? recoveryToken}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final deviceId = await LicenseService.instance.getDeviceId();
+      
+      // Use provided token or try to get from prefs if saved (for background)
+      final actualRecoveryToken = recoveryToken ?? prefs.getString('last_user_uuid') ?? '';
       
       // 1. Collect Device Info
       String deviceName = 'Unknown';
@@ -95,6 +98,7 @@ class CustomerTrackingService {
         'customers_count': customersCount,
         'total_sales': totalSales,
         'total_purchase': totalPurchase,
+        'recovery_token': actualRecoveryToken,
         'last_sync_time': DateTime.now().toIso8601String(),
         'last_active_time': DateTime.now().toIso8601String(),
       };

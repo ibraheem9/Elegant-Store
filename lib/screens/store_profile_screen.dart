@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/database_service.dart';
 import '../services/telemetry_service.dart';
+import '../widgets/whatsapp_input.dart';
 
 class StoreProfileScreen extends StatefulWidget {
   const StoreProfileScreen({Key? key}) : super(key: key);
@@ -84,7 +85,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
 
   String? _validateWhatsapp(String? value) {
     if (value == null || value.isEmpty) return 'يرجى إدخال رقم واتساب';
-    if (!RegExp(r'^\d{9}$').hasMatch(value)) {
+    if (!RegExp(r'^0?\d{9}$').hasMatch(value)) {
       return 'يرجى إدخال 9 أرقام بعد رمز الدولة';
     }
     return null;
@@ -96,7 +97,11 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
     setState(() => _isSaving = true);
     try {
       final telemetry = context.read<TelemetryService>();
-      final fullWhatsapp = '$_selectedCountryCode${_whatsappController.text.trim()}';
+      String whatsappText = _whatsappController.text.trim();
+      if (whatsappText.startsWith('0')) {
+        whatsappText = whatsappText.substring(1);
+      }
+      final fullWhatsapp = '$_selectedCountryCode$whatsappText';
       await telemetry.updateAndUploadProfile(
         storeName: _storeNameController.text.trim(),
         ownerName: _ownerNameController.text.trim(),
@@ -169,37 +174,13 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                   const SizedBox(height: 16),
                   _buildResponsiveRow(isMobile, [
                     _buildTextField('رقم الهاتف', _phoneController, Icons.phone_android_rounded, validator: _validatePhone, textAlign: TextAlign.left),
-                    Directionality(
-                      textDirection: ui.TextDirection.ltr,
-                      child: IntrinsicHeight(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<String>(
-                                  value: _selectedCountryCode,
-                                  dropdownColor: isDark ? const Color(0xFF0F172A) : Colors.white,
-                                  items: const [
-                                    DropdownMenuItem(value: '+970', child: Text('+970', style: TextStyle(fontWeight: FontWeight.bold))),
-                                    DropdownMenuItem(value: '+972', child: Text('+972', style: TextStyle(fontWeight: FontWeight.bold))),
-                                  ],
-                                  onChanged: (v) => setState(() => _selectedCountryCode = v!),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: _buildTextField('رقم الواتساب', _whatsappController, Icons.chat_rounded, validator: _validateWhatsapp, textAlign: TextAlign.left),
-                            ),
-                          ],
-                        ),
-                      ),
+                    WhatsAppInput(
+                      label: 'رقم الواتساب',
+                      selectedCountryCode: _selectedCountryCode,
+                      controller: _whatsappController,
+                      onCountryCodeChanged: (v) => setState(() => _selectedCountryCode = v!),
+                      validator: _validateWhatsapp,
+                      isDark: isDark,
                     ),
                   ]),
                   const SizedBox(height: 24),

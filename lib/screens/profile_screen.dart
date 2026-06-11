@@ -8,6 +8,7 @@ import '../models/models.dart';
 import '../utils/timestamp_formatter.dart';
 import '../services/theme_service.dart';
 import '../services/customer_tracking_service.dart';
+import '../widgets/whatsapp_input.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -24,6 +25,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _cityController = TextEditingController();
   final _mobileController = TextEditingController();
   final _whatsappController = TextEditingController();
+  String _whatsappCountryCode = '+970';
 
   bool _isLoading = true;
   StoreProfile? _profile;
@@ -50,6 +52,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _isLoading = true);
     try {
       final db = context.read<DatabaseService>();
+      final authService = context.read<AuthService>();
       final deviceSync = context.read<DeviceSyncService>();
       final deviceId = await deviceSync.getDeviceId();
 
@@ -77,7 +80,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _addressController.text = _profile!.address ?? '';
         _cityController.text = _profile!.city ?? '';
         _mobileController.text = _profile!.mobile ?? '';
-        _whatsappController.text = _profile!.whatsapp ?? '';
+        
+        final String whatsapp = _profile!.whatsapp ?? '';
+        if (whatsapp.startsWith('+972')) {
+          _whatsappCountryCode = '+972';
+          _whatsappController.text = whatsapp.substring(4);
+        } else if (whatsapp.startsWith('+970')) {
+          _whatsappCountryCode = '+970';
+          _whatsappController.text = whatsapp.substring(4);
+        } else {
+          _whatsappController.text = whatsapp;
+        }
       }
     } catch (e) {
       debugPrint('Error loading profile: $e');
@@ -92,8 +105,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _isLoading = true);
     try {
       final db = context.read<DatabaseService>();
+      final authService = context.read<AuthService>();
       final deviceSync = context.read<DeviceSyncService>();
       final deviceId = await deviceSync.getDeviceId();
+
+      String whatsappText = _whatsappController.text.trim();
+      if (whatsappText.startsWith('0')) {
+        whatsappText = whatsappText.substring(1);
+      }
+      final fullWhatsapp = '$_whatsappCountryCode$whatsappText';
 
       final newProfile = (_profile ?? StoreProfile(deviceId: deviceId)).copyWith(
         storeName: _storeNameController.text.trim(),
@@ -101,7 +121,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         address: _addressController.text.trim(),
         city: _cityController.text.trim(),
         mobile: _mobileController.text.trim(),
-        whatsapp: _whatsappController.text.trim(),
+        whatsapp: fullWhatsapp,
         lastActiveTime: TimestampFormatter.nowUtc(),
       );
 
@@ -115,11 +135,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await prefs.setString('settings_address', _addressController.text.trim());
       await prefs.setString('settings_city', _cityController.text.trim());
       await prefs.setString('settings_phone', _mobileController.text.trim());
-      await prefs.setString('settings_whatsapp', _whatsappController.text.trim());
+      await prefs.setString('settings_whatsapp', fullWhatsapp);
 
       // Trigger immediate sync to server
       // ignore: unawaited_futures
-      CustomerTrackingService.instance.syncCustomerData();
+      CustomerTrackingService.instance.syncCustomerData(
+        recoveryToken: authService.currentUser?.uuid,
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -227,18 +249,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               return null;
                             },
                           ),
-                          _buildTextField(
-                            'واتساب (WhatsApp)',
-                            _whatsappController,
-                            Icons.chat_rounded,
-                            isDark,
-                            keyboardType: TextInputType.phone,
+                          WhatsAppInput(
+                            label: 'واتساب (WhatsApp)',
+                            selectedCountryCode: _whatsappCountryCode,
+                            controller: _whatsappController,
+                            onCountryCodeChanged: (v) => setState(() => _whatsappCountryCode = v!),
+                            isDark: isDark,
                             enabled: canEdit,
                             validator: (v) {
                               if (v == null || v.trim().isEmpty) return 'يرجى إدخال رقم الواتساب';
                               final clean = v.trim();
-                              if (!RegExp(r'^(059|056)[0-9]{7}$').hasMatch(clean)) {
-                                return 'رقم غير صحيح (يجب أن يبدأ بـ 059 أو 056 ويتكون من 10 أرقام)';
+                              if (!RegExp(r'^0?5[69][0-9]{7}$').hasMatch(clean)) {
+                                return 'رقم غير صحيح (يجب أن يتكون من 9 أرقام بعد رمز الدولة)';
                               }
                               return null;
                             },

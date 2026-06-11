@@ -105,6 +105,7 @@ class AuthService extends ChangeNotifier {
         
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('saved_username', username);
+        await prefs.setString('last_user_uuid', _currentUser!.uuid);
         await prefs.setString('last_logged_username', username);
         await prefs.setString('last_logged_password', password);
         
@@ -211,6 +212,7 @@ class AuthService extends ChangeNotifier {
 
         await prefs.setString('auth_token', _token!);
         await prefs.setString('saved_username', username);
+        await prefs.setString('last_user_uuid', _currentUser!.uuid);
         await prefs.setString('last_logged_username', username);
         if (incomingStoreManagerId != null) {
           await prefs.setString('last_store_manager_id', incomingStoreManagerId);

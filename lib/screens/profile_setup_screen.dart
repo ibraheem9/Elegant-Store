@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../services/telemetry_service.dart';
+import '../widgets/whatsapp_input.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
   const ProfileSetupScreen({Key? key}) : super(key: key);
@@ -51,7 +52,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
   String? _validateWhatsapp(String? value) {
     if (value == null || value.isEmpty) return 'يرجى إدخال رقم واتساب';
-    if (!RegExp(r'^\d{9}$').hasMatch(value)) {
+    if (!RegExp(r'^0?\d{9}$').hasMatch(value)) {
       return 'يرجى إدخال 9 أرقام بعد رمز الدولة';
     }
     return null;
@@ -63,7 +64,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     setState(() => _isLoading = true);
     try {
       final telemetry = context.read<TelemetryService>();
-      final fullWhatsapp = '$_selectedCountryCode${_whatsappController.text.trim()}';
+      String whatsappText = _whatsappController.text.trim();
+      if (whatsappText.startsWith('0')) {
+        whatsappText = whatsappText.substring(1);
+      }
+      final fullWhatsapp = '$_selectedCountryCode$whatsappText';
       await telemetry.updateAndUploadProfile(
         storeName: _storeNameController.text.trim(),
         ownerName: _ownerNameController.text.trim(),
@@ -168,44 +173,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                         textAlign: TextAlign.left,
                       ),
                       const SizedBox(height: 16),
-                      Directionality(
-                        textDirection: ui.TextDirection.ltr,
-                        child: IntrinsicHeight(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12),
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: DropdownButtonHideUnderline(
-                                  child: DropdownButton<String>(
-                                    value: _selectedCountryCode,
-                                    items: const [
-                                      DropdownMenuItem(value: '+970', child: Text('+970', style: TextStyle(fontWeight: FontWeight.bold))),
-                                      DropdownMenuItem(value: '+972', child: Text('+972', style: TextStyle(fontWeight: FontWeight.bold))),
-                                    ],
-                                    onChanged: (v) => setState(() => _selectedCountryCode = v!),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _buildTextField(
-                                  controller: _whatsappController,
-                                  label: 'رقم الواتساب',
-                                  icon: Icons.chat_rounded,
-                                  hint: '9 أرقام',
-                                  validator: _validateWhatsapp,
-                                  keyboardType: TextInputType.phone,
-                                  textAlign: TextAlign.left,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                      WhatsAppInput(
+                        label: 'رقم الواتساب',
+                        selectedCountryCode: _selectedCountryCode,
+                        controller: _whatsappController,
+                        onCountryCodeChanged: (v) => setState(() => _selectedCountryCode = v!),
+                        validator: _validateWhatsapp,
+                        isDark: isDark,
                       ),
                       const SizedBox(height: 24),
                       Container(

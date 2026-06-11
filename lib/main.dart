@@ -175,7 +175,9 @@ void main() async {
 
   /*
   // Sync customer tracking data in background
-  Future.microtask(() => CustomerTrackingService.instance.syncCustomerData());
+  Future.microtask(() => CustomerTrackingService.instance.syncCustomerData(
+    recoveryToken: authService.currentUser?.uuid,
+  ));
   */
 
   runApp(
