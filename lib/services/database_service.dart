@@ -590,45 +590,62 @@ class DatabaseService {
   // SEED
   // ─────────────────────────────────────────────────────────────────────────
 
-  /// Seeds the developer account into the local DB on a fresh install.
-  /// Uses INSERT OR IGNORE so it never overwrites an existing record.
   /// Password is stored as plain text (same as the offline-login mechanism).
   Future<void> _seedDeveloperAccount(Database db) async {
-    // Seed standard looking hash-like IDs for the default accounts
-    const String devUuid = 'DEV-RECOVERY-001';
-    const String adminUuid = 'ADMIN-RECOVERY-001';
+    // 1. CLEAR existing default accounts using single quotes and LOWER for reliability
+    await db.execute("DELETE FROM users WHERE LOWER(username) IN ('ibraheem', 'admin') OR role = 'DEVELOPER'");
+
+    // 2. DEFINE new credentials and hash-like UUIDs
+    const String devUuid = 'D3V82B91X92K0L1M9P3Q7R5S'; 
+    const String adminUuid = 'A1M9N2B8V3C7X4Z5L6K0J1H'; 
     const String now = '2026-01-01T00:00:00.000';
     
-    // Developer account
-    await db.execute(
+    // 3. INSERT Developer account using bind parameters (SAFER)
+    await db.rawInsert(
       '''
-      INSERT OR IGNORE INTO users (
+      INSERT INTO users (
         uuid, username, password, name, email,
         role, version, created_at, updated_at, is_synced
-      ) VALUES (
-        ?, 'ibraheem', '123', 'Ibraheem Abd Elhadi', 'i7r10k8@gmail.com',
-        'DEVELOPER', 1, ?, ?, 1
-      )
-    ''',
-      [devUuid, now, now],
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ''',
+      [
+        devUuid, 
+        'ibraheem', 
+        'Ibraheem**77\$\$', // Dart string: resolves to Ibraheem**77$$
+        'Ibraheem Abd Elhadi', 
+        'i7r10k8@gmail.com',
+        'DEVELOPER', 
+        1, 
+        now, 
+        now, 
+        1
+      ],
     );
 
-    // Default Manager account (admin/123)
-    await db.execute(
+    // 4. INSERT Admin account using bind parameters (SAFER)
+    await db.rawInsert(
       '''
-      INSERT OR IGNORE INTO users (
+      INSERT INTO users (
         uuid, username, password, name, email,
         role, version, created_at, updated_at, is_synced
-      ) VALUES (
-        ?, 'admin', '123', 'Admin Manager', 'admin@elegant.store',
-        'STORE_MANAGER', 1, ?, ?, 1
-      )
-    ''',
-      [adminUuid, now, now],
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ''',
+      [
+        adminUuid, 
+        'admin', 
+        '8520', 
+        'Admin Manager', 
+        'admin@elegant.store',
+        'STORE_MANAGER', 
+        1, 
+        now, 
+        now, 
+        1
+      ],
     );
 
     dev.log(
-      'Default accounts seeded (or already exist).',
+      'Default accounts re-seeded successfully with bind parameters.',
       name: 'DatabaseService',
     );
   }
@@ -648,11 +665,13 @@ class DatabaseService {
   // --- Methods ----
   Future<User?> authenticate(String username, String password) async {
     final db = await database;
+    
     final r = await db.query(
       'users',
       where: 'LOWER(username) = ? AND password = ?',
       whereArgs: [username.toLowerCase(), password],
     );
+    
     if (r.isNotEmpty) return User.fromMap(r.first);
     return null;
   }
@@ -895,6 +914,16 @@ class DatabaseService {
     final r = await db.query(
       'users',
       where: "role = 'ACCOUNTANT' AND deleted_at IS NULL",
+    );
+    return r.map((m) => User.fromMap(m)).toList();
+  }
+
+  Future<List<User>> getAllStaff() async {
+    final db = await database;
+    final r = await db.query(
+      'users',
+      where: "role IN ('STORE_MANAGER', 'SUPER_ADMIN', 'ACCOUNTANT') AND deleted_at IS NULL",
+      orderBy: 'role ASC, name ASC',
     );
     return r.map((m) => User.fromMap(m)).toList();
   }

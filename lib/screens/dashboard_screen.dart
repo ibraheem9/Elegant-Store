@@ -668,13 +668,13 @@ class DashboardScreenState extends State<DashboardScreen> {
         title: const Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            Text('تسجيل الخروج', style: TextStyle(fontWeight: FontWeight.bold)),
-            SizedBox(width: 8),
-            Icon(Icons.logout_rounded, color: Colors.red),
+            const Text('تسجيل الخروج', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(width: 8),
+            const Icon(Icons.logout_rounded, color: Colors.red),
           ],
         ),
         content: const Text(
-          'هل تريد تسجيل الخروج؟\nسيتم مزامنة بياناتك مع السيرفر قبل الخروج.',
+          'هل تريد تسجيل الخروج؟',
           textAlign: TextAlign.right,
         ),
         actionsAlignment: MainAxisAlignment.start,
@@ -714,13 +714,13 @@ class DashboardScreenState extends State<DashboardScreen> {
               const CircularProgressIndicator(),
               const SizedBox(height: 20),
               const Text(
-                'جاري مزامنة البيانات...',
+                'جاري تسجيل الخروج...',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
               Text(
-                'يُرجى الانتظار حتى تكتمل المزامنة',
+                'يُرجى الانتظار...',
                 style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 textAlign: TextAlign.center,
               ),

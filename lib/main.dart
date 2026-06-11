@@ -21,6 +21,7 @@ import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/license_gate_screen.dart';
 import 'screens/profile_setup_screen.dart';
+import 'screens/developer_management_screen.dart';
 import 'core/config/app_themes.dart';
 import 'core/config/api_config.dart';
 
@@ -341,6 +342,11 @@ class _AppHomeState extends State<_AppHome> with WidgetsBindingObserver {
         if (!_postLoginSyncTriggered) {
           // Use microtask to avoid calling notifyListeners during build
           Future.microtask(() => _triggerPostLoginSync());
+        }
+
+        if (authService.isDeveloper()) {
+          // Import required for DeveloperManagementScreen if not already there
+          return const DeveloperManagementScreen();
         }
 
         // If logged in, check if profile is complete (only for managers)
