@@ -3,7 +3,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:fl_chart/fl_chart.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
 import '../widgets/shimmer_loading.dart';
@@ -510,19 +509,19 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           physics: const NeverScrollableScrollPhysics(),
           crossAxisSpacing: 16,
           mainAxisSpacing: 16,
-          childAspectRatio: isSmall ? 2.8 : 3.5,
+          childAspectRatio: isSmall ? 2.0 : 2.5,
           children: [
-            _buildAutoDisplay('إجمالي المبيعات على التطبيق', _totalAppSales, Icons.phonelink_ring_rounded, Colors.blue, isDark),
-            _buildAutoDisplay('إجمالي مبيعات الكاش', _totalCashSales, Icons.local_atm_rounded, Colors.green, isDark),
-            _buildAutoDisplay('إجمالي المبيعات', _totalSales, Icons.trending_up_rounded, Colors.teal, isDark),
-            _buildAutoDisplay('إجمالي ديون التطبيق', _totalAppDebt, Icons.account_balance_rounded, Colors.purple, isDark),
-            _buildAutoDisplay('إجمالي الديون النقدية', _totalCashDebt, Icons.money_off_rounded, Colors.red, isDark),
-            _buildAutoDisplay('إجمالي الديون', _totalDebt, Icons.warning_rounded, Colors.orange, isDark),
-            _buildAutoDisplay('إجمالي مشتريات التطبيق', _totalAppPurchases, Icons.mobile_friendly_rounded, Colors.indigo, isDark),
-            _buildAutoDisplay('إجمالي مشتريات الكاش', _totalCashPurchases, Icons.shopping_bag_rounded, Colors.amber, isDark),
-            _buildAutoDisplay('إجمالي المشتريات', _totalPurchases, Icons.shopping_cart_rounded, Colors.cyan, isDark),
-            _buildAutoDisplay('إجمالي سداد التطبيق', _totalDepositApp, Icons.install_mobile_rounded, Colors.blueGrey, isDark),
-            _buildAutoDisplay('إجمالي سداد الكاش', _totalDepositCash, Icons.payments_rounded, Colors.brown, isDark),
+            _buildAutoDisplay('إجمالي المبيعات على التطبيق', _totalAppSales, Icons.phonelink_ring_rounded, Colors.blue, isDark, formula: '(بيع تطبيق + إيداع تطبيق)'),
+            _buildAutoDisplay('إجمالي مبيعات الكاش', _totalCashSales, Icons.local_atm_rounded, Colors.green, isDark, formula: '(صندوق اليوم + مشتريات + سحبيات) - (صندوق الأمس + إيداع كاش)'),
+            _buildAutoDisplay('إجمالي المبيعات', _totalSales, Icons.trending_up_rounded, Colors.teal, isDark, formula: '(مبيعات تطبيق + مبيعات كاش)'),
+            _buildAutoDisplay('إجمالي ديون التطبيق', _totalAppDebt, Icons.account_balance_rounded, Colors.purple, isDark, formula: '(فواتير بيع غير مدفوعة)'),
+            _buildAutoDisplay('إجمالي الديون النقدية', _totalCashDebt, Icons.money_off_rounded, Colors.red, isDark, formula: '(سحبيات غير مدفوعة)'),
+            _buildAutoDisplay('إجمالي الديون', _totalDebt, Icons.warning_rounded, Colors.orange, isDark, formula: '(ديون تطبيق + ديون نقدية)'),
+            _buildAutoDisplay('إجمالي مشتريات التطبيق', _totalAppPurchases, Icons.mobile_friendly_rounded, Colors.indigo, isDark, formula: '(مشتريات مدفوعة تطبيق)'),
+            _buildAutoDisplay('إجمالي مشتريات الكاش', _totalCashPurchases, Icons.shopping_bag_rounded, Colors.amber, isDark, formula: '(مشتريات مدفوعة كاش)'),
+            _buildAutoDisplay('إجمالي المشتريات', _totalPurchases, Icons.shopping_cart_rounded, Colors.cyan, isDark, formula: '(مشتريات تطبيق + مشتريات كاش)'),
+            _buildAutoDisplay('إجمالي سداد التطبيق', _totalDepositApp, Icons.install_mobile_rounded, Colors.blueGrey, isDark, formula: '(إيداعات رصيد تطبيق)'),
+            _buildAutoDisplay('إجمالي سداد الكاش', _totalDepositCash, Icons.payments_rounded, Colors.brown, isDark, formula: '(إيداعات رصيد كاش)'),
           ],
         ),
         const SizedBox(height: 16),
@@ -544,6 +543,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           Icons.history_rounded,
           Colors.blueGrey,
           isDark,
+          formula: '(صندوق اليوم السابق)',
         ),
         const SizedBox(height: 16),
         Opacity(
@@ -682,11 +682,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
-  Widget _buildAutoDisplay(String label, double value, IconData icon, Color color, bool isDark) {
+  Widget _buildAutoDisplay(String label, double value, IconData icon, Color color, bool isDark, {String? formula}) {
     final isNegative   = value < 0;
     final displayColor = isNegative ? Colors.redAccent : color;
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: displayColor.withOpacity(0.08),
         borderRadius: BorderRadius.circular(20),
@@ -713,6 +713,18 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   fontWeight: FontWeight.w900,
                   color: isDark ? Colors.white : const Color(0xFF0F172A),
                 )),
+            if (formula != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  formula,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white54 : Colors.grey[600],
+                  ),
+                ),
+              ),
           ],
         )),
         const Icon(Icons.lock_outline_rounded, color: Colors.grey, size: 16),
