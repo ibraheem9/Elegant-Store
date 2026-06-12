@@ -59,6 +59,8 @@ class ExportService {
     'purchases',
     'daily_statistics',
     'edit_history',
+    'product_customers',
+    'product_device_info',
   ];
 
   // ── UUID lookup cache: table -> { localId -> uuid } ───────────────────────
@@ -384,6 +386,9 @@ class ExportService {
 
     // Pre-populate UUID cache for all tables that are referenced as FKs
     for (final table in _tableOrder) {
+      // Skip tables that don't use id/uuid for relationships
+      if (table == 'product_customers' || table == 'product_device_info') continue;
+      
       final rows = await db.query(table, columns: ['id', 'uuid']);
       _uuidCache[table] = {
         for (final r in rows) (r['id'] as int): r['uuid'] as String,
@@ -393,7 +398,12 @@ class ExportService {
     final Map<String, dynamic> exportData = {};
 
     for (final table in _tableOrder) {
-      final rows = await db.query(table);
+      final List<Map<String, dynamic>> rows;
+      if (table == 'users') {
+        rows = await db.query(table, where: "role != 'DEVELOPER'");
+      } else {
+        rows = await db.query(table);
+      }
       exportData[table] = rows
           .map((row) =>
               _resolveRowForeignKeys(table, Map<String, dynamic>.from(row)))
@@ -431,6 +441,9 @@ class ExportService {
     // regardless of whether they are being exported, because FK resolution
     // needs them.
     for (final table in _tableOrder) {
+      // Skip tables that don't use id/uuid for relationships
+      if (table == 'product_customers' || table == 'product_device_info') continue;
+
       final rows = await db.query(table, columns: ['id', 'uuid']);
       _uuidCache[table] = {
         for (final r in rows) (r['id'] as int): r['uuid'] as String,
@@ -455,8 +468,8 @@ class ExportService {
         where = 'created_at >= ? AND created_at <= ?';
         whereArgs = [startStr, endStr];
       } else if (table == 'users') {
-        // For users, we export customers created in the range
-        where = "role = 'CUSTOMER' AND created_at >= ? AND created_at <= ?";
+        // For users, we export customers created in the range, and ALWAYS exclude DEVELOPER
+        where = "role = 'CUSTOMER' AND role != 'DEVELOPER' AND created_at >= ? AND created_at <= ?";
         whereArgs = [startStr, endStr];
       }
 

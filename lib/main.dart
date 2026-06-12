@@ -23,8 +23,11 @@ import 'screens/dashboard_screen.dart';
 import 'screens/license_gate_screen.dart';
 import 'screens/profile_setup_screen.dart';
 import 'screens/developer_management_screen.dart';
+import 'screens/database_setup_screen.dart';
 import 'core/config/app_themes.dart';
 import 'core/config/api_config.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 // Import sync services for ChangeNotifierProvider (even if disabled)
 
@@ -90,20 +93,66 @@ void main() async {
   // See: https://github.com/flutter/flutter/issues/...
   // Impeller causes "Format allocation info not found" errors on Mali GPUs
   WidgetsFlutterBinding.ensureInitialized();
-  // Note: For Android, Impeller can be disabled in AndroidManifest.xml or via native code
-  // For now, we rely on the device's GPU compatibility
+  await _startApp();
+}
 
+Future<void> _startApp() async {
   // Initialize date formatting (fast, no network)
   try {
     await initializeDateFormatting('ar_SA', null);
   } catch (e) {
     debugPrint('initializeDateFormatting failed: $e');
   }
-  
+
   if (Platform.isWindows) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
+  }
 
+  final prefs = await SharedPreferences.getInstance();
+  String? savedPath = prefs.getString('custom_database_path');
+
+  bool dbExists = false;
+  if (savedPath != null) {
+    dbExists = File(savedPath).existsSync();
+    if (dbExists) DatabaseService.setCustomPath(savedPath);
+  } else if (Platform.isWindows) {
+    final docs = await getApplicationDocumentsDirectory();
+    final defaultPath = p.join(docs.path, 'ElegantStoreApp', DatabaseService.dbName);
+    dbExists = File(defaultPath).existsSync();
+  } else {
+    // Mobile: assume it's fine or will be created on open
+    dbExists = true;
+  }
+
+  if (!dbExists && Platform.isWindows) {
+    await windowManager.ensureInitialized();
+    WindowOptions windowOptions = const WindowOptions(
+      minimumSize: Size(800, 600),
+      center: true,
+      title: 'Elegant Store',
+    );
+    windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+      await windowManager.focus();
+    });
+
+    runApp(MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: AppThemes.lightTheme,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [Locale('ar', 'SA')],
+      locale: const Locale('ar', 'SA'),
+      home: DatabaseSetupScreen(onSetupComplete: () => _startApp()),
+    ));
+    return;
+  }
+  
+  if (Platform.isWindows) {
     await windowManager.ensureInitialized();
     WindowOptions windowOptions = const WindowOptions(
       minimumSize: Size(800, 600),
@@ -130,8 +179,6 @@ void main() async {
     debugPrint('initDatabase failed: $e');
   }
 
-  final prefs = await SharedPreferences.getInstance();
-  
   // Initialize Notifications (with timeout to prevent hang on Android)
   try {
     await NotificationService.init().timeout(

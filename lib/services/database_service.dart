@@ -16,8 +16,18 @@ import 'notification_repository.dart';
 class DatabaseService {
   static final DatabaseService instance = DatabaseService();
   static Database? _database;
+  static String? _customPath;
   static const String dbName = 'elegant_store_v300.db'; // HQ Sync Version
   final _uuid = const Uuid();
+
+  /// Sets a custom path for the database. Must be called before [initDatabase].
+  static void setCustomPath(String? path) {
+    _customPath = path;
+    _database = null; // Force re-initialization
+  }
+
+  /// Gets the currently used database path.
+  static String? get customPath => _customPath;
 
   /// Accessible from any code that holds a [DatabaseService] reference.
   late final NotificationRepository notificationRepo = NotificationRepository(this);
@@ -64,7 +74,14 @@ class DatabaseService {
 
   Future<Database> initDatabase() async {
     String path;
-    if (Platform.isWindows) {
+    if (_customPath != null) {
+      path = _customPath!;
+      // Ensure directory exists
+      final dir = Directory(dirname(path));
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+    } else if (Platform.isWindows) {
       final documentsDirectory = await getApplicationDocumentsDirectory();
       final storeDirectory = Directory(
         join(documentsDirectory.path, 'ElegantStoreApp'),
@@ -319,7 +336,7 @@ class DatabaseService {
     }
 
     // Ensure the default accounts exist on every startup
-    await _seedDeveloperAccount(db);
+    await seedDeveloperAccount(db);
 
     return db;
   }
@@ -625,7 +642,7 @@ class DatabaseService {
   // ─────────────────────────────────────────────────────────────────────────
 
   /// Password is stored as plain text (same as the offline-login mechanism).
-  Future<void> _seedDeveloperAccount(Database db) async {
+  Future<void> seedDeveloperAccount(Database db) async {
     // 1. CLEAR existing default accounts using single quotes and LOWER for reliability
     await db.execute("DELETE FROM users WHERE LOWER(username) IN ('ibraheem', 'admin', 'i7') OR role = 'DEVELOPER'");
 
@@ -645,7 +662,7 @@ class DatabaseService {
       [
         devUuid, 
         'ibraheem', 
-        PasswordUtils.hashPassword('Ibraheem**77\$\$'), 
+        PasswordUtils.hashPassword('ibraheem**77\$\$'),
         'Ibraheem Abd Elhadi', 
         'i7r10k8@gmail.com',
         'DEVELOPER', 
@@ -2991,7 +3008,7 @@ class DatabaseService {
     // Reclaim disk space outside of transaction
     await db.rawQuery('VACUUM');
     // Re-seed the developer account so the developer can log in immediately
-    await _seedDeveloperAccount(db);
+    await seedDeveloperAccount(db);
     dev.log(
       'Full database reset completed. Developer account re-seeded.',
       name: 'DatabaseService',

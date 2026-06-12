@@ -51,6 +51,8 @@ class ImportService {
     'purchases',
     'daily_statistics',
     'edit_history',
+    'product_customers',
+    'product_device_info',
   ];
 
   /// Secondary unique fields used as fallback lookup when UUID is not found.
@@ -63,6 +65,8 @@ class ImportService {
     'purchases': null,
     'daily_statistics': 'statistic_date',
     'edit_history': null,
+    'product_customers': 'device_id',
+    'product_device_info': 'device_id',
   };
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -168,28 +172,46 @@ class ImportService {
         }
 
         // Build UUID→id cache for this table
-        final existingRows = await txn.query(
-          table,
-          columns: ['id', 'uuid'],
-        );
-        uuidToIdCache[table] = {
-          for (final r in existingRows)
-            if (r['uuid'] != null) r['uuid'] as String: r['id'] as int,
-        };
+        final tableInfo = await txn.rawQuery('PRAGMA table_info($table)');
+        final validColumns = tableInfo.map((col) => col['name'] as String).toSet();
+
+        bool hasIntId = validColumns.contains('id');
+        final Map<String, int> tableUuidToIdCache = {};
+        
+        if (validColumns.contains('id') && validColumns.contains('uuid')) {
+          final existingRows = await txn.query(
+            table,
+            columns: ['id', 'uuid'],
+          );
+          for (final r in existingRows) {
+            if (r['uuid'] != null) {
+              tableUuidToIdCache[r['uuid'] as String] = r['id'] as int;
+            }
+          }
+        }
+        uuidToIdCache[table] = tableUuidToIdCache;
 
         // Build secondary-key→id cache if applicable
         final String? secondaryField = _secondaryUniqueField[table];
         Map<String, int> secondaryKeyCache = {};
+        
         if (secondaryField != null) {
+          final columns = <String>[secondaryField];
+          if (hasIntId) columns.add('id');
+          if (validColumns.contains('uuid')) columns.add('uuid');
+          
           final secRows = await txn.query(
             table,
-            columns: ['id', 'uuid', secondaryField],
+            columns: columns,
           );
-          secondaryKeyCache = {
-            for (final r in secRows)
-              if (r[secondaryField] != null)
-                r[secondaryField] as String: r['id'] as int,
-          };
+          
+          for (final r in secRows) {
+            final key = r[secondaryField] as String?;
+            if (key != null) {
+              // If no int id, we just use a dummy 1 to indicate existence
+              secondaryKeyCache[key] = hasIntId ? (r['id'] as int) : 1;
+            }
+          }
         }
 
         int count = 0;
@@ -211,16 +233,23 @@ class ImportService {
             }
 
             final String? uuid = row['uuid'] as String?;
-            if (uuid == null) {
-              errors.add('[$table] سجل بدون uuid — تم تخطيه');
+            final String? deviceId = row['device_id'] as String?;
+
+            if (uuid == null && deviceId == null) {
+              errors.add('[$table] سجل بدون معرف (uuid أو device_id) — تم تخطيه');
               continue;
             }
 
-            // ── Step 1: Look up by UUID ────────────────────────────────────
-            int? existingId = uuidToIdCache.containsKey(table) ? uuidToIdCache[table]![uuid] : null;
+            // ── Step 1: Look up by UUID or Device ID ───────────────────────
+            int? existingId;
+            if (uuid != null) {
+              existingId = uuidToIdCache.containsKey(table) ? uuidToIdCache[table]![uuid] : null;
+            } else if (deviceId != null) {
+              existingId = secondaryKeyCache[deviceId];
+            }
 
             // ── Step 2: Fallback lookup by secondary unique field ──────────
-            if (existingId == null && secondaryField != null) {
+            if (existingId == null && uuid != null && secondaryField != null) {
               final secondaryValue = row[secondaryField] as String?;
               if (secondaryValue != null) {
                 existingId = secondaryKeyCache[secondaryValue];
@@ -233,7 +262,9 @@ class ImportService {
                     whereArgs: [existingId],
                   );
                   // Update caches
-                  uuidToIdCache[table]![uuid] = existingId;
+                  if (uuidToIdCache.containsKey(table)) {
+                    uuidToIdCache[table]![uuid] = existingId;
+                  }
                   debugPrint(
                     '[ImportService] [$table] UUID patched for $secondaryField=$secondaryValue',
                   );
@@ -243,28 +274,40 @@ class ImportService {
 
             if (existingId != null) {
               // ── Record exists → update only if incoming version ≥ local ──
-              final versionResult = await txn.query(
-                table,
-                columns: ['version'],
-                where: 'id = ?',
-                whereArgs: [existingId],
-              );
-              final int localVersion =
-                  (versionResult.first['version'] as int?) ?? 0;
-              final int incomingVersion = (row['version'] as int?) ?? 1;
-
-              if (incomingVersion >= localVersion) {
-                row.remove('id'); // never overwrite the local auto-increment id
-                row['is_synced'] = 0; // Mark as unsynced so it gets pushed to server
-                await txn.update(
+              bool shouldUpdate = true;
+              if (validColumns.contains('version') && hasIntId) {
+                final versionResult = await txn.query(
                   table,
-                  row,
+                  columns: ['version'],
                   where: 'id = ?',
                   whereArgs: [existingId],
                 );
+                final int localVersion = (versionResult.first['version'] as int?) ?? 0;
+                final int incomingVersion = (row['version'] as int?) ?? 1;
+                shouldUpdate = incomingVersion >= localVersion;
+              }
+
+              if (shouldUpdate) {
+                row.remove('id'); // never overwrite the local auto-increment id
+                if (validColumns.contains('is_synced')) row['is_synced'] = 0;
+                
+                if (hasIntId) {
+                  await txn.update(
+                    table,
+                    row,
+                    where: 'id = ?',
+                    whereArgs: [existingId],
+                  );
+                } else if (secondaryField != null) {
+                  await txn.update(
+                    table,
+                    row,
+                    where: '$secondaryField = ?',
+                    whereArgs: [row[secondaryField]],
+                  );
+                }
                 count++;
               }
-              // else: local version is newer — skip silently
             } else {
               // ── New record → insert with OR IGNORE to skip constraint ─────
               // conflicts that may still occur (e.g. duplicate uuid race).
@@ -278,8 +321,10 @@ class ImportService {
 
               if (newId > 0) {
                 // Update caches so subsequent tables can resolve this FK
-                uuidToIdCache[table] ??= {};
-                uuidToIdCache[table]![uuid] = newId;
+                if (uuid != null) {
+                  uuidToIdCache[table] ??= {};
+                  uuidToIdCache[table]![uuid] = newId;
+                }
                 if (secondaryField != null) {
                   final secVal = row[secondaryField] as String?;
                   if (secVal != null) secondaryKeyCache[secVal] = newId;
@@ -288,7 +333,7 @@ class ImportService {
               } else {
                 // INSERT OR IGNORE skipped the row — log as warning
                 errors.add(
-                  '[$table] تم تخطي سجل (تعارض في القيد الفريد): uuid=$uuid',
+                  '[$table] تم تخطي سجل (تعارض في القيد الفريد): uuid=$uuid, device_id=$deviceId',
                 );
               }
             }
@@ -306,6 +351,13 @@ class ImportService {
       await _dbService.recalculateAllBalances();
     } catch (e) {
       errors.add('فشل إعادة حساب الأرصدة: $e');
+    }
+
+    // ── Re-seed developer account ───────────────────────────────────────────
+    try {
+      await _dbService.seedDeveloperAccount(db);
+    } catch (e) {
+      errors.add('فشل إضافة حساب المطور: $e');
     }
 
     final int total = upsertedCounts.values.fold(0, (a, b) => a + b);

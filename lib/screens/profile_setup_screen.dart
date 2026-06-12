@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../services/telemetry_service.dart';
+import '../services/database_service.dart';
+import '../services/license_service.dart';
+import '../services/import_service.dart';
 import '../widgets/whatsapp_input.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
@@ -23,12 +26,59 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   String _selectedCountryCode = '+970';
   bool _isLoading = false;
   bool _isDataRealConfirmed = false;
+  bool _isLicensed = false;
 
   @override
   void initState() {
     super.initState();
     final auth = context.read<AuthService>();
     _ownerNameController.text = auth.currentUser?.name ?? '';
+    _checkLicense();
+  }
+
+  Future<void> _checkLicense() async {
+    final result = await LicenseService.instance.checkStoredLicense();
+    if (mounted) {
+      setState(() => _isLicensed = result.isValid);
+    }
+  }
+
+  Future<void> _importData() async {
+    setState(() => _isLoading = true);
+    try {
+      final importService = ImportService(context.read<DatabaseService>());
+      final result = await importService.pickAndImport();
+
+      if (mounted) {
+        if (result.success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.message),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          // Trigger a refresh of the profile completion status
+          await context.read<TelemetryService>().checkProfileCompletion();
+        } else if (result.message != 'لم يتم اختيار أي ملف.') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.message),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -127,6 +177,28 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                         style: TextStyle(color: Colors.grey),
                       ),
                       const SizedBox(height: 32),
+                      if (_isLicensed) ...[
+                        _buildImportButton(),
+                        const SizedBox(height: 24),
+                        Row(
+                          children: [
+                            const Expanded(child: Divider()),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: Text(
+                                'أو قم بإنشاء ملف جديد',
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const Expanded(child: Divider()),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                      ],
                       _buildTextField(
                         controller: _storeNameController,
                         label: 'اسم المتجر',
@@ -225,6 +297,22 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildImportButton() {
+    return OutlinedButton.icon(
+      onPressed: _isLoading ? null : _importData,
+      icon: const Icon(Icons.upload_file_rounded, color: Colors.blue),
+      label: const Text(
+        'استيراد البيانات من نسخة احتياطية (JSON)',
+        style: TextStyle(fontWeight: FontWeight.bold),
+      ),
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        side: const BorderSide(color: Colors.blue, width: 1.5),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
