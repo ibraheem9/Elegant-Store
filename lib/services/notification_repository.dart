@@ -218,20 +218,20 @@ class NotificationRepository {
     return rows.map(AppNotification.fromMap).toList();
   }
 
-  /// Returns the total count (for badge).
+  /// Returns the total count of unread notifications (for badge).
   Future<int> getTotalCount() async {
     final db = await _db;
     final result = await db.rawQuery(
-      'SELECT COUNT(*) as cnt FROM app_notifications',
+      'SELECT COUNT(*) as cnt FROM app_notifications WHERE is_read = 0',
     );
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
-  /// Returns count per type.
+  /// Returns unread count per type.
   Future<Map<String, int>> getCountByType() async {
     final db = await _db;
     final rows = await db.rawQuery(
-      'SELECT type, COUNT(*) as cnt FROM app_notifications GROUP BY type',
+      'SELECT type, COUNT(*) as cnt FROM app_notifications WHERE is_read = 0 GROUP BY type',
     );
     return {for (final r in rows) r['type'] as String: r['cnt'] as int};
   }
@@ -412,6 +412,7 @@ class NotificationRepository {
             'percentage': limit != null && limit > 0
                 ? ((balance / limit) * 100).round()
                 : null,
+            'is_read': 0, // Reset to unread when data changes
             'updated_at': now,
           },
           where: 'customer_id = ? AND type = ?',
@@ -480,6 +481,7 @@ class NotificationRepository {
             'balance': balance,
             'credit_limit': limit,
             'percentage': pct,
+            'is_read': 0, // Reset to unread when data changes
             'updated_at': now,
           },
           where: 'customer_id = ? AND type = ?',

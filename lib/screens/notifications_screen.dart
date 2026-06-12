@@ -94,6 +94,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         typeFilter: typeFilter,
       );
       final counts = await _repo.getCountByType();
+      
+      // Mark all as read when opening the screen to clear the badge
+      await _repo.markAllRead();
+      if (mounted) {
+        context.read<DatabaseService>().refreshNotificationCount();
+      }
+
       if (!mounted) return;
       setState(() {
         _items.addAll(page);

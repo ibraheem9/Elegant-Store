@@ -1642,6 +1642,10 @@ class DatabaseService {
         'is_synced': 0,
       });
     });
+
+    // Option 2: refresh notifications after adding credit (customer balance changed).
+    await notificationRepo.refreshAllForCustomer(userId);
+    await refreshNotificationCount();
   }
 
   /// Returns only ACTIVE, non-deleted payment methods.
@@ -1890,6 +1894,12 @@ class DatabaseService {
         'is_synced': 0,
       });
     });
+
+    // Option 2: refresh notifications after withdrawal (customer balance changed).
+    if (customer.id != null) {
+      await notificationRepo.refreshAllForCustomer(customer.id!);
+      await refreshNotificationCount();
+    }
   }
 
   Future<void> updateInvoiceWithLog({
