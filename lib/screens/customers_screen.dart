@@ -196,17 +196,12 @@ class _CustomersScreenState extends State<CustomersScreen> {
     );
 
     if (confirm == true) {
-      await db.softDeleteUser(customer.id!);
       final _actUser = context.read<AuthService>().currentUser;
-      db.logActivity(
-        targetId: customer.id!,
-        targetType: 'CUSTOMER',
-        action: 'DELETE',
-        summary: 'حذف الزبون: ${customer.name}',
+      await db.softDeleteUser(
+        customer.id!,
         performedById: _actUser?.id,
-        performedByName: _actUser?.username ?? _actUser?.name,
-        storeManagerId: _actUser?.parentId ?? _actUser?.id,
-      ).catchError((e) => debugPrint('logActivity failed: $e'));
+        performedByName: _actUser?.name ?? _actUser?.username,
+      );
       _loadCustomers();
     }
   }
@@ -896,11 +891,14 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
               onPressed: () async {
                 final amount = double.tryParse(amountController.text) ?? 0;
                 if (amount <= 0 || selectedMethod == null) return;
+                final _actUser = context.read<AuthService>().currentUser;
                 await db.addCredit(
                   userId: _currentCustomer.id!,
                   amount: amount,
                   paymentMethodId: selectedMethod!.id!,
                   notes: 'سداد ديون: ${notesController.text}',
+                  performedById: _actUser?.id,
+                  performedByName: _actUser?.name ?? _actUser?.username,
                 );
                 Navigator.pop(ctx);
                 _loadData();
@@ -975,17 +973,12 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     );
     if (confirmed != true) return;
     final db = context.read<DatabaseService>();
-    await db.softDeleteInvoice(inv); // recalculateUserBalance is called inside
     final _actUser = context.read<AuthService>().currentUser;
-    db.logActivity(
-      targetId: inv.id!,
-      targetType: 'INVOICE',
-      action: 'DELETE',
-      summary: 'حذف فاتورة للزبون ${_currentCustomer.name} بمبلغ ${inv.amount.toStringAsFixed(2)} ₪',
+    await db.softDeleteInvoice(
+      inv,
       performedById: _actUser?.id,
-      performedByName: _actUser?.username ?? _actUser?.name,
-      storeManagerId: _actUser?.parentId ?? _actUser?.id,
-    ).catchError((e) => debugPrint('logActivity failed: $e'));
+      performedByName: _actUser?.name ?? _actUser?.username,
+    );
     _loadData();
     if (mounted) {
       ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(const SnackBar(
@@ -1249,10 +1242,10 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                                 const SizedBox(width: 4),
                                 Text(
                                   action == 'CREATE'
-                                      ? 'أُنشئت بواسطة: ${createdByName ?? editorName ?? "غير معروف"}${createdById != null ? " (ID: $createdById)" : ""}'
+                                      ? 'أُنشئت بواسطة: ${createdByName ?? editorName ?? "غير معروف"}'
                                       : action == 'DELETE'
-                                          ? 'حُذفت بواسطة: $editorName'
-                                          : 'عُدّلت بواسطة: $editorName',
+                                          ? 'حُذفت بواسطة: ${editorName ?? "غير معروف"}'
+                                          : 'عُدّلت بواسطة: ${editorName ?? "غير معروف"}',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,

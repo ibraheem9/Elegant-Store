@@ -1068,7 +1068,7 @@ class DatabaseService {
     );
   }
 
-  Future<void> softDeleteUser(int id) async {
+  Future<void> softDeleteUser(int id, {int? performedById, String? performedByName}) async {
     final db = await database;
     final now = TimestampFormatter.nowUtc();
     final existing = await db.query(
@@ -1077,9 +1077,11 @@ class DatabaseService {
       whereArgs: [id],
       limit: 1,
     );
-    int currentVersion = existing.isNotEmpty
-        ? (existing.first['version'] as int? ?? 0)
-        : 0;
+    if (existing.isEmpty) return;
+
+    int currentVersion = existing.first['version'] as int? ?? 0;
+    String name = existing.first['name'] as String? ?? '';
+    String role = existing.first['role'] as String? ?? '';
 
     await db.update(
       'users',
@@ -1092,6 +1094,17 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [id],
     );
+
+    await logActivity(
+      targetId: id,
+      targetType: role == 'CUSTOMER' ? 'CUSTOMER' : 'ACCOUNTANT',
+      action: 'DELETE',
+      summary: 'حذف ${role == 'CUSTOMER' ? 'زبون' : 'محاسب'}: $name',
+      performedById: performedById,
+      performedByName: performedByName,
+      createdAt: now,
+    );
+
     // Clean up any persisted notifications for this user (may be a customer).
     await notificationRepo.deleteAllForCustomer(id);
   }
@@ -1222,7 +1235,7 @@ class DatabaseService {
   /// Soft-deletes an invoice and immediately recalculates the owner's balance.
   /// This ensures that deleting a DEPOSIT invoice removes its credit effect
   /// and deleting a SALE/WITHDRAWAL invoice removes its debt effect.
-  Future<void> softDeleteInvoice(Invoice inv) async {
+  Future<void> softDeleteInvoice(Invoice inv, {int? performedById, String? performedByName}) async {
     final db = await database;
     final now = TimestampFormatter.nowUtc();
     await db.update(
@@ -1236,6 +1249,17 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [inv.id],
     );
+
+    await logActivity(
+      targetId: inv.id!,
+      targetType: 'INVOICE',
+      action: 'DELETE',
+      summary: 'حذف فاتورة بمبلغ ${inv.amount.toStringAsFixed(2)} NIS',
+      performedById: performedById,
+      performedByName: performedByName,
+      createdAt: now,
+    );
+
     // Always recalculate balance after delete so the customer's balance
     // reflects the removal of this invoice's financial effect.
     await recalculateUserBalance(inv.userId);
@@ -1245,7 +1269,7 @@ class DatabaseService {
   /// Restores a soft-deleted invoice and immediately recalculates the owner's balance.
   /// This ensures that restoring a DEPOSIT invoice re-applies its credit effect
   /// and restoring a SALE/WITHDRAWAL invoice re-applies its debt effect.
-  Future<void> restoreInvoice(Invoice inv) async {
+  Future<void> restoreInvoice(Invoice inv, {int? performedById, String? performedByName}) async {
     final db = await database;
     final now = TimestampFormatter.nowUtc();
     await db.update(
@@ -1259,6 +1283,17 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [inv.id],
     );
+
+    await logActivity(
+      targetId: inv.id!,
+      targetType: 'INVOICE',
+      action: 'RESTORE',
+      summary: 'استعادة فاتورة بمبلغ ${inv.amount.toStringAsFixed(2)} NIS',
+      performedById: performedById,
+      performedByName: performedByName,
+      createdAt: now,
+    );
+
     // Always recalculate balance after restore so the customer's balance
     // reflects the re-inclusion of this invoice's financial effect.
     await recalculateUserBalance(inv.userId);
@@ -2380,26 +2415,60 @@ class DatabaseService {
   }
 
   /// Soft-delete a purchase (sets deleted_at timestamp)
-  Future<void> softDeletePurchase(int purchaseId) async {
+  Future<void> softDeletePurchase(int purchaseId, {int? performedById, String? performedByName}) async {
     final db = await database;
     final now = TimestampFormatter.nowUtc();
+    
+    final existing = await db.query('purchases', where: 'id = ?', whereArgs: [purchaseId], limit: 1);
+    if (existing.isEmpty) return;
+    int currentVersion = existing.first['version'] as int? ?? 1;
+    double amount = (existing.first['amount'] as num?)?.toDouble() ?? 0.0;
+    String merchant = existing.first['merchant_name'] as String? ?? '';
+
     await db.update(
       'purchases',
-      {'deleted_at': now, 'updated_at': now, 'is_synced': 0},
+      {'deleted_at': now, 'updated_at': now, 'is_synced': 0, 'version': currentVersion + 1},
       where: 'id = ?',
       whereArgs: [purchaseId],
+    );
+
+    await logActivity(
+      targetId: purchaseId,
+      targetType: 'PURCHASE',
+      action: 'DELETE',
+      summary: 'حذف مشتريات من $merchant بمبلغ ${amount.toStringAsFixed(2)} NIS',
+      performedById: performedById,
+      performedByName: performedByName,
+      createdAt: now,
     );
   }
 
   /// Restore a soft-deleted purchase
-  Future<void> restorePurchase(int purchaseId) async {
+  Future<void> restorePurchase(int purchaseId, {int? performedById, String? performedByName}) async {
     final db = await database;
     final now = TimestampFormatter.nowUtc();
+
+    final existing = await db.query('purchases', where: 'id = ?', whereArgs: [purchaseId], limit: 1);
+    if (existing.isEmpty) return;
+    int currentVersion = existing.first['version'] as int? ?? 1;
+    double amount = (existing.first['amount'] as num?)?.toDouble() ?? 0.0;
+    String merchant = existing.first['merchant_name'] as String? ?? '';
+
     await db.update(
       'purchases',
-      {'deleted_at': null, 'updated_at': now, 'is_synced': 0},
+      {'deleted_at': null, 'updated_at': now, 'is_synced': 0, 'version': currentVersion + 1},
       where: 'id = ?',
       whereArgs: [purchaseId],
+    );
+
+    await logActivity(
+      targetId: purchaseId,
+      targetType: 'PURCHASE',
+      action: 'RESTORE',
+      summary: 'استعادة مشتريات من $merchant بمبلغ ${amount.toStringAsFixed(2)} NIS',
+      performedById: performedById,
+      performedByName: performedByName,
+      createdAt: now,
     );
   }
 

@@ -134,7 +134,7 @@ class _AccountantsScreenState extends State<AccountantsScreen> {
         action: 'DELETE',
         summary: 'حذف الموظف: ${accountant.name}',
         performedById: actUser?.id,
-        performedByName: actUser?.name,
+        performedByName: actUser?.name ?? actUser?.username,
         storeManagerId: actUser?.parentId ?? actUser?.id,
       ).catchError((e) => debugPrint('logActivity failed: $e'));
       _loadAccountants();
@@ -379,7 +379,12 @@ class _EditAccountantSheetState extends State<_EditAccountantSheet> {
         notes: widget.accountant.notes,
       );
 
-      await db.updateUser(updated, widget.accountant);
+      await db.updateUser(
+        updated,
+        widget.accountant,
+        performedById: auth.currentUser?.id,
+        performedByName: auth.currentUser?.name ?? auth.currentUser?.username,
+      );
 
       // Update password if provided
       if (password.isNotEmpty) {
@@ -394,7 +399,7 @@ class _EditAccountantSheetState extends State<_EditAccountantSheet> {
         action: 'UPDATE',
         summary: 'تعديل بيانات الموظف: ${widget.accountant.name}',
         performedById: actUser?.id,
-        performedByName: actUser?.name,
+        performedByName: actUser?.name ?? actUser?.username,
         storeManagerId: actUser?.parentId ?? actUser?.id,
       ).catchError((e) => debugPrint('logActivity failed: $e'));
 

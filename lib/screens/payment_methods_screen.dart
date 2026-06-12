@@ -718,7 +718,7 @@ class PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                           action: 'CREATE',
                           summary: 'إضافة طريقة دفع جديدة: ' + newMethod.name,
                           performedById: actUser?.id,
-                          performedByName: actUser?.name,
+                          performedByName: actUser?.name ?? actUser?.username,
                           storeManagerId: actUser?.parentId ?? actUser?.id,
                         ).catchError((e) => debugPrint('logActivity failed'));
                       } else {
@@ -729,7 +729,7 @@ class PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                           action: 'UPDATE',
                           summary: 'تعديل طريقة دفع: ' + newMethod.name,
                           performedById: actUser?.id,
-                          performedByName: actUser?.name,
+                          performedByName: actUser?.name ?? actUser?.username,
                           storeManagerId: actUser?.parentId ?? actUser?.id,
                         ).catchError((e) => debugPrint('logActivity failed'));
                       }
@@ -881,7 +881,7 @@ class PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                     action: 'DELETE',
                     summary: 'حذف طريقة دفع: ' + method.name,
                     performedById: actUser?.id,
-                    performedByName: actUser?.name,
+                    performedByName: actUser?.name ?? actUser?.username,
                     storeManagerId: actUser?.parentId ?? actUser?.id,
                   ).catchError((e) => debugPrint('logActivity failed'));
                   if (mounted) {

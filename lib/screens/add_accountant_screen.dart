@@ -43,7 +43,12 @@ class _AddAccountantScreenState extends State<AddAccountantScreen> {
         createdAt: TimestampFormatter.nowUtc(),
       );
 
-      final newAccId = await db.insertUser(accountant, _passwordController.text);
+      final newAccId = await db.insertUser(
+        accountant,
+        _passwordController.text,
+        performedById: auth.currentUser?.id,
+        performedByName: auth.currentUser?.name ?? auth.currentUser?.username,
+      );
       final actUser = context.read<AuthService>().currentUser;
       db.logActivity(
         targetId: newAccId,
@@ -51,7 +56,7 @@ class _AddAccountantScreenState extends State<AddAccountantScreen> {
         action: 'CREATE',
         summary: 'إضافة محاسب جديد: \${accountant.name}',
         performedById: actUser?.id,
-        performedByName: actUser?.name,
+        performedByName: actUser?.name ?? actUser?.username,
         storeManagerId: actUser?.parentId ?? actUser?.id,
       ).catchError((e) => debugPrint('logActivity failed: \$e'));
 

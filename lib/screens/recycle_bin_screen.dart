@@ -6,6 +6,7 @@ import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/sync_service.dart';
 import '../services/theme_service.dart';
+import '../services/auth_service.dart';
 
 class RecycleBinScreen extends StatefulWidget {
   const RecycleBinScreen({super.key});
@@ -301,7 +302,12 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
 
   Future<void> _restoreInvoice(Invoice inv) async {
     final db = context.read<DatabaseService>();
-    await db.restoreInvoice(inv);
+    final _actUser = context.read<AuthService>().currentUser;
+    await db.restoreInvoice(
+      inv,
+      performedById: _actUser?.id,
+      performedByName: _actUser?.name ?? _actUser?.username,
+    );
     _loadDeletedInvoices();
     ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
       const SnackBar(content: Text('تم استعادة الفاتورة بنجاح'), backgroundColor: Colors.green),

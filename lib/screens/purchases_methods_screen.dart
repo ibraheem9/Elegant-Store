@@ -696,7 +696,7 @@ class PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
                           action: 'CREATE',
                           summary: 'إضافة طريقة دفع مشتريات: ' + newMethod.name,
                           performedById: actUser?.id,
-                          performedByName: actUser?.name,
+                          performedByName: actUser?.name ?? actUser?.username,
                           storeManagerId: actUser?.parentId ?? actUser?.id,
                         ).catchError((e) => debugPrint('logActivity failed'));
                       } else {
@@ -707,7 +707,7 @@ class PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
                           action: 'UPDATE',
                           summary: 'تعديل طريقة دفع مشتريات: ' + newMethod.name,
                           performedById: actUser?.id,
-                          performedByName: actUser?.name,
+                          performedByName: actUser?.name ?? actUser?.username,
                           storeManagerId: actUser?.parentId ?? actUser?.id,
                         ).catchError((e) => debugPrint('logActivity failed'));
                       }
@@ -859,7 +859,7 @@ class PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
                     action: 'DELETE',
                     summary: 'حذف طريقة دفع مشتريات: ' + method.name,
                     performedById: actUser?.id,
-                    performedByName: actUser?.name,
+                    performedByName: actUser?.name ?? actUser?.username,
                     storeManagerId: actUser?.parentId ?? actUser?.id,
                   ).catchError((e) => debugPrint('logActivity failed'));
                   if (mounted) {

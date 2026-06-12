@@ -195,7 +195,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
       fieldName: 'تسوية دفع', oldValue: inv.methodName ?? 'غير محدد',
       newValue: selectedMethod.name,
       summary: 'تسوية فاتورة بمبلغ ${inv.amount.toStringAsFixed(2)} ₪ عبر ${selectedMethod.name}',
-      performedById: user?.id, performedByName: user?.name,
+      performedById: user?.id, performedByName: user?.name ?? user?.username,
       storeManagerId: user?.parentId ?? user?.id,
     ).catchError((e) => debugPrint('logActivity failed: $e'));
 

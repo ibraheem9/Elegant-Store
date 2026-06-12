@@ -99,7 +99,12 @@ class _PurchasesRecycleBinScreenState
 
   Future<void> _restore(Purchase p) async {
     final db = context.read<DatabaseService>();
-    await db.restorePurchase(p.id!);
+    final _actUser = context.read<AuthService>().currentUser;
+    await db.restorePurchase(
+      p.id!,
+      performedById: _actUser?.id,
+      performedByName: _actUser?.name ?? _actUser?.username,
+    );
     _snack('تمت استعادة "${p.merchantName}" بنجاح', Colors.green);
     await _loadFirstPage();
   }

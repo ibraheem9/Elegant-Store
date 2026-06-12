@@ -94,7 +94,7 @@ class _DeveloperUserEditScreenState extends State<DeveloperUserEditScreen> {
 
       await db.updateUser(updatedUser, widget.user, 
         performedById: auth.currentUser?.id, 
-        performedByName: auth.currentUser?.name,
+        performedByName: auth.currentUser?.name ?? auth.currentUser?.username,
         reason: 'تعديل من قبل المطور'
       );
 

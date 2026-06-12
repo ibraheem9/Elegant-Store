@@ -392,10 +392,10 @@ class _SalesScreenState extends State<SalesScreen> {
           newUser,
           '123',
           performedById: actUser?.id,
-          performedByName: actUser?.username ?? actUser?.name,
-        );
-        customer = (await db.getCustomers()).firstWhere((c) => c.id == id);
-      }
+        performedByName: actUser?.name ?? actUser?.username,
+      );
+      customer = (await db.getCustomers()).firstWhere((c) => c.id == id);
+    }
 
       String status = 'PAID';
       if (_selectedPaymentMethod!.type == 'deferred' || _selectedPaymentMethod!.type == 'unpaid') {
@@ -417,7 +417,7 @@ class _SalesScreenState extends State<SalesScreen> {
       final invoiceId = await db.insertInvoice(
         invoice,
         performedById: actUser?.id,
-        performedByName: actUser?.username ?? actUser?.name,
+        performedByName: actUser?.name ?? actUser?.username,
       );
       // Always recalculate after insert to ensure balance reflects the new invoice correctly
       await db.recalculateUserBalance(invoice.userId);
@@ -474,8 +474,8 @@ class _SalesScreenState extends State<SalesScreen> {
         final id = await db.insertUser(
           newUser,
           '123',
-          performedById: actUser?.id,
-          performedByName: actUser?.username ?? actUser?.name,
+            performedById: actUser?.id,
+          performedByName: actUser?.name ?? actUser?.username,
         );
         customer = (await db.getCustomers()).firstWhere((c) => c.id == id);
       }
@@ -486,7 +486,7 @@ class _SalesScreenState extends State<SalesScreen> {
         paymentMethodId: _selectedPaymentMethod?.id,
         date: TimestampFormatter.applyPastDateRule(_selectedInvoiceDate),
         performedById: actUser?.id,
-        performedByName: actUser?.username ?? actUser?.name,
+        performedByName: actUser?.name ?? actUser?.username,
       );
       _clearFields();
       await _loadData();
@@ -540,7 +540,7 @@ class _SalesScreenState extends State<SalesScreen> {
         paymentMethodId: _selectedPaymentMethod!.id!,
         date: combinedDateTime,
         performedById: actUser?.id,
-        performedByName: actUser?.username ?? actUser?.name,
+        performedByName: actUser?.name ?? actUser?.username,
       );
       _clearFields();
       await _loadData();
@@ -699,7 +699,7 @@ class _SalesScreenState extends State<SalesScreen> {
         newInv: newInv,
         reason: reasonController.text,
         performedById: actUser?.id,
-        performedByName: actUser?.username ?? actUser?.name,
+        performedByName: actUser?.name ?? actUser?.username,
         storeManagerId: actUser?.parentId ?? actUser?.id,
       );
       // Recalculate balance in case amount or payment_status changed
@@ -846,7 +846,7 @@ class _SalesScreenState extends State<SalesScreen> {
                               Text(
                                 action == 'CREATE'
                                     ? 'بواسطة: ${createdByName ?? editorName ?? "غير معروف"}'
-                                    : 'بواسطة: $editorName',
+                                    : 'بواسطة: ${editorName ?? "غير معروف"}',
                                 style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
                               ),
                               const SizedBox(width: 12),
@@ -894,17 +894,12 @@ class _SalesScreenState extends State<SalesScreen> {
 
     if (confirm == true) {
       final db = context.read<DatabaseService>();
-      await db.softDeleteInvoice(inv);
-      final actUser = context.read<AuthService>().currentUser;
-      db.logActivity(
-        targetId: inv.id!,
-        targetType: 'INVOICE',
-        action: 'DELETE',
-        summary: 'حذف فاتورة بمبلغ ${inv.amount.toStringAsFixed(2)} NIS - الحالة: ${_translateHistoryValue('payment_status', inv.paymentStatus)}',
-        performedById: actUser?.id,
-        performedByName: actUser?.username ?? actUser?.name,
-        storeManagerId: actUser?.parentId ?? actUser?.id,
-      ).catchError((e) => debugPrint('logActivity failed: $e'));
+      final _actUser = context.read<AuthService>().currentUser;
+      await db.softDeleteInvoice(
+        inv,
+        performedById: _actUser?.id,
+        performedByName: _actUser?.name ?? _actUser?.username,
+      );
 
       // Update local state instead of calling _loadData() to maintain scroll position
       setState(() {

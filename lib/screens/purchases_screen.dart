@@ -163,7 +163,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           createdAt:     TimestampFormatter.toUtcString(dt),
         ),
         performedById: actUser?.id,
-        performedByName: actUser?.username ?? actUser?.name,
+        performedByName: actUser?.name ?? actUser?.username,
       );
       _merchantController.clear();
       _amountController.clear();
@@ -196,17 +196,12 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     );
     if (confirm == true && p.id != null) {
       final db2 = context.read<DatabaseService>();
-      await db2.softDeletePurchase(p.id!);
-      final actUser = context.read<AuthService>().currentUser;
-      db2.logActivity(
-        targetId: p.id!,
-        targetType: 'PURCHASE',
-        action: 'DELETE',
-        summary: 'حذف مشتريات ${p.merchantName} بمبلغ ${p.amount.toStringAsFixed(2)} ₪',
-        performedById: actUser?.id,
-        performedByName: actUser?.name,
-        storeManagerId: actUser?.parentId ?? actUser?.id,
-      ).catchError((e) => debugPrint('logActivity failed: $e'));
+      final _actUser = context.read<AuthService>().currentUser;
+      await db2.softDeletePurchase(
+        p.id!,
+        performedById: _actUser?.id,
+        performedByName: _actUser?.name ?? _actUser?.username,
+      );
       await _loadData();
       _snack('تم نقل الفاتورة إلى سلة المحذوفات', Colors.redAccent);
     }
@@ -320,7 +315,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           isSynced:       0,
         ),
         reason:     reasonCtrl.text.trim(),
-        editorName: editor?.name ?? 'غير معروف',
+        editorName: editor?.name ?? editor?.username ?? 'غير معروف',
         editorId:   editor?.id ?? 0,
       );
       await _loadData();
