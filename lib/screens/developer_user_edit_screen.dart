@@ -5,6 +5,7 @@ import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/auth_service.dart';
 import '../utils/app_snackbar.dart';
+import '../utils/password_utils.dart';
 
 class DeveloperUserEditScreen extends StatefulWidget {
   final User user;
@@ -24,6 +25,8 @@ class _DeveloperUserEditScreenState extends State<DeveloperUserEditScreen> {
   late String _selectedRole;
   bool _obscurePassword = true;
   bool _isLoading = false;
+  bool _isPasswordHashed = false;
+  String? _originalPassword;
 
   final List<String> _roles = ['STORE_MANAGER', 'SUPER_ADMIN', 'ACCOUNTANT'];
 
@@ -52,8 +55,15 @@ class _DeveloperUserEditScreenState extends State<DeveloperUserEditScreen> {
       whereArgs: [widget.user.id],
     );
     if (result.isNotEmpty && mounted) {
+      final password = result.first['password'] as String;
       setState(() {
-        _passwordController.text = result.first['password'] as String;
+        _isPasswordHashed = PasswordUtils.isHashed(password);
+        _originalPassword = password;
+        if (_isPasswordHashed) {
+          _passwordController.text = ''; // Leave empty if hashed
+        } else {
+          _passwordController.text = password;
+        }
       });
     }
   }
@@ -98,7 +108,7 @@ class _DeveloperUserEditScreenState extends State<DeveloperUserEditScreen> {
         reason: 'تعديل من قبل المطور'
       );
 
-      if (_passwordController.text.isNotEmpty) {
+      if (_passwordController.text.isNotEmpty && _passwordController.text != _originalPassword) {
         await db.updateUserPassword(widget.user.id!, _passwordController.text);
       }
 
@@ -211,9 +221,10 @@ class _DeveloperUserEditScreenState extends State<DeveloperUserEditScreen> {
       controller: _passwordController,
       obscureText: _obscurePassword,
       decoration: InputDecoration(
-        labelText: 'كلمة المرور',
+        labelText: _isPasswordHashed ? 'كلمة المرور (مشفرة - اتركها فارغة لعدم التغيير)' : 'كلمة المرور',
         prefixIcon: const Icon(Icons.lock, color: Color(0xFF1E3A8A)),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        hintText: _isPasswordHashed ? 'ادخل كلمة مرور جديدة لتغييرها' : null,
         suffixIcon: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -221,17 +232,23 @@ class _DeveloperUserEditScreenState extends State<DeveloperUserEditScreen> {
               icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
               onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
             ),
-            IconButton(
-              icon: const Icon(Icons.copy),
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: _passwordController.text));
-                AppSnackBar.success(context, 'تم نسخ كلمة المرور');
-              },
-            ),
+            if (!_isPasswordHashed) 
+              IconButton(
+                icon: const Icon(Icons.copy),
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: _passwordController.text));
+                  AppSnackBar.success(context, 'تم نسخ كلمة المرور');
+                },
+              ),
           ],
         ),
       ),
-      validator: (v) => v!.isEmpty ? 'يرجى إدخال كلمة المرور' : null,
+      validator: (v) {
+        if (!_isPasswordHashed && (v == null || v.isEmpty)) {
+          return 'يرجى إدخال كلمة المرور';
+        }
+        return null;
+      },
     );
   }
 }

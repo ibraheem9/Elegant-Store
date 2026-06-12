@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/models.dart';
 import '../utils/timestamp_formatter.dart';
+import '../utils/password_utils.dart';
 import 'dart:developer' as dev;
 import 'notification_repository.dart';
 
@@ -79,7 +80,7 @@ class DatabaseService {
 
     final db = await openDatabase(
       path,
-      version: 12,
+      version: 13,
       onCreate: (db, version) async {
         await _createTables(db);
         await _createTriggers(db);
@@ -271,6 +272,24 @@ class DatabaseService {
             } catch (e) {
               dev.log('Error adding created_by_id to $table: $e',
                   name: 'DatabaseService');
+            }
+          }
+        }
+        if (oldVersion < 13) {
+          // v13: Hash all existing plain-text passwords
+          final List<Map<String, dynamic>> users = await db.query('users');
+          for (final user in users) {
+            final String? plainPassword = user['password'] as String?;
+            if (plainPassword != null &&
+                plainPassword.isNotEmpty &&
+                !PasswordUtils.isHashed(plainPassword)) {
+              final String hashedPassword = PasswordUtils.hashPassword(plainPassword);
+              await db.update(
+                'users',
+                {'password': hashedPassword},
+                where: 'id = ?',
+                whereArgs: [user['id']],
+              );
             }
           }
         }
@@ -611,7 +630,7 @@ class DatabaseService {
       [
         devUuid, 
         'ibraheem', 
-        'Ibraheem**77\$\$', // Dart string: resolves to Ibraheem**77$$
+        PasswordUtils.hashPassword('Ibraheem**77\$\$'), 
         'Ibraheem Abd Elhadi', 
         'i7r10k8@gmail.com',
         'DEVELOPER', 
@@ -633,7 +652,7 @@ class DatabaseService {
       [
         adminUuid, 
         'i7', 
-        '123', 
+        PasswordUtils.hashPassword('123'), 
         'Ibraheem',
         'admin@elegant.store',
         'STORE_MANAGER', 
@@ -668,11 +687,32 @@ class DatabaseService {
     
     final r = await db.query(
       'users',
-      where: 'LOWER(username) = ? AND password = ?',
-      whereArgs: [username.toLowerCase(), password],
+      where: 'LOWER(username) = ? AND deleted_at IS NULL',
+      whereArgs: [username.toLowerCase()],
+      limit: 1,
     );
     
-    if (r.isNotEmpty) return User.fromMap(r.first);
+    if (r.isNotEmpty) {
+      final userMap = r.first;
+      final storedPassword = userMap['password'] as String;
+      
+      if (PasswordUtils.verifyPassword(password, storedPassword)) {
+        return User.fromMap(userMap);
+      }
+      
+      // Fallback for migration: check if it's plain text and matches
+      if (!PasswordUtils.isHashed(storedPassword) && storedPassword == password) {
+        // Migration: hash it now
+        final hashedPassword = PasswordUtils.hashPassword(password);
+        await db.update(
+          'users', 
+          {'password': hashedPassword}, 
+          where: 'id = ?', 
+          whereArgs: [userMap['id']]
+        );
+        return User.fromMap(userMap);
+      }
+    }
     return null;
   }
 
@@ -711,7 +751,7 @@ class DatabaseService {
     final rowsAffected = await db.update(
       'users',
       {
-        'password': newPassword,
+        'password': PasswordUtils.hashPassword(newPassword),
         'version': currentVersion + 1,
         'is_synced': 0,
         'updated_at': now,
@@ -938,7 +978,7 @@ class DatabaseService {
     final managerId = u.getStoreManagerIdLocal();
     map['uuid'] = (u.uuid.isEmpty) ? _generateHashId(managerId) : u.uuid;
 
-    map['password'] = p;
+    map['password'] = PasswordUtils.hashPassword(p);
     map['version'] = 1;
     map['created_by_name'] = performedByName;
     map['created_by_id'] = performedById;
@@ -1058,7 +1098,7 @@ class DatabaseService {
     await db.update(
       'users',
       {
-        'password': newPassword,
+        'password': PasswordUtils.hashPassword(newPassword),
         'version': currentVersion + 1,
         'is_synced': 0,
         'updated_at': TimestampFormatter.nowUtc(),

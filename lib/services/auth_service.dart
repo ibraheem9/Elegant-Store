@@ -1,7 +1,9 @@
 import '../utils/timestamp_formatter.dart';
+import '../utils/password_utils.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:dio/dio.dart';
 import '../models/models.dart';
@@ -23,6 +25,7 @@ class AuthService extends ChangeNotifier {
   final DatabaseService _dbService;
   final SyncService? _syncService;
   final LocalAuthentication _localAuth = LocalAuthentication();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   final Dio _dio = Dio(BaseOptions(
     baseUrl: ApiConfig.baseUrl,
     headers: {
@@ -107,7 +110,7 @@ class AuthService extends ChangeNotifier {
         await prefs.setString('saved_username', username);
         await prefs.setString('last_user_uuid', _currentUser!.uuid);
         await prefs.setString('last_logged_username', username);
-        await prefs.setString('last_logged_password', password);
+        await _secureStorage.write(key: 'last_logged_password', value: password);
         
         // Always save session expiry for 30 days unless explicitly logged out.
         // This fulfills the user request for a month-long session.
@@ -192,7 +195,7 @@ class AuthService extends ChangeNotifier {
           'parent_id': userData['parent_id'],
           'store_manager_id': userData['store_manager_id'],
           'username': userData['username'],
-          'password': password, // Store plain text locally for offline re-auth
+          'password': PasswordUtils.hashPassword(password), // Hash for local storage
           'name': userData['name'],
           'role': userData['role'],
           'email': userData['email'],
@@ -217,7 +220,7 @@ class AuthService extends ChangeNotifier {
         if (incomingStoreManagerId != null) {
           await prefs.setString('last_store_manager_id', incomingStoreManagerId);
         }
-        await prefs.setString('last_logged_password', password);
+        await _secureStorage.write(key: 'last_logged_password', value: password);
 
         // Always save session expiry for 30 days unless explicitly logged out.
         // This fulfills the user request for a month-long session.
@@ -258,6 +261,7 @@ class AuthService extends ChangeNotifier {
     await prefs.remove('auth_token');
     await prefs.remove('saved_username');
     await prefs.remove('session_expiry');
+    await _secureStorage.delete(key: 'last_logged_password');
     notifyListeners();
   }
 
@@ -325,27 +329,32 @@ class AuthService extends ChangeNotifier {
       final db = await _dbService.database;
       final results = await db.query(
         'users',
-        where: 'id = ? AND password = ?',
-        whereArgs: [_currentUser!.id, current],
+        where: 'id = ?',
+        whereArgs: [_currentUser!.id],
       );
 
-      if (results.isEmpty) {
-        _lastLoginError = 'كلمة المرور الحالية غير صحيحة.';
-        return false;
+      if (results.isEmpty) return false;
+
+      final storedPassword = results.first['password'] as String;
+      if (!PasswordUtils.verifyPassword(current, storedPassword)) {
+        // Fallback for migration: check if it's plain text and matches
+        if (PasswordUtils.isHashed(storedPassword) || storedPassword != current) {
+          _lastLoginError = 'كلمة المرور الحالية غير صحيحة.';
+          return false;
+        }
       }
 
       // 2. Update local database and mark as unsynced
       final now = TimestampFormatter.nowUtc();
       await db.update(
         'users',
-        {'password': newPass, 'updated_at': now, 'is_synced': 0},
+        {'password': PasswordUtils.hashPassword(newPass), 'updated_at': now, 'is_synced': 0},
         where: 'id = ?',
         whereArgs: [_currentUser!.id],
       );
 
-      // 3. Update SharedPreferences for biometric and future sessions
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('last_logged_password', newPass);
+      // 3. Update SecureStorage for biometric and future sessions
+      await _secureStorage.write(key: 'last_logged_password', value: newPass);
 
       // 4. Update the _currentUser object with new update_at
       _currentUser = User(
@@ -407,7 +416,7 @@ class AuthService extends ChangeNotifier {
         final prefs = await SharedPreferences.getInstance();
         final lastUser = prefs.getString('last_logged_username');
         if (lastUser != null && lastUser.toLowerCase() == username.toLowerCase()) {
-          await prefs.setString('last_logged_password', newPassword);
+          await _secureStorage.write(key: 'last_logged_password', value: newPassword);
         }
         dev.log('Password reset successful for $username', name: 'AuthService');
       }
@@ -437,7 +446,7 @@ class AuthService extends ChangeNotifier {
       if (authenticated) {
         final prefs = await SharedPreferences.getInstance();
         final String? username = prefs.getString('last_logged_username');
-        final String? password = prefs.getString('last_logged_password');
+        final String? password = await _secureStorage.read(key: 'last_logged_password');
 
         if (username != null && password != null) {
           return await login(username, password);

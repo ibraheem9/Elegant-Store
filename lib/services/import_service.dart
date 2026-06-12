@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'database_service.dart';
+import '../utils/password_utils.dart';
 
 /// Result of an import operation.
 class ImportResult {
@@ -199,6 +200,15 @@ class ImportService {
 
             // Resolve UUID-based FKs back to local integer IDs
             _resolveUuidForeignKeys(table, row, uuidToIdCache);
+
+            if (table == 'users') {
+              final String? password = row['password'] as String?;
+              if (password != null &&
+                  password.isNotEmpty &&
+                  !PasswordUtils.isHashed(password)) {
+                row['password'] = PasswordUtils.hashPassword(password);
+              }
+            }
 
             final String? uuid = row['uuid'] as String?;
             if (uuid == null) {
