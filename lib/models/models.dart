@@ -70,7 +70,7 @@ class User {
     String? updatedAt,
     this.deletedAt,
     this.isSynced = 0,
-  }) : this.updatedAt = updatedAt ?? TimestampFormatter.nowUtc();
+  }) : updatedAt = updatedAt ?? TimestampFormatter.nowUtc();
 
   Map<String, dynamic> toMap() {
     return {
@@ -169,8 +169,8 @@ class PaymentMethod {
     String? createdAt,
     String? updatedAt,
     this.isSynced = 0,
-  })  : this.createdAt = createdAt ?? TimestampFormatter.nowUtc(),
-        this.updatedAt = updatedAt ?? TimestampFormatter.nowUtc();
+  })  : createdAt = createdAt ?? TimestampFormatter.nowUtc(),
+        updatedAt = updatedAt ?? TimestampFormatter.nowUtc();
 
   Map<String, dynamic> toMap() {
     return {
@@ -288,7 +288,7 @@ class Invoice {
     this.userUuid,
     this.customerIsPermanent = 0,
     this.lastEditedBy,
-  }) : this.updatedAt = updatedAt ?? TimestampFormatter.nowUtc();
+  }) : updatedAt = updatedAt ?? TimestampFormatter.nowUtc();
 
   Map<String, dynamic> toMap() {
     return {
@@ -384,7 +384,7 @@ class FinancialTransaction {
     this.isSynced = 0,
     this.buyerUuid,
     this.invoiceUuid,
-  }) : this.updatedAt = updatedAt ?? TimestampFormatter.nowUtc();
+  }) : updatedAt = updatedAt ?? TimestampFormatter.nowUtc();
 
   Map<String, dynamic> toMap() {
     return {
@@ -467,7 +467,7 @@ class Purchase {
     String? updatedAt,
     this.deletedAt,
     this.isSynced = 0,
-  }) : this.updatedAt = updatedAt ?? TimestampFormatter.nowUtc();
+  }) : updatedAt = updatedAt ?? TimestampFormatter.nowUtc();
 
   Map<String, dynamic> toMap() {
     return {
@@ -550,7 +550,7 @@ class DailyStatistics {
     required this.createdAt,
     String? updatedAt,
     this.isSynced = 0,
-  }) : this.updatedAt = updatedAt ?? TimestampFormatter.nowUtc();
+  }) : updatedAt = updatedAt ?? TimestampFormatter.nowUtc();
 
   Map<String, dynamic> toMap() {
     return {
@@ -630,6 +630,8 @@ class StoreProfile {
   final String? city;
   final String? mobile;
   final String? whatsapp;
+  final String? username;
+  final String? password;
   final int invoiceCount;
   final int customersCount;
   final double totalSales;
@@ -646,6 +648,8 @@ class StoreProfile {
     this.city,
     this.mobile,
     this.whatsapp,
+    this.username,
+    this.password,
     this.invoiceCount = 0,
     this.customersCount = 0,
     this.totalSales = 0.0,
@@ -664,6 +668,8 @@ class StoreProfile {
       'city': city,
       'mobile': mobile,
       'whatsapp': whatsapp,
+      'username': username,
+      'password': password,
       'invoice_count': invoiceCount,
       'customers_count': customersCount,
       'total_sales': _roundMoney(totalSales),
@@ -683,6 +689,8 @@ class StoreProfile {
       city: map['city'],
       mobile: map['mobile'],
       whatsapp: map['whatsapp'],
+      username: map['username'],
+      password: map['password'],
       invoiceCount: map['invoice_count'] ?? 0,
       customersCount: map['customers_count'] ?? 0,
       totalSales: _toDouble(map['total_sales']),
@@ -699,6 +707,8 @@ class StoreProfile {
     String? city,
     String? mobile,
     String? whatsapp,
+    String? username,
+    String? password,
     int? invoiceCount,
     int? customersCount,
     double? totalSales,
@@ -715,6 +725,8 @@ class StoreProfile {
       city: city ?? this.city,
       mobile: mobile ?? this.mobile,
       whatsapp: whatsapp ?? this.whatsapp,
+      username: username ?? this.username,
+      password: password ?? this.password,
       invoiceCount: invoiceCount ?? this.invoiceCount,
       customersCount: customersCount ?? this.customersCount,
       totalSales: totalSales ?? this.totalSales,

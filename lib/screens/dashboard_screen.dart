@@ -115,9 +115,9 @@ class DashboardScreenState extends State<DashboardScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.05),
+                    color: Colors.blue.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                    border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
                   ),
                   child: Row(
                     children: [
@@ -477,7 +477,7 @@ class DashboardScreenState extends State<DashboardScreen> {
 
     return NavigationBarTheme(
       data: NavigationBarThemeData(
-        indicatorColor: Colors.blue.withOpacity(0.2),
+        indicatorColor: Colors.blue.withValues(alpha: 0.2),
         labelTextStyle: MaterialStateProperty.resolveWith((states) {
           if (states.contains(MaterialState.selected)) {
             return const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue);
@@ -547,7 +547,7 @@ class DashboardScreenState extends State<DashboardScreen> {
         leading: Icon(icon, color: isSelected ? Colors.white : Colors.white60, size: 22),
         title: Text(title, style: TextStyle(color: isSelected ? Colors.white : Colors.white70, fontSize: 14, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
         selected: isSelected,
-        selectedTileColor: Colors.white.withOpacity(0.15),
+        selectedTileColor: Colors.white.withValues(alpha: 0.15),
       ),
     );
   }
@@ -558,7 +558,7 @@ class DashboardScreenState extends State<DashboardScreen> {
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white.withOpacity(0.1))),
+      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white.withValues(alpha: 0.1))),
       child: Row(
         children: [
           CircleAvatar(backgroundColor: Colors.blue, radius: 18, child: Text(user?.name.substring(0, 1).toUpperCase() ?? 'U', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
@@ -728,7 +728,7 @@ class DashboardScreenState extends State<DashboardScreen> {
 }
 
 class DashboardHomeScreen extends StatefulWidget {
-  const DashboardHomeScreen({Key? key}) : super(key: key);
+  const DashboardHomeScreen({super.key});
 
   @override
   State<DashboardHomeScreen> createState() => _DashboardHomeScreenState();
@@ -833,7 +833,7 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
           color: isDark ? const Color(0xFF0F172A) : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
-          boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 3))],
+          boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 8, offset: const Offset(0, 3))],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -842,7 +842,7 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
           children: [
             Container(
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+              decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
               child: Icon(icon, color: color, size: 20),
             ),
             const SizedBox(height: 10),

@@ -234,7 +234,7 @@ void _initWorkmanager() {
 
 class ElegantStoreApp extends StatefulWidget {
   final bool isLicensed;
-  const ElegantStoreApp({Key? key, required this.isLicensed}) : super(key: key);
+  const ElegantStoreApp({super.key, required this.isLicensed});
 
   @override
   State<ElegantStoreApp> createState() => _ElegantStoreAppState();
@@ -279,7 +279,7 @@ class _ElegantStoreAppState extends State<ElegantStoreApp> {
 /// Stateful home widget that ensures post-login side effects (sync, notifications)
 /// are triggered exactly once per login session, not on every Consumer rebuild.
 class _AppHome extends StatefulWidget {
-  const _AppHome({Key? key}) : super(key: key);
+  const _AppHome({super.key});
 
   @override
   State<_AppHome> createState() => _AppHomeState();

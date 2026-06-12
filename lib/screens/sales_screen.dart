@@ -15,7 +15,7 @@ import 'recycle_bin_screen.dart';
 import 'dashboard_screen.dart';
 
 class SalesScreen extends StatefulWidget {
-  const SalesScreen({Key? key}) : super(key: key);
+  const SalesScreen({super.key});
 
   @override
   State<SalesScreen> createState() => _SalesScreenState();
@@ -793,9 +793,9 @@ class _SalesScreenState extends State<SalesScreen> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: badgeColor.withOpacity(0.1),
+                                  color: badgeColor.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: badgeColor.withOpacity(0.3)),
+                                  border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
                                 ),
                                 child: Text(
                                   action == 'CREATE' ? 'إضافة' : action == 'DELETE' ? 'حذف' : 'تعديل',

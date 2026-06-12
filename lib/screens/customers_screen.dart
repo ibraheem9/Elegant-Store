@@ -420,7 +420,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                           decoration: BoxDecoration(
-                            color: AppColors.zeroBadge.withOpacity(0.12),
+                            color: AppColors.zeroBadge.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Row(
@@ -437,7 +437,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                           decoration: BoxDecoration(
-                            color: AppColors.debtorBadge.withOpacity(0.12),
+                            color: AppColors.debtorBadge.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Row(
@@ -454,7 +454,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                           decoration: BoxDecoration(
-                            color: AppColors.creditBadge.withOpacity(0.12),
+                            color: AppColors.creditBadge.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Row(

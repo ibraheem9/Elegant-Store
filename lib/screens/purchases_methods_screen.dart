@@ -5,7 +5,7 @@ import '../services/auth_service.dart';
 import '../models/models.dart';
 
 class PurchasesMethodsScreen extends StatefulWidget {
-  const PurchasesMethodsScreen({Key? key}) : super(key: key);
+  const PurchasesMethodsScreen({super.key});
 
   @override
   State<PurchasesMethodsScreen> createState() =>
@@ -136,10 +136,10 @@ class PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF0B74FF).withOpacity(0.08),
+                      color: const Color(0xFF0B74FF).withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                          color: const Color(0xFF0B74FF).withOpacity(0.3)),
+                          color: const Color(0xFF0B74FF).withValues(alpha: 0.3)),
                     ),
                     child: const Row(
                       children: [
@@ -196,10 +196,10 @@ class PurchasesMethodsScreenState extends State<PurchasesMethodsScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E3A5F).withOpacity(isDark ? 0.3 : 0.08),
+        color: const Color(0xFF1E3A5F).withValues(alpha: isDark ? 0.3 : 0.08),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-            color: const Color(0xFF1E3A5F).withOpacity(0.3), width: 1),
+            color: const Color(0xFF1E3A5F).withValues(alpha: 0.3), width: 1),
       ),
       child: Row(
         children: [

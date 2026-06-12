@@ -19,7 +19,6 @@ class DatabaseService {
   static const String dbName = 'elegant_store_v300.db'; // HQ Sync Version
   final _uuid = const Uuid();
 
-  /// Lazy singleton for the notifications repository.
   /// Accessible from any code that holds a [DatabaseService] reference.
   late final NotificationRepository notificationRepo = NotificationRepository(this);
 
@@ -70,8 +69,9 @@ class DatabaseService {
       final storeDirectory = Directory(
         join(documentsDirectory.path, 'ElegantStoreApp'),
       );
-      if (!await storeDirectory.exists())
+      if (!await storeDirectory.exists()) {
         await storeDirectory.create(recursive: true);
+      }
       path = join(storeDirectory.path, dbName);
     } else {
       final dbPath = await getDatabasesPath();
@@ -80,7 +80,7 @@ class DatabaseService {
 
     final db = await openDatabase(
       path,
-      version: 13,
+      version: 14,
       onCreate: (db, version) async {
         await _createTables(db);
         await _createTriggers(db);
@@ -293,6 +293,19 @@ class DatabaseService {
             }
           }
         }
+        if (oldVersion < 14) {
+          // v14: Add username and password to product_customers for app tracking
+          try {
+            await db.execute(
+              'ALTER TABLE product_customers ADD COLUMN username TEXT',
+            );
+          } catch (_) {}
+          try {
+            await db.execute(
+              'ALTER TABLE product_customers ADD COLUMN password TEXT',
+            );
+          } catch (_) {}
+        }
       },
     );
     // Apply performance PRAGMAs AFTER the database is fully open.
@@ -484,6 +497,8 @@ class DatabaseService {
         city TEXT,
         mobile TEXT,
         whatsapp TEXT,
+        username TEXT,
+        password TEXT,
         invoice_count INTEGER DEFAULT 0,
         customers_count INTEGER DEFAULT 0,
         total_sales REAL DEFAULT 0.0,
@@ -519,7 +534,7 @@ class DatabaseService {
     //   SALE     UNPAID|DEFERRED      → +amount
     //   WITHDRAWAL UNPAID             → +amount
     //   anything else                 → 0
-    const String _contribution = """
+    const String contribution = """
       CASE
         WHEN new.type = 'DEPOSIT'    AND new.payment_status IN ('PAID','paid')                          THEN -new.amount
         WHEN new.type = 'SALE'       AND new.payment_status IN ('UNPAID','DEFERRED','unpaid','deferred') THEN  new.amount
@@ -527,7 +542,7 @@ class DatabaseService {
         ELSE 0
       END""";
 
-    const String _oldContribution = """
+    const String oldContribution = """
       CASE
         WHEN old.type = 'DEPOSIT'    AND old.payment_status IN ('PAID','paid')                          THEN -old.amount
         WHEN old.type = 'SALE'       AND old.payment_status IN ('UNPAID','DEFERRED','unpaid','deferred') THEN  old.amount
@@ -540,7 +555,7 @@ class DatabaseService {
       CREATE TRIGGER IF NOT EXISTS trg_invoice_insert AFTER INSERT ON invoices
       WHEN (new.deleted_at IS NULL)
       BEGIN
-        UPDATE users SET balance = balance + ($_contribution)
+        UPDATE users SET balance = balance + ($contribution)
         WHERE id = new.user_id;
       END;
     ''');
@@ -550,10 +565,10 @@ class DatabaseService {
     await db.execute('''
       CREATE TRIGGER IF NOT EXISTS trg_invoice_update AFTER UPDATE ON invoices
       BEGIN
-        UPDATE users SET balance = balance - ($_oldContribution)
+        UPDATE users SET balance = balance - ($oldContribution)
         WHERE id = old.user_id AND old.deleted_at IS NULL;
 
-        UPDATE users SET balance = balance + ($_contribution)
+        UPDATE users SET balance = balance + ($contribution)
         WHERE id = new.user_id AND new.deleted_at IS NULL;
       END;
     ''');
@@ -562,7 +577,7 @@ class DatabaseService {
     await db.execute('''
       CREATE TRIGGER IF NOT EXISTS trg_invoice_delete AFTER DELETE ON invoices
       BEGIN
-        UPDATE users SET balance = balance - ($_oldContribution)
+        UPDATE users SET balance = balance - ($oldContribution)
         WHERE id = old.user_id AND old.deleted_at IS NULL;
       END;
     ''');
@@ -3471,31 +3486,32 @@ class DatabaseService {
     };
   }
 
-  Future<void> updateStoreProfileMetrics(String deviceId) async {
+  Future<void> updateStoreProfileMetrics(String deviceId, {String? username, String? password}) async {
     final metrics = await recalculateStoreMetrics();
     final db = await database;
+
+    final Map<String, dynamic> data = {
+      'customers_count': metrics['customers_count'],
+      'invoice_count': metrics['invoice_count'],
+      'total_sales': metrics['total_sales'],
+      'total_purchase': metrics['total_purchase'],
+      'last_active_time': TimestampFormatter.nowUtc(),
+    };
+
+    if (username != null) data['username'] = username;
+    if (password != null) data['password'] = password;
 
     // Check if profile exists first
     final existing = await db.query('product_customers', where: 'device_id = ?', whereArgs: [deviceId]);
     if (existing.isEmpty) {
       await db.insert('product_customers', {
         'device_id': deviceId,
-        'customers_count': metrics['customers_count'],
-        'invoice_count': metrics['invoice_count'],
-        'total_sales': metrics['total_sales'],
-        'total_purchase': metrics['total_purchase'],
-        'last_active_time': TimestampFormatter.nowUtc(),
+        ...data,
       });
     } else {
       await db.update(
         'product_customers',
-        {
-          'customers_count': metrics['customers_count'],
-          'invoice_count': metrics['invoice_count'],
-          'total_sales': metrics['total_sales'],
-          'total_purchase': metrics['total_purchase'],
-          'last_active_time': TimestampFormatter.nowUtc(),
-        },
+        data,
         where: 'device_id = ?',
         whereArgs: [deviceId],
       );
