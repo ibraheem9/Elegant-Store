@@ -610,7 +610,15 @@ class _SalesScreenState extends State<SalesScreen> {
               const SizedBox(height: 12),
               DropdownButtonFormField<PaymentMethod>(
                 value: selectedMethod,
-                items: _paymentMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name))).toList(),
+                isExpanded: true,
+                items: _paymentMethods.map((m) => DropdownMenuItem(
+                  value: m, 
+                  child: Text(
+                    m.name,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  )
+                )).toList(),
                 onChanged: (v) => setDialogState(() => selectedMethod = v),
                 decoration: const InputDecoration(labelText: 'طريقة الدفع'),
               ),
@@ -1068,19 +1076,6 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Widget _buildInvoiceForm(bool isMobile, bool isDark) {
-    final formFields = [
-      Expanded(flex: isMobile ? 0 : 2, child: _buildCustomerField()),
-      if (isMobile) const SizedBox(height: 16),
-      if (!isMobile) const SizedBox(width: 16),
-      Expanded(flex: isMobile ? 0 : 1, child: _buildAmountField()),
-      if (isMobile) const SizedBox(height: 16),
-      if (!isMobile) const SizedBox(width: 16),
-      Expanded(flex: isMobile ? 0 : 1, child: _buildPaymentMethodField()),
-      if (isMobile) const SizedBox(height: 16),
-      if (!isMobile) const SizedBox(width: 16),
-      Expanded(flex: isMobile ? 0 : 1, child: _buildDateField()),
-    ];
-
     return Container(
       padding: EdgeInsets.all(isMobile ? 20 : 32),
       decoration: BoxDecoration(
@@ -1094,10 +1089,37 @@ class _SalesScreenState extends State<SalesScreen> {
         children: [
           const Text('إدخال فاتورة جديدة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           const SizedBox(height: 24),
-          if (isMobile) 
-            ...formFields.map((e) => e is Expanded ? e.child : e).toList()
-          else 
-            Row(crossAxisAlignment: CrossAxisAlignment.start, children: formFields),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final double spacing = 16.0;
+              final double itemWidth = (constraints.maxWidth - spacing) / 2;
+              
+              if (isMobile) {
+                return Column(
+                  children: [
+                    _buildCustomerField(),
+                    const SizedBox(height: 16),
+                    _buildAmountField(),
+                    const SizedBox(height: 16),
+                    _buildPaymentMethodField(),
+                    const SizedBox(height: 16),
+                    _buildDateField(),
+                  ],
+                );
+              }
+              
+              return Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: [
+                  SizedBox(width: itemWidth, child: _buildCustomerField()),
+                  SizedBox(width: itemWidth, child: _buildAmountField()),
+                  SizedBox(width: itemWidth, child: _buildPaymentMethodField()),
+                  SizedBox(width: itemWidth, child: _buildDateField()),
+                ],
+              );
+            },
+          ),
           const SizedBox(height: 8),
           _buildBalancePreview(),
           const SizedBox(height: 16),
@@ -1208,8 +1230,16 @@ class _SalesScreenState extends State<SalesScreen> {
   Widget _buildPaymentMethodField() {
     return DropdownButtonFormField<PaymentMethod>(
       value: (_paymentMethods.contains(_selectedPaymentMethod)) ? _selectedPaymentMethod : null, 
-      items: _paymentMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.name))).toList(), 
+      items: _paymentMethods.map((m) => DropdownMenuItem(
+        value: m, 
+        child: Text(
+          m.name,
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
+        )
+      )).toList(), 
       onChanged: (v) => setState(() => _selectedPaymentMethod = v), 
+      isExpanded: true,
       decoration: const InputDecoration(labelText: 'طريقة الدفع', prefixIcon: Icon(Icons.wallet, color: Colors.purple)),
     );
   }

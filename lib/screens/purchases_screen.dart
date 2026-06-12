@@ -746,28 +746,37 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                   fontWeight: FontWeight.bold,
                   color: isDark ? Colors.white : Colors.black)),
           const SizedBox(height: 12),
-          if (isMobile) ...([
-            _buildInput('اسم المورد', _merchantController, Icons.business, isDark),
-            const SizedBox(height: 10),
-            _buildInput('المبلغ', _amountController, Icons.payments, isDark, isNumeric: true),
-            const SizedBox(height: 10),
-            _buildDatePicker(isDark),
-            const SizedBox(height: 10),
-            _buildMethodDropdown(isDark),
-          ])
-          else
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(flex: 2, child: _buildInput('اسم المورد', _merchantController, Icons.business, isDark)),
-                const SizedBox(width: 10),
-                Expanded(flex: 1, child: _buildInput('المبلغ', _amountController, Icons.payments, isDark, isNumeric: true)),
-                const SizedBox(width: 10),
-                Expanded(flex: 1, child: _buildDatePicker(isDark)),
-                const SizedBox(width: 10),
-                Expanded(flex: 2, child: _buildMethodDropdown(isDark)),
-              ],
-            ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final double spacing = 16.0;
+              final double itemWidth = (constraints.maxWidth - spacing) / 2;
+              
+              if (isMobile) {
+                return Column(
+                  children: [
+                    _buildInput('اسم المورد', _merchantController, Icons.business, isDark),
+                    const SizedBox(height: 10),
+                    _buildInput('المبلغ', _amountController, Icons.payments, isDark, isNumeric: true),
+                    const SizedBox(height: 10),
+                    _buildDatePicker(isDark),
+                    const SizedBox(height: 10),
+                    _buildMethodDropdown(isDark),
+                  ],
+                );
+              }
+              
+              return Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: [
+                  SizedBox(width: itemWidth, child: _buildInput('اسم المورد', _merchantController, Icons.business, isDark)),
+                  SizedBox(width: itemWidth, child: _buildInput('المبلغ', _amountController, Icons.payments, isDark, isNumeric: true)),
+                  SizedBox(width: itemWidth, child: _buildDatePicker(isDark)),
+                  SizedBox(width: itemWidth, child: _buildMethodDropdown(isDark)),
+                ],
+              );
+            },
+          ),
           const SizedBox(height: 10),
           _buildInput('ملاحظات (اختياري)', _notesController, Icons.note_outlined, isDark),
           const SizedBox(height: 14),
@@ -852,7 +861,14 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
       style: TextStyle(fontSize: 14, color: isDark ? Colors.white : Colors.black, fontFamily: 'Cairo'),
       items: _purchaseMethods.map((m) =>
-          DropdownMenuItem(value: m, child: Text(m.name, overflow: TextOverflow.ellipsis))).toList(),
+          DropdownMenuItem(
+            value: m, 
+            child: Text(
+              m.name, 
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            )
+          )).toList(),
       onChanged: (val) => setState(() => _selectedMethod = val),
       decoration: InputDecoration(
         labelText: 'وسيلة الدفع',

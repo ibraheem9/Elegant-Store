@@ -1,16 +1,13 @@
-import 'tutorial_screen.dart';
 import 'help_screen.dart';
 import '../utils/app_snackbar.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../utils/timestamp_formatter.dart';
 import '../widgets/notification_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../services/sync_service.dart';
-import '../services/sync_manager.dart';
 import '../models/models.dart';
 import 'sales_screen.dart';
 import 'statistics_screen.dart';
@@ -23,13 +20,11 @@ import 'purchases_methods_screen.dart';
 import 'recycle_bin_screen.dart';
 import 'notifications_screen.dart';
 import 'accountants_screen.dart';
-import 'sync_details_screen.dart';
 import 'customer_balances_screen.dart';
 import 'unpaid_invoices_screen.dart';
 import 'contact_us_screen.dart';
 import 'about_us_screen.dart';
 import 'profile_screen.dart';
-import 'general_statistics_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -201,8 +196,7 @@ class DashboardScreenState extends State<DashboardScreen> {
       case 13: return const ContactUsScreen();
       case 14: return const AboutUsScreen();
       case 15: return const ProfileScreen();
-      case 16: return const GeneralStatisticsScreen();
-      case 17: return const HelpScreen();
+      case 16: return const HelpScreen();
       default: return const DashboardHomeScreen();
     }
   }
@@ -225,8 +219,7 @@ class DashboardScreenState extends State<DashboardScreen> {
       case 13: return 'تواصل معنا';
       case 14: return 'عن المطور';
       case 15: return 'الملف الشخصي للمتجر';
-      case 16: return 'الإحصائيات العامة';
-      case 17: return 'دليل الاستخدام';
+      case 16: return 'دليل الاستخدام';
       default: return 'Elegant Store';
     }
   }
@@ -287,7 +280,6 @@ class DashboardScreenState extends State<DashboardScreen> {
                 _buildSidebarItem(1, 'شاشة البيع', Icons.receipt_long_rounded),
                 _buildSidebarItem(8, 'الفواتير غير المدفوعة', Icons.unpublished_rounded),
                 _buildSidebarItem(2, 'إحصائيات اليوم', Icons.bar_chart_rounded),
-                _buildSidebarItem(16, 'الإحصائيات العامة', Icons.analytics_rounded),
                 _buildSidebarItem(3, 'المشتريات', Icons.shopping_cart_rounded),
                 _buildSidebarItem(4, 'إدارة الزبائن', Icons.people_alt_rounded),
                 if (auth.isManager())
@@ -332,7 +324,6 @@ class DashboardScreenState extends State<DashboardScreen> {
                 _buildSidebarItem(1, 'شاشة البيع', Icons.receipt_long_rounded),
                 _buildSidebarItem(8, 'الفواتير غير المدفوعة', Icons.unpublished_rounded),
                 _buildSidebarItem(2, 'إحصائيات اليوم', Icons.bar_chart_rounded),
-                _buildSidebarItem(16, 'الإحصائيات العامة', Icons.analytics_rounded),
                 _buildSidebarItem(3, 'المشتريات', Icons.shopping_cart_rounded),
                 _buildSidebarItem(4, 'إدارة الزبائن', Icons.people_alt_rounded),
                 if (auth.isManager())
@@ -375,18 +366,17 @@ class DashboardScreenState extends State<DashboardScreen> {
         case 0: return 0;
         case 1: return 1;
         case 2: return 2;
-        case 16: return 3; // General Statistics
-        case 3: return 4;
-        case 4: return 5;
-        case 5: return 6; // Accountants (Manager only)
-        case 6: return isManager ? 7 : 6;
-        case 9: return isManager ? 8 : 7;
-        case 10: return isManager ? 8 : 7;
-        case 11: return isManager ? 9 : 8;
-        case 12: return isManager ? 10 : 9;
-        case 13: return isManager ? 11 : 10;
-        case 14: return isManager ? 12 : 11;
-        case 15: return isManager ? 13 : 12;
+        case 3: return 3;
+        case 4: return 4;
+        case 5: return 5; // Accountants (Manager only)
+        case 6: return isManager ? 6 : 5;
+        case 9: return isManager ? 7 : 6;
+        case 10: return isManager ? 7 : 6;
+        case 11: return isManager ? 8 : 7;
+        case 12: return isManager ? 9 : 8;
+        case 13: return isManager ? 10 : 9;
+        case 14: return isManager ? 11 : 10;
+        case 15: return isManager ? 12 : 11;
         default: return 0;
       }
     }
@@ -404,27 +394,9 @@ class DashboardScreenState extends State<DashboardScreen> {
             case 0: targetScreen = 0; break;
             case 1: targetScreen = 1; break;
             case 2: targetScreen = 2; break;
-            case 3: targetScreen = 16; break;
-            case 4: targetScreen = 3; break;
-            case 5: targetScreen = 4; break;
-            case 6: targetScreen = 5; break;
-            case 7: targetScreen = 6; break;
-            case 8: targetScreen = 9; break;
-            case 9: targetScreen = 11; break;
-            case 10: targetScreen = 12; break;
-            case 11: targetScreen = 13; break;
-            case 12: targetScreen = 14; break;
-            case 13: targetScreen = 15; break;
-            default: targetScreen = 0;
-          }
-        } else {
-          switch (index) {
-            case 0: targetScreen = 0; break;
-            case 1: targetScreen = 1; break;
-            case 2: targetScreen = 2; break;
-            case 3: targetScreen = 16; break;
-            case 4: targetScreen = 3; break;
-            case 5: targetScreen = 4; break;
+            case 3: targetScreen = 3; break;
+            case 4: targetScreen = 4; break;
+            case 5: targetScreen = 5; break;
             case 6: targetScreen = 6; break;
             case 7: targetScreen = 9; break;
             case 8: targetScreen = 11; break;
@@ -432,6 +404,22 @@ class DashboardScreenState extends State<DashboardScreen> {
             case 10: targetScreen = 13; break;
             case 11: targetScreen = 14; break;
             case 12: targetScreen = 15; break;
+            default: targetScreen = 0;
+          }
+        } else {
+          switch (index) {
+            case 0: targetScreen = 0; break;
+            case 1: targetScreen = 1; break;
+            case 2: targetScreen = 2; break;
+            case 3: targetScreen = 3; break;
+            case 4: targetScreen = 4; break;
+            case 5: targetScreen = 6; break;
+            case 6: targetScreen = 9; break;
+            case 7: targetScreen = 11; break;
+            case 8: targetScreen = 12; break;
+            case 9: targetScreen = 13; break;
+            case 10: targetScreen = 14; break;
+            case 11: targetScreen = 15; break;
             default: targetScreen = 0;
           }
         }
@@ -446,7 +434,6 @@ class DashboardScreenState extends State<DashboardScreen> {
         const NavigationRailDestination(icon: Icon(Icons.dashboard_rounded, color: Colors.white60), selectedIcon: Icon(Icons.dashboard_rounded), label: Text('لوحة التحكم')),
         const NavigationRailDestination(icon: Icon(Icons.receipt_long_rounded, color: Colors.white60), selectedIcon: Icon(Icons.receipt_long_rounded), label: Text('شاشة البيع')),
         const NavigationRailDestination(icon: Icon(Icons.bar_chart_rounded, color: Colors.white60), selectedIcon: Icon(Icons.bar_chart_rounded), label: Text('إحصائيات اليوم')),
-        const NavigationRailDestination(icon: Icon(Icons.analytics_rounded, color: Colors.white60), selectedIcon: Icon(Icons.analytics_rounded), label: Text('الإحصائيات العامة')),
         const NavigationRailDestination(icon: Icon(Icons.shopping_cart_rounded, color: Colors.white60), selectedIcon: Icon(Icons.shopping_cart_rounded), label: Text('المشتريات')),
         const NavigationRailDestination(icon: Icon(Icons.people_alt_rounded, color: Colors.white60), selectedIcon: Icon(Icons.people_alt_rounded), label: Text('إدارة الزبائن')),
         if (auth.isManager())
@@ -748,7 +735,6 @@ class DashboardHomeScreen extends StatefulWidget {
 }
 
 class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
-  String _syncStatus = "جاهز للمزامنة";
   SyncService? _syncService;
 
   @override
@@ -773,112 +759,6 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
     if (!mounted) return;
   }
 
-  Future<void> _handleSync() async {
-    final syncService = context.read<SyncService>();
-    final syncManager = context.read<SyncManager>();
-
-    if (syncService.isSyncing || syncManager.isSyncing) {
-      setState(() => _syncStatus = "المزامنة جارية بالفعل...");
-      return;
-    }
-
-    setState(() {
-      _syncStatus = "جاري الاتصال بالسيرفر...";
-    });
-
-    try {
-      final success = await syncManager.forceSyncNow();
-      if (mounted) {
-        setState(() => _syncStatus = success ? "تمت المزامنة بنجاح" : "فشلت المزامنة");
-        
-        if (success) {
-          _showSyncSummaryAlert();
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        String msg = e.toString();
-        if (msg.contains('500')) msg = "خطأ في السيرفر (500)";
-        setState(() => _syncStatus = "فشلت المزامنة: $msg");
-      }
-    } finally {
-      if (mounted) {
-        Future.delayed(const Duration(seconds: 3), () {
-          if (mounted) setState(() {
-            _syncStatus = "جاهز للمزامنة";
-          });
-        });
-      }
-    }
-  }
-
-  void _openSyncDetails() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const SyncDetailsScreen()),
-    );
-  }
-
-  void _showSyncSummaryAlert() {
-    final syncService = context.read<SyncService>();
-    final details = syncService.lastSyncDetails;
-    if (details == null) return;
-
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(Icons.check_circle_rounded, color: Colors.green, size: 28),
-            const SizedBox(width: 12),
-            const Text('اكتملت المزامنة', style: TextStyle(fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('تم تحديث البيانات بنجاح مع السيرفر:'),
-            const SizedBox(height: 16),
-            _buildSummaryRow(Icons.upload_rounded, 'سجلات مرفوعة', '${details.customersUploaded + details.invoicesUploaded}'),
-            _buildSummaryRow(Icons.download_rounded, 'سجلات محمّلة', '${details.customersDownloaded + details.invoicesDownloaded}'),
-            _buildSummaryRow(Icons.update_rounded, 'سجلات محدّثة', '${details.recordsUpdated}'),
-            if (details.mergedCustomers.isNotEmpty) ...[
-              const Divider(height: 24),
-              Text('تم دمج ${details.mergedCustomers.length} زبائن مكررين.', 
-                style: const TextStyle(fontSize: 12, color: Colors.orange, fontWeight: FontWeight.bold)),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('حسنًا', style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSummaryRow(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: Colors.blue),
-          const SizedBox(width: 8),
-          Text('$label:', style: const TextStyle(fontSize: 13)),
-          const Spacer(),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -895,20 +775,6 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-/*
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  _buildSyncButton(isDark, syncService.isSyncing || context.read<SyncManager>().isSy
-                ],
-              ),
-              if (syncService.isSyncing || context.read<SyncManager>().isSyncing || _syncStatus.cont
-                const SizedBox(height: 16),
-                _buildSyncProgress(isDark, syncService.isSyncing || context.read<SyncManager>().isSy
-              ],
-              const SizedBox(height: 24),
-              _buildLastSyncDetails(isDark, isMobile),
-*/
               const SizedBox(height: 12),
               const SizedBox(height: 32),
               FutureBuilder<Map<String, dynamic>>(
@@ -954,206 +820,6 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
           ),
         );
       }
-    );
-  }
-
-  Widget _buildSyncButton(bool isDark, bool isSyncing) {
-    return ElevatedButton.icon(
-      onPressed: isSyncing ? null : _handleSync,
-      icon: isSyncing 
-        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-        : const Icon(Icons.sync_rounded, size: 20, color: Colors.white),
-      label: Text(isSyncing ? 'جاري المزامنة...' : 'مزامنة البيانات', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF3B82F6),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
-  }
-
-  Widget _buildSyncProgress(bool isDark, bool isSyncing) {
-    final syncManager = context.watch<SyncManager>();
-    final progress = syncManager.syncProgress;
-    final statusText = syncManager.syncStatusText.isNotEmpty ? syncManager.syncStatusText : _syncStatus;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : Colors.blue[50],
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.blue.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.cloud_sync_rounded, color: Colors.blue, size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  statusText,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: isDark ? Colors.white : Colors.blue[900],
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (isSyncing)
-                Text(
-                  '${(progress * 100).toStringAsFixed(0)}%',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.blue[300] : Colors.blue[800],
-                  ),
-                ),
-            ],
-          ),
-          if (isSyncing) ...[
-            const SizedBox(height: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: LinearProgressIndicator(
-                value: progress > 0 ? progress : null,
-                minHeight: 6,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLastSyncDetails(bool isDark, bool isMobile) {
-    final syncService = context.read<SyncService>();
-    final details = syncService.lastSyncDetails;
-
-    // Format last sync time for display (using local time saved during sync)
-    String lastSyncDisplay = 'لم تتم المزامنة بعد';
-    if (details != null && details.lastSyncTime.isNotEmpty) {
-      try {
-        // Now it's reading the local timestamp we just added to SyncDetails
-        lastSyncDisplay = details.lastSyncTime.toLocalArabic();
-      } catch (_) {
-        lastSyncDisplay = details.lastSyncTime;
-      }
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF0F172A).withOpacity(0.5) : Colors.grey[50],
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Header row ──────────────────────────────────────────────────
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // ── More Details button ────────────────────────────────────────────────
-              TextButton.icon(
-                onPressed: _openSyncDetails,
-                icon: const Icon(Icons.bar_chart_rounded, size: 16),
-                label: const Text('مزيد من التفاصيل', style: TextStyle(fontSize: 12)),
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.blue,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  backgroundColor: Colors.blue.withOpacity(0.08),
-                ),
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Flexible(
-                    child: Text(
-                      'حالة المزامنة',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                        color: isDark ? Colors.blue[300] : Colors.blue[800],
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Icon(Icons.cloud_done_rounded,
-                      size: 20,
-                      color: details != null ? Colors.green : Colors.grey),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // ── Last sync time ───────────────────────────────────────────
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  const Text('آخر مزامنة:', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                  Text(lastSyncDisplay, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : Colors.black87)),
-                ],
-              ),
-              const SizedBox(width: 8),
-              const Icon(Icons.access_time_rounded, size: 18, color: Colors.grey),
-            ],
-          ),
-          
-          // ── Quick stats row ──────────────────────────────────────────
-          if (details != null) ...[
-            const SizedBox(height: 16),
-            const Divider(height: 1),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                if (details.mergedCustomers.isNotEmpty) ...[
-                  _buildMiniStat('مدموج', '${details.mergedCustomers.length}', Icons.merge_type_rounded, Colors.orange, isDark),
-                  const SizedBox(width: 16),
-                ],
-                // Uploaded / Downloaded counts
-                _buildMiniStat('محمّل', '${details.customersDownloaded + details.invoicesDownloaded}', Icons.download_rounded, Colors.blue, isDark),
-                const SizedBox(width: 16),
-                _buildMiniStat('مرفوع', '${details.customersUploaded + details.invoicesUploaded}', Icons.upload_rounded, Colors.green, isDark),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMiniStat(String label, String value, IconData icon, Color color, bool isDark) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-            Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
-          ],
-        ),
-        const SizedBox(width: 6),
-        Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, size: 14, color: color),
-        ),
-      ],
     );
   }
 
