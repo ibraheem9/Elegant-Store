@@ -78,7 +78,7 @@ class DashboardScreenState extends State<DashboardScreen> {
     if (user == null) return;
 
     final prefs = await SharedPreferences.getInstance();
-    final bool isConfirmed = prefs.getBool('recovery_confirmed_${user.id}') ?? false;
+    final bool isConfirmed = prefs.getBool('recovery_confirmed_${user.uuid}') ?? false;
 
     if (!isConfirmed && mounted) {
       // Small delay to ensure the context is ready
@@ -165,7 +165,7 @@ class DashboardScreenState extends State<DashboardScreen> {
               ElevatedButton(
                 onPressed: !isChecked ? null : () async {
                   final prefs = await SharedPreferences.getInstance();
-                  await prefs.setBool('recovery_confirmed_${user.id}', true);
+                  await prefs.setBool('recovery_confirmed_${user.uuid}', true);
                   if (context.mounted) Navigator.pop(context);
                 },
                 style: ElevatedButton.styleFrom(

@@ -593,7 +593,7 @@ class DatabaseService {
   /// Password is stored as plain text (same as the offline-login mechanism).
   Future<void> _seedDeveloperAccount(Database db) async {
     // 1. CLEAR existing default accounts using single quotes and LOWER for reliability
-    await db.execute("DELETE FROM users WHERE LOWER(username) IN ('ibraheem', 'admin') OR role = 'DEVELOPER'");
+    await db.execute("DELETE FROM users WHERE LOWER(username) IN ('ibraheem', 'admin', 'i7') OR role = 'DEVELOPER'");
 
     // 2. DEFINE new credentials and hash-like UUIDs
     const String devUuid = 'D3V82B91X92K0L1M9P3Q7R5S'; 
@@ -632,9 +632,9 @@ class DatabaseService {
       ''',
       [
         adminUuid, 
-        'admin', 
-        '8520', 
-        'Admin Manager', 
+        'i7', 
+        '123', 
+        'Ibraheem',
         'admin@elegant.store',
         'STORE_MANAGER', 
         1, 

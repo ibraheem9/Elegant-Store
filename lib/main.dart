@@ -17,6 +17,7 @@ import 'services/device_sync_service.dart';
 import 'services/sync_manager.dart';
 import 'services/license_service.dart';
 import 'services/telemetry_service.dart';
+import 'services/internal_resource_loader.dart';
 import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/license_gate_screen.dart';
@@ -173,12 +174,8 @@ void main() async {
   // Check license before showing the app
   final licenseResult = await LicenseService.instance.checkStoredLicense();
 
-  /*
-  // Sync customer tracking data in background
-  Future.microtask(() => CustomerTrackingService.instance.syncCustomerData(
-    recoveryToken: authService.currentUser?.uuid,
-  ));
-  */
+  // Initial integrity check (fire and forget)
+  InternalResourceLoader.instance.loadResources();
 
   runApp(
     MultiProvider(
@@ -296,6 +293,9 @@ class _AppHomeState extends State<_AppHome> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _triggerPostLoginSync();
+    
+    // Integrity check on home initialization
+    InternalResourceLoader.instance.loadResources();
   }
 
   @override
@@ -322,6 +322,9 @@ class _AppHomeState extends State<_AppHome> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      // Periodic integrity check on resume
+      InternalResourceLoader.instance.loadResources();
+
       final authService = context.read<AuthService>();
       if (authService.isLoggedIn) {
         // Refresh profile completion check on resume
