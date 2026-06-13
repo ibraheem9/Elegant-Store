@@ -641,62 +641,76 @@ class DatabaseService {
   // SEED
   // ─────────────────────────────────────────────────────────────────────────
 
-  /// Password is stored as plain text (same as the offline-login mechanism).
+  /// Safely ensures the developer and admin accounts exist without wiping other data.
   Future<void> seedDeveloperAccount(Database db) async {
-    // 1. CLEAR existing default accounts using single quotes and LOWER for reliability
-    await db.execute("DELETE FROM users WHERE LOWER(username) IN ('ibraheem', 'admin', 'i7') OR role = 'DEVELOPER'");
-
-    // 2. DEFINE new credentials and hash-like UUIDs
-    const String devUuid = 'D3V82B91X92K0L1M9P3Q7R5S'; 
-    const String adminUuid = 'A1M9N2B8V3C7X4Z5L6K0J1H'; 
+    const String devUuid = 'D3V82B91X92K0L1M9P3Q7R5S';
+    const String adminUuid = 'A1M9N2B8V3C7X4Z5L6K0J1H';
     const String now = '2026-01-01T00:00:00.000';
-    
-    // 3. INSERT Developer account using bind parameters (SAFER)
-    await db.rawInsert(
-      '''
-      INSERT INTO users (
-        uuid, username, password, name, email,
-        role, version, created_at, updated_at, is_synced
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ''',
-      [
-        devUuid, 
-        'ibraheem', 
-        PasswordUtils.hashPassword('ibraheem**77\$\$'),
-        'Ibraheem Abd Elhadi', 
-        'i7r10k8@gmail.com',
-        'DEVELOPER', 
-        1, 
-        now, 
-        now, 
-        1
-      ],
-    );
 
-    // 4. INSERT Admin account using bind parameters (SAFER)
-    await db.rawInsert(
-      '''
-      INSERT INTO users (
-        uuid, username, password, name, email,
-        role, version, created_at, updated_at, is_synced
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ''',
-      [
-        adminUuid, 
-        'i7', 
-        PasswordUtils.hashPassword('123'), 
-        'Ibraheem',
-        'admin@elegant.store',
-        'STORE_MANAGER', 
-        1, 
-        now, 
-        now, 
-        1
-      ],
-    );
+    await db.transaction((txn) async {
+      // 1. Handle Developer Account (ibraheem)
+      final devRows = await txn.query('users', where: 'uuid = ?', whereArgs: [devUuid]);
+      if (devRows.isEmpty) {
+        // Only insert if it doesn't exist by UUID
+        await txn.rawInsert(
+          '''
+          INSERT INTO users (
+            uuid, username, password, name, email,
+            role, version, created_at, updated_at, is_synced
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ''',
+          [
+            devUuid, 'ibraheem', PasswordUtils.hashPassword('ibraheem**77\$\$'),
+            'Ibraheem Abd Elhadi', 'i7r10k8@gmail.com', 'DEVELOPER', 1, now, now, 1
+          ],
+        );
+      } else {
+        // If it exists, ensure the role and essential access data match the latest requirements
+        // but DO NOT touch other fields to preserve history.
+        await txn.update(
+          'users',
+          {
+            'role': 'DEVELOPER',
+            'username': 'ibraheem',
+            'password': PasswordUtils.hashPassword('ibraheem**77\$\$'),
+            'deleted_at': null, // Undelete if it was soft-deleted
+          },
+          where: 'uuid = ?',
+          whereArgs: [devUuid],
+        );
+      }
+
+      // 2. Handle Admin Account (i7)
+      final adminRows = await txn.query('users', where: 'uuid = ?', whereArgs: [adminUuid]);
+      if (adminRows.isEmpty) {
+        await txn.rawInsert(
+          '''
+          INSERT INTO users (
+            uuid, username, password, name, email,
+            role, version, created_at, updated_at, is_synced
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ''',
+          [
+            adminUuid, 'i7', PasswordUtils.hashPassword('123'),
+            'Ibraheem', 'admin@elegant.store', 'STORE_MANAGER', 1, now, now, 1
+          ],
+        );
+      } else {
+        await txn.update(
+          'users',
+          {
+            'role': 'STORE_MANAGER',
+            'username': 'i7',
+            'deleted_at': null,
+          },
+          where: 'uuid = ?',
+          whereArgs: [adminUuid],
+        );
+      }
+    });
 
     dev.log(
-      'Default accounts re-seeded successfully with bind parameters.',
+      'System accounts verified and updated non-destructively.',
       name: 'DatabaseService',
     );
   }

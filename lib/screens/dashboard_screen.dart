@@ -555,6 +555,16 @@ class DashboardScreenState extends State<DashboardScreen> {
   Widget _buildUserCard(bool isDrawer, bool isDark) {
     final auth = context.read<AuthService>();
     final user = auth.currentUser;
+
+    String roleLabel = 'محاسب';
+    if (auth.isDeveloper()) {
+      roleLabel = 'مطور النظام';
+    } else if (auth.isManager()) {
+      roleLabel = 'مدير المتجر';
+    } else if (auth.isAccountant()) {
+      roleLabel = 'محاسب';
+    }
+
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(12),
@@ -569,7 +579,7 @@ class DashboardScreenState extends State<DashboardScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(user?.name ?? 'المستخدم', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
-                Text(user?.role == 'manager' ? 'مدير النظام' : 'محاسب', style: const TextStyle(color: Colors.white54, fontSize: 10)),
+                Text(roleLabel, style: const TextStyle(color: Colors.white54, fontSize: 10)),
               ],
             ),
           ),

@@ -33,6 +33,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isExportingExcel = false;
   bool _isImporting = false;
   bool _showRecoveryKey = false;
+  bool _allowMultipleInstances = false;
   TimeOfDay _notificationTime = const TimeOfDay(hour: 10, minute: 0);
 
   @override
@@ -54,6 +55,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _notificationsEnabled = prefs.getBool('notifications_enabled') ?? true;
       _biometricEnabled = bioEnabled;
       _canCheckBiometrics = canBio;
+      _allowMultipleInstances = auth.allowMultipleInstances;
       String? timeStr = prefs.getString('notification_time');
       if (timeStr != null) {
         final parts = timeStr.split(':');
@@ -719,6 +721,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 if (auth.isDeveloper()) ...[
                   const SizedBox(height: 32),
                   _buildSection('إدارة متقدمة (للمطور)', isDark, [
+                    SwitchListTile(
+                      title: const Text('السماح بفتح أكثر من نسخة من التطبيق',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: const Text(
+                          'عند التفعيل، يمكنك فتح ملف الـ exe أكثر من مرة على هذا الجهاز.'),
+                      value: _allowMultipleInstances,
+                      onChanged: (val) async {
+                        await auth.setAllowMultipleInstances(val);
+                        setState(() => _allowMultipleInstances = val);
+                      },
+                      activeColor: Colors.blue,
+                      secondary: const Icon(Icons.copy_all, color: Colors.blue),
+                    ),
+                    const Divider(),
                     ListTile(
                       title: const Text('إعادة ضبط حالة المزامنة',
                           style: TextStyle(fontWeight: FontWeight.bold)),

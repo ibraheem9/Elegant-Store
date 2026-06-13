@@ -165,7 +165,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final authService = context.watch<AuthService>();
     final isManager = authService.isManager();
     // Allow both Manager and Accountant to edit the profile info
-    final canEdit = isManager || authService.currentUser?.role == 'ACCOUNTANT';
+    final canEdit = isManager || authService.isAccountant();
     final isDark = themeNotifier.themeMode == ThemeMode.dark;
     final size = MediaQuery.of(context).size;
     final bool isMobile = size.width < 700;

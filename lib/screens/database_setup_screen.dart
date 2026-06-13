@@ -101,6 +101,10 @@ class _DatabaseSetupScreenState extends State<DatabaseSetupScreen> {
         await prefs.setString('custom_database_path', path);
         DatabaseService.setCustomPath(path);
         
+        // Explicitly initialize to ensure seeding and connection are ready
+        final dbService = DatabaseService();
+        await dbService.initDatabase();
+        
         widget.onSetupComplete();
       }
     } catch (e) {

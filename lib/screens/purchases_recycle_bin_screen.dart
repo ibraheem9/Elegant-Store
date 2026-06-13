@@ -298,9 +298,8 @@ class _PurchasesRecycleBinScreenState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final isManager =
-        context.read<AuthService>().currentUser?.role == 'MANAGER' ||
-            context.read<AuthService>().currentUser?.role == 'DEVELOPER';
+    final auth = context.read<AuthService>();
+    final isManager = auth.isManager();
 
     return Scaffold(
       backgroundColor:

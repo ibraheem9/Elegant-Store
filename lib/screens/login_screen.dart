@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'dart:developer' as dev;
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../utils/app_snackbar.dart';
@@ -39,8 +40,13 @@ class _LoginScreenState extends State<LoginScreen> {
         _showBiometricIcon = isEnabled && canCheck;
       });
       if (_showBiometricIcon) {
-        // Automatically trigger biometric login if enabled
-        _loginWithBiometrics();
+        // Automatically trigger biometric login if enabled, with a delay
+        // to ensure the UI is fully stable and transitions are finished.
+        Future.delayed(const Duration(milliseconds: 800), () {
+          if (mounted && _showBiometricIcon && !_isLoading) {
+            _loginWithBiometrics();
+          }
+        });
       }
     }
   }
@@ -67,61 +73,33 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
 
-      // Step 1: Online API authentication
-      // NOTE: _isFirstLogin() is intentionally checked AFTER authService.login()
-      // because login() may clear last_sync_time (e.g. when a different user or
-      // store logs in). Reading it before login would cause a race condition where
-      // firstLogin = false even though login() just cleared last_sync_time.
       final LoginResult result = await authService.login(
         _usernameController.text.trim(),
         _passwordController.text,
         saveSession: _keepMeLoggedIn,
       );
-      switch (result) {
-        case LoginResult.success:
-          break; // continue to sync step below
-        case LoginResult.customerNotAllowed:
-          _showError('هذا الحساب لا يملك صلاحية الدخول للتطبيق');
-          return;
-        case LoginResult.wrongCredentials:
-          _showError('خطأ في اسم المستخدم أو كلمة المرور');
-          return;
-        case LoginResult.networkError:
-          _showError('لا يوجد اتصال بالإنترنت. يرجى الاتصال للدخول لأول مرة');
-          return;
-        case LoginResult.unknownError:
-          final errDetail = authService.lastLoginError;
-          _showError(errDetail != null && errDetail.isNotEmpty
-              ? 'خطأ: $errDetail'
-              : 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى');
-          return;
-      }
-
-      // Step 2: Check AFTER login() — login() may have cleared last_sync_time
-      // for a new user/store, so we must re-read it here, not before login().
-      // final bool firstLogin = await _isFirstLogin();
-
-      // Step 3: REMOVED automatic sync after login. 
-      // Users should start the sync manually from the dashboard.
-      /*
-      final syncService = Provider.of<SyncService>(context, listen: false);
-      if (firstLogin && mounted) {
-        setState(() => _syncStatusMessage = 'جاري تحميل بيانات المتجر...');
-        try {
-          await syncService.performFullSync(isInitialSync: true).timeout(
-            const Duration(seconds: 60),
-            onTimeout: () {
-              debugPrint('Initial sync timed out after 60s, continuing anyway');
-            },
-          );
-        } catch (e) {
-          // Sync failure must not block login — the user can sync manually later
-          debugPrint('Initial sync failed on first login: $e');
+      
+      if (mounted) {
+        switch (result) {
+          case LoginResult.success:
+            break; // Navigation happens in main.dart
+          case LoginResult.customerNotAllowed:
+            _showError('هذا الحساب لا يملك صلاحية الدخول للتطبيق');
+            break;
+          case LoginResult.wrongCredentials:
+            _showError(authService.lastLoginError ?? 'خطأ في اسم المستخدم أو كلمة المرور');
+            break;
+          case LoginResult.networkError:
+            _showError(authService.lastLoginError ?? 'لا يوجد اتصال بالإنترنت. يرجى الاتصال للدخول لأول مرة');
+            break;
+          case LoginResult.unknownError:
+            final errDetail = authService.lastLoginError;
+            _showError(errDetail != null && errDetail.isNotEmpty
+                ? 'خطأ: $errDetail'
+                : 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى');
+            break;
         }
       }
-      */
-
-      // Navigation is handled automatically by Consumer<AuthService> in main.dart
     } catch (e) {
       _showError('خطأ: $e');
     } finally {
@@ -139,12 +117,21 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
       final LoginResult result = await authService.authenticateWithBiometrics();
-      if (result == LoginResult.customerNotAllowed && mounted) {
-        _showError('هذا الحساب لا يملك صلاحية الدخول للتطبيق');
+      if (mounted) {
+        if (result == LoginResult.wrongCredentials) {
+          // User data changed since biometrics were enabled
+          setState(() => _showBiometricIcon = false);
+          _showError(authService.lastLoginError ?? 'تم تعطيل الدخول بالبصمة لتغيير بيانات الحساب. يرجى الدخول يدوياً.');
+        } else if (result == LoginResult.customerNotAllowed) {
+          _showError('هذا الحساب لا يملك صلاحية الدخول للتطبيق');
+        } else if (result == LoginResult.networkError) {
+          _showError(authService.lastLoginError ?? 'لا يوجد اتصال بالإنترنت');
+        } else if (result == LoginResult.success) {
+          // Success! Navigation handled by main.dart
+        }
       }
-      // Other failures are silent — user can still type their password
     } catch (e) {
-      // Silent fail for auto-trigger
+      dev.log('Error in _loginWithBiometrics: $e');
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);

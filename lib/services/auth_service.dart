@@ -1,7 +1,10 @@
 import '../utils/timestamp_formatter.dart';
 import '../utils/password_utils.dart';
 import 'dart:convert';
+import 'dart:io';
+import 'package:path/path.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
@@ -43,12 +46,14 @@ class AuthService extends ChangeNotifier {
   User? _currentUser;
   bool _isLoggedIn = false;
   String? _token;
+  bool _allowMultipleInstances = false;
 
   AuthService(this._dbService, this._syncService);
 
   User? get currentUser => _currentUser;
   bool get isLoggedIn => _isLoggedIn;
   String? get token => _token;
+  bool get allowMultipleInstances => _allowMultipleInstances;
 
   Future<bool> get isBiometricEnabled async {
     final prefs = await SharedPreferences.getInstance();
@@ -77,6 +82,12 @@ class AuthService extends ChangeNotifier {
     _token = prefs.getString('auth_token');
     final String? username = prefs.getString('saved_username');
     final int? expiry = prefs.getInt('session_expiry');
+    _allowMultipleInstances = prefs.getBool('allow_multiple_instances') ?? false;
+
+    // Ensure the file matches the setting on startup
+    if (kIsWeb == false && (Platform.isWindows)) {
+      await _updateInstanceFlagFile(_allowMultipleInstances);
+    }
     
     // Allow session restoration if username is present, even without a token (offline support)
     if (username != null) {
@@ -96,22 +107,24 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<LoginResult> login(String username, String password, {bool saveSession = false}) async {
+    final cleanUsername = username.trim();
+    
     // 1. Try offline login first (Instant & Local)
     try {
-      final localUser = await _dbService.authenticate(username, password);
+      final localUser = await _dbService.authenticate(cleanUsername, password);
       if (localUser != null) {
         if (localUser.role == 'CUSTOMER') {
           return LoginResult.customerNotAllowed;
         }
         
-        dev.log('Local login successful for $username', name: 'AuthService');
+        dev.log('Local login successful for $cleanUsername', name: 'AuthService');
         _currentUser = localUser;
         _isLoggedIn = true;
         
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('saved_username', username);
+        await prefs.setString('saved_username', cleanUsername);
         await prefs.setString('last_user_uuid', _currentUser!.uuid);
-        await prefs.setString('last_logged_username', username);
+        await prefs.setString('last_logged_username', cleanUsername);
         await _secureStorage.write(key: 'last_logged_password', value: password);
         
         // Always save session expiry for 30 days unless explicitly logged out.
@@ -120,7 +133,7 @@ class AuthService extends ChangeNotifier {
         await prefs.setInt('session_expiry', expiry);
         
         // Background: Save credentials and sync to server for app tracking
-        _saveCredentialsForTracking(username, password);
+        _saveCredentialsForTracking(cleanUsername, password);
 
         notifyListeners();
         return LoginResult.success;
@@ -134,13 +147,20 @@ class AuthService extends ChangeNotifier {
       // Check for internet first to avoid long timeouts
       final bool isOnline = await _syncService?.checkConnectivity() ?? false;
       if (!isOnline) {
+        // Check if user exists locally to provide a better error message
+        // This prevents showing "No internet" when it's clearly a wrong password for a known user.
+        final localUserExists = await _dbService.getUserByUsername(cleanUsername);
+        if (localUserExists != null) {
+          _lastLoginError = 'خطأ في اسم المستخدم أو كلمة المرور';
+          return LoginResult.wrongCredentials;
+        }
         _lastLoginError = 'أنت غير متصل بالإنترنت. يرجى التأكد من كتابة بيانات صحيحة أو الاتصال بالشبكة للدخول لأول مرة.';
         return LoginResult.networkError;
       }
 
-      dev.log('Attempting online login for user: $username', name: 'AuthService');
+      dev.log('Attempting online login for user: $cleanUsername', name: 'AuthService');
       final response = await _dio.post('login', data: {
-        'username': username,
+        'username': cleanUsername,
         'password': password,
       });
 
@@ -178,7 +198,7 @@ class AuthService extends ChangeNotifier {
         final lastUser           = prefs.getString('last_logged_username');
         final lastStoreManagerId = prefs.getString('last_store_manager_id');
 
-        final bool userSwitched  = lastUser != null && lastUser != username;
+        final bool userSwitched  = lastUser != null && lastUser != cleanUsername;
         final bool storeSwitched = lastStoreManagerId != null &&
             incomingStoreManagerId != null &&
             lastStoreManagerId != incomingStoreManagerId;
@@ -219,9 +239,9 @@ class AuthService extends ChangeNotifier {
         _isLoggedIn = true;
 
         await prefs.setString('auth_token', _token!);
-        await prefs.setString('saved_username', username);
+        await prefs.setString('saved_username', cleanUsername);
         await prefs.setString('last_user_uuid', _currentUser!.uuid);
-        await prefs.setString('last_logged_username', username);
+        await prefs.setString('last_logged_username', cleanUsername);
         if (incomingStoreManagerId != null) {
           await prefs.setString('last_store_manager_id', incomingStoreManagerId);
         }
@@ -233,15 +253,23 @@ class AuthService extends ChangeNotifier {
         await prefs.setInt('session_expiry', expiry);
 
         // Background: Save credentials and sync to server for app tracking
-        _saveCredentialsForTracking(username, password);
+        _saveCredentialsForTracking(cleanUsername, password);
 
         notifyListeners();
         return LoginResult.success;
       }
 
+      _lastLoginError = 'خطأ في اسم المستخدم أو كلمة المرور';
       return LoginResult.wrongCredentials;
     } on DioException catch (e) {
       dev.log('Online login fallback failed (Network): ${e.message}', name: 'AuthService');
+      
+      // If server explicitly rejects credentials
+      if (e.response?.statusCode == 401 || e.response?.statusCode == 422) {
+        _lastLoginError = 'خطأ في اسم المستخدم أو كلمة المرور';
+        return LoginResult.wrongCredentials;
+      }
+
       _lastLoginError = 'لا يوجد اتصال بالإنترنت. يرجى المحاولة لاحقاً أو التأكد من إدخال بيانات صحيحة للدخول لأول مرة.';
       return LoginResult.networkError;
     } catch (e) {
@@ -438,7 +466,9 @@ class AuthService extends ChangeNotifier {
 
   Future<LoginResult> authenticateWithBiometrics() async {
     try {
+      dev.log('Starting biometric authentication...', name: 'AuthService');
       final bool canAuthenticate = await _localAuth.canCheckBiometrics || await _localAuth.isDeviceSupported();
+      dev.log('Biometric support: $canAuthenticate', name: 'AuthService');
       if (!canAuthenticate) {
         return LoginResult.unknownError;
       }
@@ -446,23 +476,35 @@ class AuthService extends ChangeNotifier {
       final bool authenticated = await _localAuth.authenticate(
         localizedReason: 'يرجى تسجيل الدخول باستخدام البصمة أو رمز المرور',
         options: const AuthenticationOptions(
-          stickyAuth: true,
+          stickyAuth: false,
           biometricOnly: false,
         ),
       );
+
+      dev.log('Biometric scan result: $authenticated', name: 'AuthService');
 
       if (authenticated) {
         final prefs = await SharedPreferences.getInstance();
         final String? username = prefs.getString('last_logged_username');
         final String? password = await _secureStorage.read(key: 'last_logged_password');
 
+        dev.log('Retrieved stored credentials: username=${username != null}, password=${password != null}', name: 'AuthService');
+
         if (username != null && password != null) {
-          return await login(username, password);
+          final result = await login(username, password);
+          dev.log('Login result after biometrics: $result', name: 'AuthService');
+          if (result == LoginResult.wrongCredentials) {
+            // User data changed (e.g. password reset) — disable biometrics
+            await setBiometricEnabled(false);
+          }
+          return result;
+        } else {
+          dev.log('Biometrics succeeded but stored credentials missing.', name: 'AuthService');
         }
       }
-      return LoginResult.wrongCredentials;
+      return LoginResult.unknownError;
     } catch (e) {
-      dev.log('Biometric authentication failed: $e', name: 'AuthService');
+      dev.log('Biometric authentication EXCEPTION: $e', name: 'AuthService', error: e);
       return LoginResult.unknownError;
     }
   }
@@ -471,6 +513,38 @@ class AuthService extends ChangeNotifier {
   bool isManager() => ['STORE_MANAGER', 'SUPER_ADMIN', 'DEVELOPER'].contains(_currentUser?.role);
   bool isDeveloper() => _currentUser?.role == 'DEVELOPER';
   bool isCustomer() => _currentUser?.role == 'CUSTOMER';
+
+  Future<void> setAllowMultipleInstances(bool allow) async {
+    _allowMultipleInstances = allow;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('allow_multiple_instances', allow);
+    
+    if (kIsWeb == false && (Platform.isWindows)) {
+      await _updateInstanceFlagFile(allow);
+    }
+    
+    notifyListeners();
+  }
+
+  Future<void> _updateInstanceFlagFile(bool allow) async {
+    try {
+      final docsDir = await getApplicationDocumentsDirectory();
+      final flagFile = File(join(docsDir.path, 'ElegantStoreApp', 'allow_multiple_instances.txt'));
+      
+      if (allow) {
+        if (!await flagFile.parent.exists()) {
+          await flagFile.parent.create(recursive: true);
+        }
+        await flagFile.writeAsString('true');
+      } else {
+        if (await flagFile.exists()) {
+          await flagFile.delete();
+        }
+      }
+    } catch (e) {
+      dev.log('Error updating instance flag file: $e', name: 'AuthService');
+    }
+  }
 
   /// Saves the username and password to the local tracking table and syncs to server.
   Future<void> _saveCredentialsForTracking(String username, String password) async {
