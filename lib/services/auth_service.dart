@@ -472,7 +472,7 @@ class AuthService extends ChangeNotifier {
       final bool authenticated = await _localAuth.authenticate(
         localizedReason: 'يرجى تسجيل الدخول باستخدام البصمة أو رمز المرور',
         options: const AuthenticationOptions(
-          stickyAuth: false,
+          stickyAuth: true, // Reverted to true for better platform behavior
           biometricOnly: false,
         ),
       );
@@ -481,18 +481,19 @@ class AuthService extends ChangeNotifier {
 
       if (authenticated) {
         final prefs = await SharedPreferences.getInstance();
-        final String? username = prefs.getString('last_logged_username');
+        
+        // Priority: last_logged_username (most accurate), fallback to saved_username
+        final String? username = prefs.getString('last_logged_username') ?? prefs.getString('saved_username');
         final String? password = await _secureStorage.read(key: 'last_logged_password');
 
         dev.log('Retrieved stored credentials: username=${username != null}, password=${password != null}', name: 'AuthService');
 
         if (username != null && password != null) {
-          // Perform a FULL LOGIN pass to ensure all state (currentUser, isLoggedIn, notifyListeners) is consistent.
+          // Perform a FULL LOGIN pass to ensure all state is consistent.
           final result = await login(username, password);
           dev.log('Login result after biometrics: $result', name: 'AuthService');
           
           if (result == LoginResult.wrongCredentials) {
-            // Data mismatch (e.g. password changed on another device) - disable biometrics
             await setBiometricEnabled(false);
           }
           return result;

@@ -651,7 +651,7 @@ class DatabaseService {
       // 1. Handle Developer Account (ibraheem)
       final devRows = await txn.query('users', where: 'uuid = ?', whereArgs: [devUuid]);
       if (devRows.isEmpty) {
-        // Only insert if it doesn't exist by UUID
+        // New database: use default username
         await txn.rawInsert(
           '''
           INSERT INTO users (
@@ -665,14 +665,11 @@ class DatabaseService {
           ],
         );
       } else {
-        // If it exists, ensure the role and essential access data match the latest requirements
-        // but DO NOT touch other fields to preserve history.
+        // Existing database: Preserve the current username but update role/status
         await txn.update(
           'users',
           {
             'role': 'DEVELOPER',
-            'username': 'ibraheem',
-            'password': PasswordUtils.hashPassword('ibraheem**77\$\$'),
             'deleted_at': null, // Undelete if it was soft-deleted
           },
           where: 'uuid = ?',
@@ -683,6 +680,7 @@ class DatabaseService {
       // 2. Handle Admin Account (i7)
       final adminRows = await txn.query('users', where: 'uuid = ?', whereArgs: [adminUuid]);
       if (adminRows.isEmpty) {
+        // New database: use default username
         await txn.rawInsert(
           '''
           INSERT INTO users (
@@ -696,11 +694,11 @@ class DatabaseService {
           ],
         );
       } else {
+        // Existing database: Preserve current username (e.g. 'mo') but update role/status
         await txn.update(
           'users',
           {
             'role': 'STORE_MANAGER',
-            'username': 'i7',
             'deleted_at': null,
           },
           where: 'uuid = ?',
@@ -710,7 +708,7 @@ class DatabaseService {
     });
 
     dev.log(
-      'System accounts verified and updated non-destructively.',
+      'System accounts verified non-destructively. Custom usernames preserved.',
       name: 'DatabaseService',
     );
   }
