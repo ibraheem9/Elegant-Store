@@ -108,35 +108,42 @@ class AuthService extends ChangeNotifier {
 
   Future<LoginResult> login(String username, String password, {bool saveSession = false}) async {
     final cleanUsername = username.trim();
-    
+    _lastLoginError = null;
+
     // 1. Try offline login first (Instant & Local)
     try {
-      final localUser = await _dbService.authenticate(cleanUsername, password);
-      if (localUser != null) {
-        if (localUser.role == 'CUSTOMER') {
-          return LoginResult.customerNotAllowed;
-        }
-        
-        dev.log('Local login successful for $cleanUsername', name: 'AuthService');
-        _currentUser = localUser;
-        _isLoggedIn = true;
-        
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('saved_username', cleanUsername);
-        await prefs.setString('last_user_uuid', _currentUser!.uuid);
-        await prefs.setString('last_logged_username', cleanUsername);
-        await _secureStorage.write(key: 'last_logged_password', value: password);
-        
-        // Always save session expiry for 30 days unless explicitly logged out.
-        // This fulfills the user request for a month-long session.
-        final expiry = DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch;
-        await prefs.setInt('session_expiry', expiry);
-        
-        // Background: Save credentials and sync to server for app tracking
-        _saveCredentialsForTracking(cleanUsername, password);
+      final userInDb = await _dbService.getUserByUsername(cleanUsername);
+      if (userInDb != null) {
+        final localUser = await _dbService.authenticate(cleanUsername, password);
+        if (localUser != null) {
+          if (localUser.role == 'CUSTOMER') {
+            return LoginResult.customerNotAllowed;
+          }
 
-        notifyListeners();
-        return LoginResult.success;
+          dev.log('Local login successful for $cleanUsername', name: 'AuthService');
+          _currentUser = localUser;
+          _isLoggedIn = true;
+
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('saved_username', cleanUsername);
+          await prefs.setString('last_user_uuid', _currentUser!.uuid);
+          await prefs.setString('last_logged_username', cleanUsername);
+          await _secureStorage.write(key: 'last_logged_password', value: password);
+
+          // Always save session expiry for 30 days unless explicitly logged out.
+          final expiry = DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch;
+          await prefs.setInt('session_expiry', expiry);
+
+          // Background: Save credentials and sync to server for app tracking
+          _saveCredentialsForTracking(cleanUsername, password);
+
+          notifyListeners();
+          return LoginResult.success;
+        } else {
+          // USER FOUND BUT WRONG PASSWORD - Return immediately to prevent "No Internet" message
+          _lastLoginError = 'خطأ في اسم المستخدم أو كلمة المرور';
+          return LoginResult.wrongCredentials;
+        }
       }
     } catch (e) {
       dev.log('Local login attempt failed with error: $e', name: 'AuthService');
@@ -147,13 +154,6 @@ class AuthService extends ChangeNotifier {
       // Check for internet first to avoid long timeouts
       final bool isOnline = await _syncService?.checkConnectivity() ?? false;
       if (!isOnline) {
-        // Check if user exists locally to provide a better error message
-        // This prevents showing "No internet" when it's clearly a wrong password for a known user.
-        final localUserExists = await _dbService.getUserByUsername(cleanUsername);
-        if (localUserExists != null) {
-          _lastLoginError = 'خطأ في اسم المستخدم أو كلمة المرور';
-          return LoginResult.wrongCredentials;
-        }
         _lastLoginError = 'أنت غير متصل بالإنترنت. يرجى التأكد من كتابة بيانات صحيحة أو الاتصال بالشبكة للدخول لأول مرة.';
         return LoginResult.networkError;
       }
@@ -248,7 +248,6 @@ class AuthService extends ChangeNotifier {
         await _secureStorage.write(key: 'last_logged_password', value: password);
 
         // Always save session expiry for 30 days unless explicitly logged out.
-        // This fulfills the user request for a month-long session.
         final expiry = DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch;
         await prefs.setInt('session_expiry', expiry);
 
@@ -263,7 +262,7 @@ class AuthService extends ChangeNotifier {
       return LoginResult.wrongCredentials;
     } on DioException catch (e) {
       dev.log('Online login fallback failed (Network): ${e.message}', name: 'AuthService');
-      
+
       // If server explicitly rejects credentials
       if (e.response?.statusCode == 401 || e.response?.statusCode == 422) {
         _lastLoginError = 'خطأ في اسم المستخدم أو كلمة المرور';
@@ -303,13 +302,14 @@ class AuthService extends ChangeNotifier {
 
   Future<bool> updateProfile(String name, String username) async {
     if (_currentUser == null) return false;
+    final cleanNewUsername = username.trim();
     try {
       final db = await _dbService.database;
 
       // Check for username uniqueness locally (excluding current user)
       final existing = await db.query('users',
           where: 'username = ? AND id != ?',
-          whereArgs: [username, _currentUser!.id]);
+          whereArgs: [cleanNewUsername, _currentUser!.id]);
       if (existing.isNotEmpty) {
         _lastLoginError = 'اسم المستخدم موجود بالفعل، يرجى اختيار اسم آخر.';
         return false;
@@ -318,24 +318,20 @@ class AuthService extends ChangeNotifier {
       final now = TimestampFormatter.nowUtc();
       await db.update(
         'users',
-        {'name': name, 'username': username, 'updated_at': now, 'is_synced': 0},
+        {'name': name, 'username': cleanNewUsername, 'updated_at': now, 'is_synced': 0},
         where: 'id = ?',
         whereArgs: [_currentUser!.id],
       );
 
       // Persist to SharedPreferences so the new username is remembered on restart/re-auth
       final prefs = await SharedPreferences.getInstance();
-      if (prefs.getString('saved_username') == _currentUser!.username) {
-        await prefs.setString('saved_username', username);
-      }
-      if (prefs.getString('last_logged_username') == _currentUser!.username) {
-        await prefs.setString('last_logged_username', username);
-      }
+      await prefs.setString('saved_username', cleanNewUsername);
+      await prefs.setString('last_logged_username', cleanNewUsername);
 
       _currentUser = User(
         id: _currentUser!.id,
         uuid: _currentUser!.uuid,
-        username: username,
+        username: cleanNewUsername,
         name: name,
         role: _currentUser!.role,
         balance: _currentUser!.balance,
@@ -440,8 +436,9 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<bool> resetPassword(String username, String uuid, String newPassword) async {
+    final cleanUsername = username.trim();
     try {
-      final user = await _dbService.getUserByUsername(username);
+      final user = await _dbService.getUserByUsername(cleanUsername);
       if (user == null || user.uuid != uuid) {
         return false;
       }
@@ -450,11 +447,10 @@ class AuthService extends ChangeNotifier {
       
       if (success) {
         final prefs = await SharedPreferences.getInstance();
-        final lastUser = prefs.getString('last_logged_username');
-        if (lastUser != null && lastUser.toLowerCase() == username.toLowerCase()) {
-          await _secureStorage.write(key: 'last_logged_password', value: newPassword);
-        }
-        dev.log('Password reset successful for $username', name: 'AuthService');
+        await prefs.setString('saved_username', cleanUsername);
+        await prefs.setString('last_logged_username', cleanUsername);
+        await _secureStorage.write(key: 'last_logged_password', value: newPassword);
+        dev.log('Password reset successful for $cleanUsername', name: 'AuthService');
       }
       
       return success;
@@ -491,10 +487,12 @@ class AuthService extends ChangeNotifier {
         dev.log('Retrieved stored credentials: username=${username != null}, password=${password != null}', name: 'AuthService');
 
         if (username != null && password != null) {
+          // Perform a FULL LOGIN pass to ensure all state (currentUser, isLoggedIn, notifyListeners) is consistent.
           final result = await login(username, password);
           dev.log('Login result after biometrics: $result', name: 'AuthService');
+          
           if (result == LoginResult.wrongCredentials) {
-            // User data changed (e.g. password reset) — disable biometrics
+            // Data mismatch (e.g. password changed on another device) - disable biometrics
             await setBiometricEnabled(false);
           }
           return result;

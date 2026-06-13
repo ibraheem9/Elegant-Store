@@ -113,13 +113,16 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _loginWithBiometrics() async {
+    // Only proceed if not already loading a manual login
+    if (_isLoading) return;
+
     setState(() => _isLoading = true);
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
       final LoginResult result = await authService.authenticateWithBiometrics();
       if (mounted) {
         if (result == LoginResult.wrongCredentials) {
-          // User data changed since biometrics were enabled
+          // Password/User data changed since biometrics were enabled
           setState(() => _showBiometricIcon = false);
           _showError(authService.lastLoginError ?? 'تم تعطيل الدخول بالبصمة لتغيير بيانات الحساب. يرجى الدخول يدوياً.');
         } else if (result == LoginResult.customerNotAllowed) {
@@ -127,11 +130,12 @@ class _LoginScreenState extends State<LoginScreen> {
         } else if (result == LoginResult.networkError) {
           _showError(authService.lastLoginError ?? 'لا يوجد اتصال بالإنترنت');
         } else if (result == LoginResult.success) {
-          // Success! Navigation handled by main.dart
+          // Success! Navigation handled by main.dart (Consumer<AuthService>)
+          dev.log('Biometric login successful pass', name: 'LoginScreen');
         }
       }
     } catch (e) {
-      dev.log('Error in _loginWithBiometrics: $e');
+      dev.log('Error in _loginWithBiometrics: $e', name: 'LoginScreen');
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
