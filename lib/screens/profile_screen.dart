@@ -182,15 +182,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'الملف الشخصي للمتجر',
-                        style: TextStyle(
-                          fontSize: isMobile ? 24 : 32,
-                          fontWeight: FontWeight.w900,
-                          color: isDark ? const Color(0xFFDCEFFF) : const Color(0xFF0F172A),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.info_outline_rounded, color: Colors.blue),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'هذه البيانات مهمة وسيتم استخدامها في التقارير والمزامنة والتطوير لاحقاً.',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: isDark ? Colors.blue[200] : Colors.blue[900],
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 24),
 
                       // ── Store Information ──────────────────────────────────────────
                       _buildSection('معلومات المتجر', isDark, [

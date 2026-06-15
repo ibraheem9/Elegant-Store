@@ -443,18 +443,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'الإعدادات والتحكم',
-                  style: TextStyle(
-                    fontSize: isMobile ? 24 : 32,
-                    fontWeight: FontWeight.w900,
-                    color: isDark
-                        ? const Color(0xFFDCEFFF)
-                        : const Color(0xFF0F172A),
-                  ),
-                ),
-                const SizedBox(height: 32),
-
                 // ── Profile ───────────────────────────────────────────────────
                 _buildSection('الملف الشخصي', isDark, [
                   _buildResponsiveInputs(isMobile, isDark, [
