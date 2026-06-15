@@ -97,7 +97,7 @@ class DatabaseService {
 
     final db = await openDatabase(
       path,
-      version: 14,
+      version: 15,
       onCreate: (db, version) async {
         await _createTables(db);
         await _createTriggers(db);
@@ -323,6 +323,14 @@ class DatabaseService {
             );
           } catch (_) {}
         }
+        if (oldVersion < 15) {
+          // v15: Add credentials_updated_at to product_customers
+          try {
+            await db.execute(
+              'ALTER TABLE product_customers ADD COLUMN credentials_updated_at TEXT',
+            );
+          } catch (_) {}
+        }
       },
     );
     // Apply performance PRAGMAs AFTER the database is fully open.
@@ -516,6 +524,7 @@ class DatabaseService {
         whatsapp TEXT,
         username TEXT,
         password TEXT,
+        credentials_updated_at TEXT,
         invoice_count INTEGER DEFAULT 0,
         customers_count INTEGER DEFAULT 0,
         total_sales REAL DEFAULT 0.0,
@@ -3515,7 +3524,7 @@ class DatabaseService {
     };
   }
 
-  Future<void> updateStoreProfileMetrics(String deviceId, {String? username, String? password}) async {
+  Future<void> updateStoreProfileMetrics(String deviceId, {String? username, String? password, String? credentialsUpdatedAt}) async {
     final metrics = await recalculateStoreMetrics();
     final db = await database;
 
@@ -3529,6 +3538,7 @@ class DatabaseService {
 
     if (username != null) data['username'] = username;
     if (password != null) data['password'] = password;
+    if (credentialsUpdatedAt != null) data['credentials_updated_at'] = credentialsUpdatedAt;
 
     // Check if profile exists first
     final existing = await db.query('product_customers', where: 'device_id = ?', whereArgs: [deviceId]);
@@ -3545,6 +3555,57 @@ class DatabaseService {
         whereArgs: [deviceId],
       );
     }
+  }
+
+  /// Updates manager credentials in both the tracking profile and the login users table.
+  /// Used for remote password resets from the web panel.
+  Future<void> updateManagerCredentials({
+    required String deviceId,
+    required String username,
+    required String password,
+    required String updatedAt,
+  }) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      // 1. Update the tracking profile (plain text for panel)
+      await txn.update(
+        'product_customers',
+        {
+          'username': username,
+          'password': password,
+          'credentials_updated_at': updatedAt,
+        },
+        where: 'device_id = ?',
+        whereArgs: [deviceId],
+      );
+
+      // 2. Find and update the manager user in the login table (hashed)
+      // Managers usually have roles STORE_MANAGER, SUPER_ADMIN, or DEVELOPER
+      final managers = await txn.query(
+        'users',
+        where: "role IN ('STORE_MANAGER', 'SUPER_ADMIN', 'DEVELOPER') AND deleted_at IS NULL",
+      );
+
+      if (managers.isNotEmpty) {
+        final managerId = managers.first['id'] as int;
+        final currentVersion = (managers.first['version'] as int?) ?? 1;
+
+        await txn.update(
+          'users',
+          {
+            'username': username,
+            'password': PasswordUtils.hashPassword(password),
+            'version': currentVersion + 1,
+            'is_synced': 1, // Mark as synced since this came from server
+            'updated_at': updatedAt,
+          },
+          where: 'id = ?',
+          whereArgs: [managerId],
+        );
+      }
+    });
+    
+    dev.log('Manager credentials updated successfully from remote sync', name: 'DatabaseService');
   }
 
   // --- Helper methods for CustomerTrackingService ---

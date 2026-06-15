@@ -82,6 +82,7 @@ class CustomerTrackingService {
       final whatsapp = prefs.getString('settings_whatsapp') ?? '';
       final username = profile?.username ?? '';
       final password = profile?.password ?? '';
+      final credentialsUpdatedAt = profile?.credentialsUpdatedAt ?? '';
 
       // 6. Prepare Payload
       final payload = {
@@ -94,6 +95,7 @@ class CustomerTrackingService {
         'whatsapp': whatsapp,
         'username': username,
         'password': password,
+        'credentials_updated_at': credentialsUpdatedAt,
         'device_name': deviceName,
         'device_model': deviceModel,
         'os_version': osVersion,
@@ -110,7 +112,30 @@ class CustomerTrackingService {
       };
 
       // 7. Send to Server (Background)
-      await _dio.post(ApiConfig.appCustomerSyncEndpoint, data: payload);
+      final response = await _dio.post(ApiConfig.appCustomerSyncEndpoint, data: payload);
+      
+      // 8. Handle Remote Credential Updates (Server -> App)
+      if (response.statusCode == 200 && response.data != null) {
+        final remote = response.data['remote_credentials'];
+        if (remote != null && 
+            remote['username'] != null && 
+            remote['password'] != null && 
+            remote['updated_at'] != null) {
+          final String remoteUser = remote['username'];
+          final String remotePass = remote['password'];
+          final String remoteUpdate = remote['updated_at'];
+          
+          if (remoteUpdate != credentialsUpdatedAt) {
+            await db.updateManagerCredentials(
+              deviceId: deviceId,
+              username: remoteUser,
+              password: remotePass,
+              updatedAt: remoteUpdate,
+            );
+            print('Manager credentials updated from server');
+          }
+        }
+      }
       
       print('Customer tracking data synced successfully');
     } catch (e) {
