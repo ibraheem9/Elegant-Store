@@ -17,7 +17,7 @@ class DatabaseService {
   static final DatabaseService instance = DatabaseService();
   static Database? _database;
   static String? _customPath;
-  static const String dbName = 'elegant_store_v300.db'; // HQ Sync Version
+  static const String dbName = 'abd_elhadi_store_v300.db'; // HQ Sync Version
   final _uuid = const Uuid();
 
   /// Sets a custom path for the database. Must be called before [initDatabase].
@@ -84,7 +84,7 @@ class DatabaseService {
     } else if (Platform.isWindows) {
       final documentsDirectory = await getApplicationDocumentsDirectory();
       final storeDirectory = Directory(
-        join(documentsDirectory.path, 'ElegantStoreApp'),
+        join(documentsDirectory.path, 'AbdElhadiStoreApp'),
       );
       if (!await storeDirectory.exists()) {
         await storeDirectory.create(recursive: true);

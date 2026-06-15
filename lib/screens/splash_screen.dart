@@ -104,7 +104,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                         ),
                         const SizedBox(height: 30),
                         const Text(
-                          'ELEGANT STORE',
+                          'ABD ELHADI STORE',
                           style: TextStyle(
                             fontSize: 26,
                             fontWeight: FontWeight.w900,

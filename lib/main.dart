@@ -17,6 +17,7 @@ import 'services/device_sync_service.dart';
 import 'services/sync_manager.dart';
 import 'services/license_service.dart';
 import 'services/telemetry_service.dart';
+import 'services/customer_tracking_service.dart';
 import 'services/internal_resource_loader.dart';
 import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
@@ -33,7 +34,7 @@ import 'package:path_provider/path_provider.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-const String syncTaskName = "com.elegantstore.sync_task";
+const String syncTaskName = "com.abdelhadistore.sync_task";
 
   /* 
   @pragma('vm:entry-point')
@@ -118,7 +119,7 @@ Future<void> _startApp() async {
     if (dbExists) DatabaseService.setCustomPath(savedPath);
   } else if (Platform.isWindows) {
     final docs = await getApplicationDocumentsDirectory();
-    final defaultPath = p.join(docs.path, 'ElegantStoreApp', DatabaseService.dbName);
+    final defaultPath = p.join(docs.path, 'AbdElhadiStoreApp', DatabaseService.dbName);
     dbExists = File(defaultPath).existsSync();
   } else {
     // Mobile: assume it's fine or will be created on open
@@ -130,7 +131,7 @@ Future<void> _startApp() async {
     WindowOptions windowOptions = const WindowOptions(
       minimumSize: Size(800, 600),
       center: true,
-      title: 'Elegant Store',
+      title: 'Abd Elhadi Store',
     );
     windowManager.waitUntilReadyToShow(windowOptions, () async {
       await windowManager.show();
@@ -157,7 +158,7 @@ Future<void> _startApp() async {
     WindowOptions windowOptions = const WindowOptions(
       minimumSize: Size(800, 600),
       center: true,
-      title: 'Elegant Store',
+      title: 'Abd Elhadi Store',
     );
     windowManager.waitUntilReadyToShow(windowOptions, () async {
       await windowManager.show();
@@ -192,6 +193,9 @@ Future<void> _startApp() async {
   final syncService = SyncService(dbService, prefs);
   final authService = AuthService(dbService, syncService);
   final telemetryService = TelemetryService(dbService);
+  
+  // Start periodic tracking sync (8 AM & 10 PM)
+  CustomerTrackingService.instance.startPeriodicSync();
   
   // initSession with timeout to prevent splash screen hang
   try {
@@ -266,7 +270,7 @@ Future<void> _startApp() async {
           },
         ),
       ],
-      child: ElegantStoreApp(isLicensed: licenseResult.isValid),
+      child: AbdElhadiStoreApp(isLicensed: licenseResult.isValid),
     ),
   );
 }
@@ -279,15 +283,15 @@ void _initWorkmanager() {
 }
 */
 
-class ElegantStoreApp extends StatefulWidget {
+class AbdElhadiStoreApp extends StatefulWidget {
   final bool isLicensed;
-  const ElegantStoreApp({super.key, required this.isLicensed});
+  const AbdElhadiStoreApp({super.key, required this.isLicensed});
 
   @override
-  State<ElegantStoreApp> createState() => _ElegantStoreAppState();
+  State<AbdElhadiStoreApp> createState() => _AbdElhadiStoreAppState();
 }
 
-class _ElegantStoreAppState extends State<ElegantStoreApp> {
+class _AbdElhadiStoreAppState extends State<AbdElhadiStoreApp> {
   late bool _isLicensed;
 
   @override
@@ -301,7 +305,7 @@ class _ElegantStoreAppState extends State<ElegantStoreApp> {
     final themeNotifier = context.watch<ThemeNotifier>();
 
     return MaterialApp(
-      title: 'Elegant Store',
+      title: 'Abd Elhadi Store',
       navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       themeMode: themeNotifier.themeMode,

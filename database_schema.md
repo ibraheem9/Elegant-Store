@@ -1,6 +1,6 @@
-# Elegant Store - SQLite Database Schema
+# Abd Elhadi Store - SQLite Database Schema
 
-This document outlines the complete SQLite database schema used in the Elegant Store Flutter mobile application. The database is designed to support offline-first capabilities with synchronization (`is_synced`, `version`, `uuid` fields) and soft deletes (`deleted_at`).
+This document outlines the complete SQLite database schema used in the Abd Elhadi Store Flutter mobile application. The database is designed to support offline-first capabilities with synchronization (`is_synced`, `version`, `uuid` fields) and soft deletes (`deleted_at`).
 
 ## Tables
 

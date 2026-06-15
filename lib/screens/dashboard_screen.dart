@@ -220,7 +220,7 @@ class DashboardScreenState extends State<DashboardScreen> {
       case 14: return 'عن المطور';
       case 15: return 'الملف الشخصي للمتجر';
       case 16: return 'دليل الاستخدام';
-      default: return 'Elegant Store';
+      default: return 'Abd Elhadi Store';
     }
   }
 

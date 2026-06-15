@@ -92,7 +92,7 @@ class _DatabaseSetupScreenState extends State<DatabaseSetupScreen> {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['db'],
-        dialogTitle: 'اختر ملف قاعدة البيانات (elegant_store.db)',
+        dialogTitle: 'اختر ملف قاعدة البيانات (abd_elhadi_store.db)',
       );
 
       if (result != null && result.files.single.path != null) {

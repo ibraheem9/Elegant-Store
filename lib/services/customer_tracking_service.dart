@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
@@ -14,6 +15,21 @@ class CustomerTrackingService {
 
   final Dio _dio = Dio(BaseOptions(baseUrl: ApiConfig.baseUrl));
   final DeviceInfoPlugin _deviceInfo = DeviceInfoPlugin();
+  Timer? _periodicTimer;
+
+  /// Starts a timer that checks every 15 minutes if it's 8:00 AM or 10:00 PM
+  /// and triggers a sync if so.
+  void startPeriodicSync() {
+    _periodicTimer?.cancel();
+    _periodicTimer = Timer.periodic(const Duration(minutes: 15), (timer) {
+      final now = DateTime.now();
+      // Trigger if it's 8 AM or 10 PM (22:00)
+      if ((now.hour == 8 || now.hour == 22) && now.minute < 16) {
+        print('Scheduled sync triggered at ${now.hour}:${now.minute}');
+        syncCustomerData();
+      }
+    });
+  }
 
   /// Collects and syncs customer data to the server in the background.
   Future<void> syncCustomerData({String? recoveryToken}) async {

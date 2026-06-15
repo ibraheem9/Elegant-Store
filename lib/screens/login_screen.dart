@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'dart:developer' as dev;
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
+import '../services/customer_tracking_service.dart';
 import '../utils/app_snackbar.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -29,6 +30,8 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _checkBiometricStatus();
+    // Check for credential updates from server (web panel resets) on app startup
+    CustomerTrackingService.instance.syncCustomerData();
   }
 
   Future<void> _checkBiometricStatus() async {

@@ -9,13 +9,13 @@
 #include "flutter_window.h"
 #include "utils.h"
 
-// Returns true if the "allow multiple instances" flag file exists in Documents/ElegantStoreApp
+// Returns true if the "allow multiple instances" flag file exists in Documents/AbdElhadiStoreApp
 bool IsMultipleInstancesAllowed() {
   PWSTR path = nullptr;
   bool allowed = false;
   if (SHGetKnownFolderPath(FOLDERID_Documents, 0, nullptr, &path) == S_OK) {
     std::wstring flag_path = path;
-    flag_path += L"\\ElegantStoreApp\\allow_multiple_instances.txt";
+    flag_path += L"\\AbdElhadiStoreApp\\allow_multiple_instances.txt";
     DWORD dwAttrib = GetFileAttributesW(flag_path.c_str());
     allowed = (dwAttrib != INVALID_FILE_ATTRIBUTES && !(dwAttrib & FILE_ATTRIBUTE_DIRECTORY));
     CoTaskMemFree(path);

@@ -139,7 +139,7 @@ class SyncService extends ChangeNotifier {
       headers: {
         'Accept': 'application/json',
         // ModSecurity on the server blocks requests with no User-Agent (HTTP 406)
-        'User-Agent': 'ElegantStore/1.0 (Dart/3.5; Android)',
+        'User-Agent': 'AbdElhadiStore/1.0 (Dart/3.5; Android)',
       },
     ));
 
@@ -1179,7 +1179,7 @@ class SyncService extends ChangeNotifier {
     // ── Step 4: Save to file ─────────────────────────────────────────────
     onProgress?.call(0.96, 'جاري حفظ الملف…');
     final dateStr = DateTime.now().toIso8601String().substring(0, 10);
-    final fileName = 'elegant_store_export_$dateStr.json';
+    final fileName = 'abd_elhadi_store_export_$dateStr.json';
     Directory saveDir;
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       // Desktop: save to Downloads folder

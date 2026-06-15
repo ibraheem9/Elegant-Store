@@ -148,7 +148,7 @@ class ImportService {
     if (!appName.toLowerCase().contains('elegant')) {
       return const ImportResult(
         success: false,
-        message: 'الملف لا ينتمي إلى تطبيق Elegant Store.',
+        message: 'الملف لا ينتمي إلى تطبيق Abd Elhadi Store.',
         upsertedCounts: {},
         errors: [],
       );

@@ -105,7 +105,7 @@ class HelpScreen extends StatelessWidget {
           const SizedBox(height: 30),
           Center(
             child: Text(
-              'Elegant Store v1.0.0',
+              'Abd Elhadi Store v1.0.0',
               style: TextStyle(color: isDark ? Colors.white30 : Colors.black26, fontSize: 12),
             ),
           ),

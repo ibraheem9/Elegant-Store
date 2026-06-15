@@ -1,6 +1,6 @@
 # Preserve Dio and network-related classes
 -keep class io.flutter.** { *; }
--keep class com.example.elegant_store.** { *; }
+-keep class com.example.abd_elhadi_store.** { *; }
 
 # Preserve Dio HTTP client
 -keep class io.flutter.plugins.** { *; }

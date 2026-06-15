@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:elegant_store/main.dart';
+import 'package:abd_elhadi_store/main.dart';
 
 void main() {
   testWidgets('App starts smoke test', (WidgetTester tester) async {

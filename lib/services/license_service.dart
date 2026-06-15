@@ -64,7 +64,7 @@ class LicenseService {
   static final LicenseService instance = LicenseService._();
 
   // ── Constants ──────────────────────────────────────────────────────────────
-  static const _storageKey = 'elegant_store_license_v1';
+  static const _storageKey = 'abd_elhadi_store_license_v1';
 
   /// RSA-2048 public key (PEM) — private key is NEVER in the app.
   static const _publicKeyPem = '''-----BEGIN PUBLIC KEY-----

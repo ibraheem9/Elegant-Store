@@ -20,7 +20,7 @@ class TelemetryService extends ChangeNotifier {
     receiveTimeout: const Duration(seconds: 30),
     headers: {
       'Accept': 'application/json',
-      'User-Agent': 'ElegantStore/1.0 (Telemetry)',
+      'User-Agent': 'AbdElhadiStore/1.0 (Telemetry)',
     },
   ));
 

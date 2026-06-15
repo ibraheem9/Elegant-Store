@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:elegant_store/utils/password_utils.dart';
+import 'package:abd_elhadi_store/utils/password_utils.dart';
 
 void main() {
   group('PasswordUtils Tests', () {

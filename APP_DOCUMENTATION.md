@@ -1,7 +1,7 @@
-# Elegant Store - Documentation
+# Abd Elhadi Store - Documentation
 
 ## 📱 App Overview
-Elegant Store is a comprehensive management and accounting solution designed for retail businesses. It focuses on tracking sales, customer debts, purchases, and providing detailed daily financial insights.
+Abd Elhadi Store is a comprehensive management and accounting solution designed for retail businesses. It focuses on tracking sales, customer debts, purchases, and providing detailed daily financial insights.
 
 ---
 

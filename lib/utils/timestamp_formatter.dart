@@ -3,7 +3,7 @@ import 'package:intl/intl.dart';
 
 /// TimestampFormatter
 ///
-/// Unified UTC timestamp utility for the Elegant Store app.
+/// Unified UTC timestamp utility for the Abd Elhadi Store app.
 ///
 /// STORAGE CONTRACT (enforced everywhere in the codebase):
 ///   • ALL timestamps (created_at, updated_at, deleted_at, invoice_date) are

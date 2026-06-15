@@ -21,7 +21,7 @@ import '../models/models.dart';
 /// ```json
 /// {
 ///   "meta": {
-///     "app": "Elegant Store",
+///     "app": "Abd Elhadi Store",
 ///     "exported_at": "2026-04-18T12:00:00.000",
 ///     "version": 1,
 ///     "tables": ["users", "payment_methods", ...]
@@ -153,7 +153,7 @@ class ExportService {
     if (fileBytes == null) return null;
 
     final String timestamp = DateFormat('yyyy-MM-dd_HH-mm-ss').format(DateTime.now());
-    final String fileName = 'elegant_store_report_$timestamp.xlsx';
+    final String fileName = 'abd_elhadi_store_report_$timestamp.xlsx';
 
     if (Platform.isWindows) {
       return _saveExcelWindows(fileBytes, fileName);
@@ -335,8 +335,8 @@ class ExportService {
     final XFile xFile = XFile(filePath, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     await Share.shareXFiles(
       [xFile],
-      subject: 'Elegant Store — Excel Report',
-      text: 'تقرير فواتير وأرصدة عملاء متجر Elegant Store',
+      subject: 'Abd Elhadi Store — Excel Report',
+      text: 'تقرير فواتير وأرصدة عملاء متجر Abd Elhadi Store',
     );
   }
 
@@ -348,7 +348,7 @@ class ExportService {
   /// path, and returns that path. Returns `null` if the user cancels.
   Future<String?> _exportWindows(String jsonString) async {
     final String suggestedName =
-        'elegant_store_export_${DateFormat("yyyy-MM-dd_HH-mm-ss").format(DateTime.now())}.json';
+        'abd_elhadi_store_export_${DateFormat("yyyy-MM-dd_HH-mm-ss").format(DateTime.now())}.json';
 
     // FilePicker.saveFile returns the full path chosen by the user, or null
     // if the dialog is dismissed.
@@ -412,7 +412,7 @@ class ExportService {
 
     final payload = {
       'meta': {
-        'app': 'Elegant Store',
+        'app': 'Abd Elhadi Store',
         'exported_at':
             DateFormat("yyyy-MM-dd'T'HH:mm:ss").format(DateTime.now()),
         'schema_version': 4,
@@ -482,7 +482,7 @@ class ExportService {
 
     final payload = {
       'meta': {
-        'app': 'Elegant Store',
+        'app': 'Abd Elhadi Store',
         'exported_at':
             DateFormat("yyyy-MM-dd'T'HH:mm:ss").format(DateTime.now()),
         'filter': {
@@ -587,7 +587,7 @@ class ExportService {
     final Directory dir = await _getExportDirectory();
     final String timestamp =
         DateFormat('yyyy-MM-dd_HH-mm-ss').format(DateTime.now());
-    final String fileName = 'elegant_store_export_$timestamp.json';
+    final String fileName = 'abd_elhadi_store_export_$timestamp.json';
     final File file = File('${dir.path}/$fileName');
     await file.writeAsString(jsonString, encoding: utf8, flush: true);
     debugPrint('[ExportService] Written to: ${file.path}');
@@ -611,8 +611,8 @@ class ExportService {
     final XFile xFile = XFile(filePath, mimeType: 'application/json');
     await Share.shareXFiles(
       [xFile],
-      subject: 'Elegant Store — Database Export',
-      text: 'ملف تصدير قاعدة بيانات متجر Elegant Store',
+      subject: 'Abd Elhadi Store — Database Export',
+      text: 'ملف تصدير قاعدة بيانات متجر Abd Elhadi Store',
     );
   }
 }

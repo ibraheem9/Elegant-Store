@@ -25,7 +25,7 @@ val keystoreFile = file(storeFileRelative)
 val hasKeystore  = keystoreFile.exists()
 
 android {
-    namespace = "com.example.elegant_store"
+    namespace = "com.example.abd_elhadi_store"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -40,7 +40,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.elegant_store"
+        applicationId = "com.example.abd_elhadi_store"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

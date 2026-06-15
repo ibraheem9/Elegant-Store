@@ -62,7 +62,7 @@ class ContactService {
           baseUrl: ApiConfig.baseUrl,
           headers: {
             'Accept': 'application/json',
-            'User-Agent': 'ElegantStore/1.0 (Dart/3.5; Android)',
+            'User-Agent': 'AbdElhadiStore/1.0 (Dart/3.5; Android)',
           },
           connectTimeout: const Duration(seconds: 12),
           receiveTimeout: const Duration(seconds: 20),

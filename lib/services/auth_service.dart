@@ -37,7 +37,7 @@ class AuthService extends ChangeNotifier {
       'Accept': 'application/json',
       // A proper User-Agent is required — the server's ModSecurity blocks
       // requests with no User-Agent (returns HTTP 406).
-      'User-Agent': 'ElegantStore/1.0 (Dart/3.5; Android)',
+      'User-Agent': 'AbdElhadiStore/1.0 (Dart/3.5; Android)',
     },
     connectTimeout: const Duration(seconds: 10),
     receiveTimeout: const Duration(seconds: 15),
@@ -544,7 +544,7 @@ class AuthService extends ChangeNotifier {
   Future<void> _updateInstanceFlagFile(bool allow) async {
     try {
       final docsDir = await getApplicationDocumentsDirectory();
-      final flagFile = File(join(docsDir.path, 'ElegantStoreApp', 'allow_multiple_instances.txt'));
+      final flagFile = File(join(docsDir.path, 'AbdElhadiStoreApp', 'allow_multiple_instances.txt'));
       
       if (allow) {
         if (!await flagFile.parent.exists()) {
