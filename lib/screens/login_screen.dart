@@ -121,17 +121,24 @@ class _LoginScreenState extends State<LoginScreen> {
       final authService = Provider.of<AuthService>(context, listen: false);
       final LoginResult result = await authService.authenticateWithBiometrics();
       if (mounted) {
-        if (result == LoginResult.wrongCredentials) {
-          // Password/User data changed since biometrics were enabled
-          setState(() => _showBiometricIcon = false);
-          _showError(authService.lastLoginError ?? 'تم تعطيل الدخول بالبصمة لتغيير بيانات الحساب. يرجى الدخول يدوياً.');
-        } else if (result == LoginResult.customerNotAllowed) {
-          _showError('هذا الحساب لا يملك صلاحية الدخول للتطبيق');
-        } else if (result == LoginResult.networkError) {
-          _showError(authService.lastLoginError ?? 'لا يوجد اتصال بالإنترنت');
-        } else if (result == LoginResult.success) {
+        if (result == LoginResult.success) {
           // Success! Navigation handled by main.dart (Consumer<AuthService>)
           dev.log('Biometric login successful pass', name: 'LoginScreen');
+        } else {
+          // Handle all failures (wrongCredentials, customerNotAllowed, networkError, unknownError)
+          String errorMessage = authService.lastLoginError ?? 'فشل تسجيل الدخول بالبصمة';
+          
+          if (result == LoginResult.wrongCredentials) {
+            // Password/User data changed since biometrics were enabled
+            setState(() => _showBiometricIcon = false);
+            errorMessage = authService.lastLoginError ?? 'تم تعطيل الدخول بالبصمة لتغيير بيانات الحساب. يرجى الدخول يدوياً.';
+          } else if (result == LoginResult.customerNotAllowed) {
+            errorMessage = 'هذا الحساب لا يملك صلاحية الدخول للتطبيق';
+          } else if (result == LoginResult.networkError) {
+            errorMessage = authService.lastLoginError ?? 'لا يوجد اتصال بالإنترنت';
+          }
+          
+          _showError(errorMessage);
         }
       }
     } catch (e) {

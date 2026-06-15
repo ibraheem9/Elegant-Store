@@ -296,7 +296,12 @@ class AuthService extends ChangeNotifier {
     await prefs.remove('auth_token');
     await prefs.remove('saved_username');
     await prefs.remove('session_expiry');
-    await _secureStorage.delete(key: 'last_logged_password');
+    
+    // We NO LONGER delete the password from secure storage here.
+    // This allows the user to log out but still use biometrics next time.
+    // The password is only cleared if they explicitly disable biometrics 
+    // or if the account is wiped.
+    
     notifyListeners();
   }
 
@@ -498,11 +503,15 @@ class AuthService extends ChangeNotifier {
           }
           return result;
         } else {
+          _lastLoginError = 'لم يتم العثور على بيانات الدخول المحفوظة. يرجى تسجيل الدخول يدوياً أولاً.';
           dev.log('Biometrics succeeded but stored credentials missing.', name: 'AuthService');
         }
+      } else {
+        _lastLoginError = 'فشل التحقق من البصمة';
       }
       return LoginResult.unknownError;
     } catch (e) {
+      _lastLoginError = 'خطأ في نظام البصمة: $e';
       dev.log('Biometric authentication EXCEPTION: $e', name: 'AuthService', error: e);
       return LoginResult.unknownError;
     }
