@@ -8,6 +8,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
+import 'package:local_auth_android/local_auth_android.dart';
+import 'package:local_auth_darwin/local_auth_darwin.dart';
 import 'package:dio/dio.dart';
 import '../models/models.dart';
 import '../core/config/api_config.dart';
@@ -478,13 +480,24 @@ class AuthService extends ChangeNotifier {
       final bool canAuthenticate = await _localAuth.canCheckBiometrics || await _localAuth.isDeviceSupported();
       dev.log('Biometric support: $canAuthenticate', name: 'AuthService');
       if (!canAuthenticate) {
+        _lastLoginError = 'جهازك لا يدعم البصمة أو لم يتم إعدادها';
         return LoginResult.unknownError;
       }
 
       final bool authenticated = await _localAuth.authenticate(
         localizedReason: 'يرجى تسجيل الدخول باستخدام البصمة أو رمز المرور',
+        authMessages: const [
+          AndroidAuthMessages(
+            signInTitle: 'تسجيل الدخول بالبصمة',
+            biometricHint: 'المصادقة الحيوية',
+            cancelButton: 'إلغاء',
+          ),
+          IOSAuthMessages(
+            cancelButton: 'إلغاء',
+          ),
+        ],
         options: const AuthenticationOptions(
-          stickyAuth: true, // Reverted to true for better platform behavior
+          stickyAuth: true,
           biometricOnly: false,
         ),
       );
@@ -506,6 +519,8 @@ class AuthService extends ChangeNotifier {
           dev.log('Login result after biometrics: $result', name: 'AuthService');
           
           if (result == LoginResult.wrongCredentials) {
+            // Password changed - must disable until manual login updates it
+            _lastLoginError = 'تم تغيير كلمة المرور. يرجى تسجيل الدخول يدوياً مرة واحدة لتحديث البصمة.';
             await setBiometricEnabled(false);
           }
           return result;
@@ -514,13 +529,42 @@ class AuthService extends ChangeNotifier {
           dev.log('Biometrics succeeded but stored credentials missing.', name: 'AuthService');
         }
       } else {
-        _lastLoginError = 'فشل التحقق من البصمة';
+        _lastLoginError = 'تم إلغاء أو فشل التحقق من البصمة';
       }
       return LoginResult.unknownError;
     } catch (e) {
       _lastLoginError = 'خطأ في نظام البصمة: $e';
       dev.log('Biometric authentication EXCEPTION: $e', name: 'AuthService', error: e);
       return LoginResult.unknownError;
+    }
+  }
+
+  /// Verifies identity without logging in. Used for sensitive settings.
+  Future<bool> verifyIdentityOnly() async {
+    try {
+      final bool canAuthenticate = await _localAuth.canCheckBiometrics || await _localAuth.isDeviceSupported();
+      if (!canAuthenticate) return false;
+
+      return await _localAuth.authenticate(
+        localizedReason: 'يرجى تأكيد هويتك للمتابعة',
+        authMessages: const [
+          AndroidAuthMessages(
+            signInTitle: 'تأكيد الهوية',
+            biometricHint: 'المصادقة الحيوية',
+            cancelButton: 'إلغاء',
+          ),
+          IOSAuthMessages(
+            cancelButton: 'إلغاء',
+          ),
+        ],
+        options: const AuthenticationOptions(
+          stickyAuth: true,
+          biometricOnly: false,
+        ),
+      );
+    } catch (e) {
+      dev.log('verifyIdentityOnly error: $e', name: 'AuthService');
+      return false;
     }
   }
 

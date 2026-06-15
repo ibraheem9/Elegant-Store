@@ -134,7 +134,7 @@ class _LoginScreenState extends State<LoginScreen> {
           if (result == LoginResult.wrongCredentials) {
             // Password/User data changed since biometrics were enabled
             setState(() => _showBiometricIcon = false);
-            errorMessage = authService.lastLoginError ?? 'تم تعطيل الدخول بالبصمة لتغيير بيانات الحساب. يرجى الدخول يدوياً.';
+            // errorMessage already set in AuthService for this case
           } else if (result == LoginResult.customerNotAllowed) {
             errorMessage = 'هذا الحساب لا يملك صلاحية الدخول للتطبيق';
           } else if (result == LoginResult.networkError) {
@@ -146,6 +146,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       dev.log('Error in _loginWithBiometrics: $e', name: 'LoginScreen');
+      _showError('حدث خطأ أثناء الدخول بالبصمة');
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -374,7 +375,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 constraints: const BoxConstraints(maxWidth: 450),
                 child: Card(
                   elevation: 25,
-                  shadowColor: Colors.black.withOpacity(0.5),
+                  shadowColor: Colors.black.withValues(alpha: 0.5),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
                   child: Padding(
                     padding: const EdgeInsets.all(40.0),

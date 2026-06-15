@@ -120,9 +120,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
+                    color: Colors.orange.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                    border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -170,25 +170,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _notificationsEnabled = enabled);
 
     if (enabled) {
-      NotificationService.scheduleDailyCheck(context.read<DatabaseService>());
+      if (mounted) {
+        NotificationService.scheduleDailyCheck(context.read<DatabaseService>());
+      }
     }
   }
 
   Future<void> _toggleBiometric(bool enabled) async {
     final auth = context.read<AuthService>();
     if (enabled) {
-      final LoginResult result = await auth.authenticateWithBiometrics();
-      if (result == LoginResult.success) {
+      final bool verified = await auth.verifyIdentityOnly();
+      if (verified) {
         await auth.setBiometricEnabled(true);
         setState(() => _biometricEnabled = true);
         _showSnackBar('تم تفعيل الدخول بالبصمة بنجاح', Colors.green);
       } else {
         _showSnackBar(
-            'فشل التحقق من البصمة. يرجى تسجيل الدخول أولاً.', Colors.red);
+            'تم إلغاء أو فشل التحقق من البصمة', Colors.orange);
       }
     } else {
       await auth.setBiometricEnabled(false);
       setState(() => _biometricEnabled = false);
+      _showSnackBar('تم تعطيل الدخول بالبصمة', Colors.blue);
     }
   }
 
@@ -200,8 +203,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     bool isAuth = false;
 
     if (canBio) {
-      final result = await auth.authenticateWithBiometrics();
-      if (result == LoginResult.success) {
+      final bool verified = await auth.verifyIdentityOnly();
+      if (verified) {
         isAuth = true;
       }
     }
@@ -585,7 +588,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           'استخدم البصمة لتسجيل الدخول السريع بدلاً من كلمة المرور'),
                       value: _biometricEnabled,
                       onChanged: _toggleBiometric,
-                      activeColor: Colors.green,
+                      activeThumbColor: Colors.green,
+                      activeTrackColor: Colors.green.withValues(alpha: 0.5),
                       secondary:
                           const Icon(Icons.fingerprint, color: Colors.green),
                     )
