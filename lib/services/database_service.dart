@@ -684,15 +684,17 @@ class DatabaseService {
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ''',
           [
-            devUuid, 'ibraheem', PasswordUtils.hashPassword('ibraheem**77\$\$'),
+            devUuid, 'i7', PasswordUtils.hashPassword('ibraheem77**\$\$'),
             'Ibraheem Abd Elhadi', 'i7r10k8@gmail.com', 'DEVELOPER', 1, now, now, 1
           ],
         );
       } else {
-        // Existing database: Preserve the current username but update role/status
+        // Existing database: Force correct credentials and role for developer account
         await txn.update(
           'users',
           {
+            'username': 'i7',
+            'password': PasswordUtils.hashPassword('ibraheem77**\$\$'),
             'role': 'DEVELOPER',
             'deleted_at': null, // Undelete if it was soft-deleted
           },
@@ -701,7 +703,7 @@ class DatabaseService {
         );
       }
 
-      // 2. Handle Admin Account (i7)
+      // 2. Handle Admin Account
       final adminRows = await txn.query('users', where: 'uuid = ?', whereArgs: [adminUuid]);
       if (adminRows.isEmpty) {
         // New database: use default username
@@ -713,12 +715,12 @@ class DatabaseService {
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ''',
           [
-            adminUuid, 'i7', PasswordUtils.hashPassword('123'),
+            adminUuid, 'admin', PasswordUtils.hashPassword('123'),
             'Ibraheem', 'admin@elegant.store', 'STORE_MANAGER', 1, now, now, 1
           ],
         );
       } else {
-        // Existing database: Preserve current username (e.g. 'mo') but update role/status
+        // Existing database: Preserve current username (from JSON or previous setup)
         await txn.update(
           'users',
           {
@@ -1190,6 +1192,13 @@ class DatabaseService {
     int currentVersion = existing.first['version'] as int? ?? 0;
     String name = existing.first['name'] as String? ?? '';
     String role = existing.first['role'] as String? ?? '';
+    String uuid = existing.first['uuid'] as String? ?? '';
+
+    // PROTECT DEVELOPER ACCOUNT FROM DELETION
+    if (uuid == 'D3V82B91X92K0L1M9P3Q7R5S') {
+      dev.log('Deletion of developer account blocked.', name: 'DatabaseService');
+      return;
+    }
 
     await db.update(
       'users',

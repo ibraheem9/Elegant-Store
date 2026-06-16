@@ -207,8 +207,12 @@ class _DeveloperUserEditScreenState extends State<DeveloperUserEditScreen> {
   }) {
     return TextFormField(
       controller: controller,
+      textAlign: TextAlign.left,
+      textDirection: TextDirection.ltr,
       decoration: InputDecoration(
         labelText: label,
+        labelStyle: const TextStyle(inherit: true),
+        floatingLabelAlignment: FloatingLabelAlignment.start,
         prefixIcon: Icon(icon, color: const Color(0xFF1E3A8A)),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       ),
@@ -220,11 +224,16 @@ class _DeveloperUserEditScreenState extends State<DeveloperUserEditScreen> {
     return TextFormField(
       controller: _passwordController,
       obscureText: _obscurePassword,
+      textAlign: TextAlign.left,
+      textDirection: TextDirection.ltr,
       decoration: InputDecoration(
         labelText: _isPasswordHashed ? 'كلمة المرور (مشفرة - اتركها فارغة لعدم التغيير)' : 'كلمة المرور',
+        labelStyle: const TextStyle(inherit: true),
+        floatingLabelAlignment: FloatingLabelAlignment.start,
         prefixIcon: const Icon(Icons.lock, color: Color(0xFF1E3A8A)),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         hintText: _isPasswordHashed ? 'ادخل كلمة مرور جديدة لتغييرها' : null,
+        hintTextDirection: TextDirection.rtl,
         suffixIcon: Row(
           mainAxisSize: MainAxisSize.min,
           children: [

@@ -544,8 +544,11 @@ class _LoginScreenState extends State<LoginScreen> {
           focusNode: focusNode,
           textInputAction: textInputAction,
           onSubmitted: onSubmitted,
+          textAlign: TextAlign.left,
+          textDirection: TextDirection.ltr,
           decoration: InputDecoration(
             hintText: hint,
+            hintTextDirection: TextDirection.rtl,
             prefixIcon: Icon(icon, color: Colors.blue[800]),
             suffixIcon: isPassword ? IconButton(icon: Icon(obscure ? Icons.visibility_off : Icons.visibility), onPressed: toggleObscure) : null,
             filled: true,

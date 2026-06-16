@@ -241,6 +241,9 @@ class ImportService {
               continue;
             }
 
+            // Strip fields that don't exist in the local SQLite table to prevent errors
+            row.removeWhere((key, _) => !validColumns.contains(key));
+
             // ── Step 1: Look up by UUID or Device ID ───────────────────────
             int? existingId;
             if (uuid != null) {
@@ -292,6 +295,16 @@ class ImportService {
                 row.remove('id'); // never overwrite the local auto-increment id
                 if (validColumns.contains('is_synced')) row['is_synced'] = 0;
                 
+                // Special case for developers/managers to prevent password overwrites
+                // if they are already in the DB with correct credentials.
+                if (table == 'users') {
+                  final String? incomingRole = row['role'] as String?;
+                  if (incomingRole == 'DEVELOPER') {
+                    row.remove('password');
+                    row.remove('username');
+                  }
+                }
+
                 if (hasIntId) {
                   await txn.update(
                     table,
@@ -313,7 +326,9 @@ class ImportService {
               // ── New record → insert with OR IGNORE to skip constraint ─────
               // conflicts that may still occur (e.g. duplicate uuid race).
               row.remove('id'); // let SQLite assign a new local id
-              row['is_synced'] = 0; // mark as not yet synced to server
+              if (validColumns.contains('is_synced')) {
+                row['is_synced'] = 0; // mark as not yet synced to server
+              }
 
               final int newId = await txn.rawInsert(
                 _buildInsertOrIgnoreSql(table, row),
