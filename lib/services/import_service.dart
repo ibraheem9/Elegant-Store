@@ -145,7 +145,8 @@ class ImportService {
     }
 
     final String appName = meta['app'] as String? ?? '';
-    if (!appName.toLowerCase().contains('elegant')) {
+    final String lowerAppName = appName.toLowerCase();
+    if (!lowerAppName.contains('elegant') && !lowerAppName.contains('abd elhadi')) {
       return const ImportResult(
         success: false,
         message: 'الملف لا ينتمي إلى تطبيق Abd Elhadi Store.',
