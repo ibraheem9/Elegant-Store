@@ -1,4 +1,3 @@
-import '../widgets/notification_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -6,9 +5,10 @@ import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/auth_service.dart';
 import 'add_accountant_screen.dart';
+import 'accountant_permissions_screen.dart';
 
 class AccountantsScreen extends StatefulWidget {
-  const AccountantsScreen({Key? key}) : super(key: key);
+  const AccountantsScreen({super.key});
 
   @override
   State<AccountantsScreen> createState() => _AccountantsScreenState();
@@ -126,8 +126,10 @@ class _AccountantsScreenState extends State<AccountantsScreen> {
     );
 
     if (confirm == true && mounted) {
+      final auth = context.read<AuthService>();
+      final actUser = auth.currentUser;
       await db.softDeleteUser(accountant.id!);
-      final actUser = context.read<AuthService>().currentUser;
+
       db.logActivity(
         targetId: accountant.id!,
         targetType: 'ACCOUNTANT',
@@ -161,6 +163,14 @@ class _AccountantsScreenState extends State<AccountantsScreen> {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const AddAccountantScreen()),
+    );
+    if (result == true) _loadAccountants();
+  }
+
+  Future<void> _managePermissions(User accountant) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => AccountantPermissionsScreen(accountant: accountant)),
     );
     if (result == true) _loadAccountants();
   }
@@ -287,17 +297,26 @@ class _AccountantsScreenState extends State<AccountantsScreen> {
               ),
             ),
             // Actions
-            Column(
+            Row(
               children: [
                 IconButton(
-                  icon: const Icon(Icons.edit_outlined, color: Color(0xFF3B82F6)),
-                  tooltip: 'تعديل',
-                  onPressed: () => _editAccountant(acc),
+                  icon: const Icon(Icons.security_rounded, color: Colors.orange),
+                  tooltip: 'الصلاحيات',
+                  onPressed: () => _managePermissions(acc),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                  tooltip: 'حذف',
-                  onPressed: () => _deleteAccountant(acc),
+                Column(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined, color: Color(0xFF3B82F6)),
+                      tooltip: 'تعديل',
+                      onPressed: () => _editAccountant(acc),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                      tooltip: 'حذف',
+                      onPressed: () => _deleteAccountant(acc),
+                    ),
+                  ],
                 ),
               ],
             ),

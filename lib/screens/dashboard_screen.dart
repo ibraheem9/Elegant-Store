@@ -179,6 +179,20 @@ class DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _getScreen(int index) {
+    final auth = context.read<AuthService>();
+    if (!auth.hasPermission(index)) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.lock_person_rounded, size: 64, color: Colors.red),
+            SizedBox(height: 16),
+            Text('عذراً، لا تملك صلاحية الدخول لهذه الشاشة', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      );
+    }
+
     switch (index) {
       case 0: return const DashboardHomeScreen();
       case 1: return const SalesScreen();
@@ -276,27 +290,27 @@ class DashboardScreenState extends State<DashboardScreen> {
               children: [
                 // Logo hidden as requested: اخفي الشعار منها
                 const SizedBox(height: 60),
-                _buildSidebarItem(0, 'لوحة التحكم', Icons.dashboard_rounded),
-                _buildSidebarItem(1, 'شاشة البيع', Icons.receipt_long_rounded),
-                _buildSidebarItem(8, 'الفواتير غير المدفوعة', Icons.unpublished_rounded),
-                _buildSidebarItem(2, 'إحصائيات اليوم', Icons.bar_chart_rounded),
-                _buildSidebarItem(3, 'المشتريات', Icons.shopping_cart_rounded),
-                _buildSidebarItem(4, 'إدارة الزبائن', Icons.people_alt_rounded),
-                if (auth.isManager())
+                if (auth.hasPermission(0)) _buildSidebarItem(0, 'لوحة التحكم', Icons.dashboard_rounded),
+                if (auth.hasPermission(1)) _buildSidebarItem(1, 'شاشة البيع', Icons.receipt_long_rounded),
+                if (auth.hasPermission(8)) _buildSidebarItem(8, 'الفواتير غير المدفوعة', Icons.unpublished_rounded),
+                if (auth.hasPermission(2)) _buildSidebarItem(2, 'إحصائيات اليوم', Icons.bar_chart_rounded),
+                if (auth.hasPermission(3)) _buildSidebarItem(3, 'المشتريات', Icons.shopping_cart_rounded),
+                if (auth.hasPermission(4)) _buildSidebarItem(4, 'إدارة الزبائن', Icons.people_alt_rounded),
+                if (auth.isManager() && auth.hasPermission(5))
                   _buildSidebarItem(5, 'إدارة الموظفين', Icons.badge_rounded),
-                _buildSidebarItem(6, 'مراجعة المدفوعات', Icons.payments_rounded),
-                _buildSidebarItem(7, 'أرصدة الزبائن', Icons.account_balance_wallet_rounded),
+                if (auth.hasPermission(6)) _buildSidebarItem(6, 'مراجعة المدفوعات', Icons.payments_rounded),
+                if (auth.hasPermission(7)) _buildSidebarItem(7, 'أرصدة الزبائن', Icons.account_balance_wallet_rounded),
                 const Divider(color: Colors.white10, indent: 20, endIndent: 20),
-                _buildSidebarItem(9, 'طرق دفع المبيعات', Icons.payment_rounded),
-                _buildSidebarItem(10, 'طرق دفع المشتريات', Icons.account_balance_rounded),
-                _buildSidebarItem(11, 'سلة المحذوفات', Icons.delete_sweep_rounded),
-                _buildSidebarItem(15, 'الملف الشخصي للمتجر', Icons.store_rounded),
+                if (auth.hasPermission(9)) _buildSidebarItem(9, 'طرق دفع المبيعات', Icons.payment_rounded),
+                if (auth.hasPermission(10)) _buildSidebarItem(10, 'طرق دفع المشتريات', Icons.account_balance_rounded),
+                if (auth.hasPermission(11)) _buildSidebarItem(11, 'سلة المحذوفات', Icons.delete_sweep_rounded),
+                if (auth.hasPermission(15)) _buildSidebarItem(15, 'الملف الشخصي للمتجر', Icons.store_rounded),
                 const Divider(color: Colors.white10, indent: 20, endIndent: 20),
-                _buildSidebarItem(12, 'الإعدادات والسمة', Icons.settings_rounded),
-                _buildSidebarItem(13, 'تواصل معنا', Icons.contact_support_rounded),
-                _buildSidebarItem(14, 'عن المطور', Icons.info_outline_rounded),
+                if (auth.hasPermission(12)) _buildSidebarItem(12, 'الإعدادات والسمة', Icons.settings_rounded),
+                if (auth.hasPermission(13)) _buildSidebarItem(13, 'تواصل معنا', Icons.contact_support_rounded),
+                if (auth.hasPermission(14)) _buildSidebarItem(14, 'عن المطور', Icons.info_outline_rounded),
                 const Divider(color: Colors.white10, indent: 20, endIndent: 20),
-                _buildSidebarItem(16, 'دليل الاستخدام', Icons.help_outline_rounded),
+                if (auth.hasPermission(16)) _buildSidebarItem(16, 'دليل الاستخدام', Icons.help_outline_rounded),
                 const SizedBox(height: 20),
               ],
             ),
@@ -320,30 +334,30 @@ class DashboardScreenState extends State<DashboardScreen> {
               children: [
                 _buildSidebarHeader(),
                 const SizedBox(height: 5),
-                _buildSidebarItem(0, 'لوحة التحكم', Icons.dashboard_rounded),
-                _buildSidebarItem(1, 'شاشة البيع', Icons.receipt_long_rounded),
-                _buildSidebarItem(8, 'الفواتير غير المدفوعة', Icons.unpublished_rounded),
-                _buildSidebarItem(2, 'إحصائيات اليوم', Icons.bar_chart_rounded),
-                _buildSidebarItem(3, 'المشتريات', Icons.shopping_cart_rounded),
-                _buildSidebarItem(4, 'إدارة الزبائن', Icons.people_alt_rounded),
-                if (auth.isManager())
+                if (auth.hasPermission(0)) _buildSidebarItem(0, 'لوحة التحكم', Icons.dashboard_rounded),
+                if (auth.hasPermission(1)) _buildSidebarItem(1, 'شاشة البيع', Icons.receipt_long_rounded),
+                if (auth.hasPermission(8)) _buildSidebarItem(8, 'الفواتير غير المدفوعة', Icons.unpublished_rounded),
+                if (auth.hasPermission(2)) _buildSidebarItem(2, 'إحصائيات اليوم', Icons.bar_chart_rounded),
+                if (auth.hasPermission(3)) _buildSidebarItem(3, 'المشتريات', Icons.shopping_cart_rounded),
+                if (auth.hasPermission(4)) _buildSidebarItem(4, 'إدارة الزبائن', Icons.people_alt_rounded),
+                if (auth.isManager() && auth.hasPermission(5))
                   _buildSidebarItem(5, 'إدارة الموظفين', Icons.badge_rounded),
-                _buildSidebarItem(6, 'مراجعة المدفوعات', Icons.payments_rounded),
-                _buildSidebarItem(7, 'أرصدة الزبائن', Icons.account_balance_wallet_rounded),
+                if (auth.hasPermission(6)) _buildSidebarItem(6, 'مراجعة المدفوعات', Icons.payments_rounded),
+                if (auth.hasPermission(7)) _buildSidebarItem(7, 'أرصدة الزبائن', Icons.account_balance_wallet_rounded),
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 10, horizontal: 10),
                   child: Divider(color: Colors.white10),
                 ),
-                _buildSidebarItem(9, 'طرق دفع المبيعات', Icons.payment_rounded),
-                _buildSidebarItem(10, 'طرق دفع المشتريات', Icons.account_balance_rounded),
-                _buildSidebarItem(11, 'سلة المحذوفات', Icons.delete_sweep_rounded),
-                _buildSidebarItem(15, 'الملف الشخصي للمتجر', Icons.store_rounded),
+                if (auth.hasPermission(9)) _buildSidebarItem(9, 'طرق دفع المبيعات', Icons.payment_rounded),
+                if (auth.hasPermission(10)) _buildSidebarItem(10, 'طرق دفع المشتريات', Icons.account_balance_rounded),
+                if (auth.hasPermission(11)) _buildSidebarItem(11, 'سلة المحذوفات', Icons.delete_sweep_rounded),
+                if (auth.hasPermission(15)) _buildSidebarItem(15, 'الملف الشخصي للمتجر', Icons.store_rounded),
                 const Divider(color: Colors.white10, indent: 20, endIndent: 20),
-                _buildSidebarItem(12, 'الإعدادات والسمة', Icons.settings_rounded),
-                _buildSidebarItem(13, 'تواصل معنا', Icons.contact_support_rounded),
-                _buildSidebarItem(14, 'عن المطور', Icons.info_outline_rounded),
+                if (auth.hasPermission(12)) _buildSidebarItem(12, 'الإعدادات والسمة', Icons.settings_rounded),
+                if (auth.hasPermission(13)) _buildSidebarItem(13, 'تواصل معنا', Icons.contact_support_rounded),
+                if (auth.hasPermission(14)) _buildSidebarItem(14, 'عن المطور', Icons.info_outline_rounded),
                 const Divider(color: Colors.white10, indent: 20, endIndent: 20),
-                _buildSidebarItem(16, 'دليل الاستخدام', Icons.help_outline_rounded),
+                if (auth.hasPermission(16)) _buildSidebarItem(16, 'دليل الاستخدام', Icons.help_outline_rounded),
                 const SizedBox(height: 20),
               ],
             ),
@@ -359,93 +373,50 @@ class DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildNavigationRail(ThemeData theme, bool isDark, AuthService auth) {
+    // Generate filtered destinations based on permissions
+    final allDestinations = [
+      (index: 0, icon: Icons.dashboard_rounded, label: 'لوحة التحكم'),
+      (index: 1, icon: Icons.receipt_long_rounded, label: 'شاشة البيع'),
+      (index: 2, icon: Icons.bar_chart_rounded, label: 'إحصائيات اليوم'),
+      (index: 3, icon: Icons.shopping_cart_rounded, label: 'المشتريات'),
+      (index: 4, icon: Icons.people_alt_rounded, label: 'إدارة الزبائن'),
+      if (auth.isManager())
+        (index: 5, icon: Icons.badge_rounded, label: 'إدارة الموظفين'),
+      (index: 6, icon: Icons.payments_rounded, label: 'مراجعة المدفوعات'),
+      (index: 9, icon: Icons.payment_rounded, label: 'طرق الدفع'),
+      (index: 11, icon: Icons.delete_sweep_rounded, label: 'المحذوفات'),
+      (index: 12, icon: Icons.settings_rounded, label: 'الإعدادات'),
+      (index: 13, icon: Icons.contact_support_rounded, label: 'تواصل معنا'),
+      (index: 14, icon: Icons.info_outline_rounded, label: 'عن المطور'),
+      (index: 15, icon: Icons.store_rounded, label: 'الملف الشخصي'),
+    ];
+
+    final filteredDestinations = allDestinations.where((d) => auth.hasPermission(d.index)).toList();
+
     int getRailIndex() {
-      bool isManager = auth.isManager();
-      // Map all indices to rail indices
-      switch (_selectedIndex) {
-        case 0: return 0;
-        case 1: return 1;
-        case 2: return 2;
-        case 3: return 3;
-        case 4: return 4;
-        case 5: return 5; // Accountants (Manager only)
-        case 6: return isManager ? 6 : 5;
-        case 9: return isManager ? 7 : 6;
-        case 10: return isManager ? 7 : 6;
-        case 11: return isManager ? 8 : 7;
-        case 12: return isManager ? 9 : 8;
-        case 13: return isManager ? 10 : 9;
-        case 14: return isManager ? 11 : 10;
-        case 15: return isManager ? 12 : 11;
-        default: return 0;
+      for (int i = 0; i < filteredDestinations.length; i++) {
+        if (filteredDestinations[i].index == _selectedIndex) return i;
       }
+      // If selected index is not in filtered list, it might be a sub-screen or home
+      return 0;
     }
 
     return NavigationRail(
       backgroundColor: const Color(0xFF0F172A),
       selectedIndex: getRailIndex(),
-      onDestinationSelected: (int index) {
-        bool isManager = auth.isManager();
-        int targetScreen;
-        
-        // Dynamic mapping based on manager status
-        if (isManager) {
-          switch (index) {
-            case 0: targetScreen = 0; break;
-            case 1: targetScreen = 1; break;
-            case 2: targetScreen = 2; break;
-            case 3: targetScreen = 3; break;
-            case 4: targetScreen = 4; break;
-            case 5: targetScreen = 5; break;
-            case 6: targetScreen = 6; break;
-            case 7: targetScreen = 9; break;
-            case 8: targetScreen = 11; break;
-            case 9: targetScreen = 12; break;
-            case 10: targetScreen = 13; break;
-            case 11: targetScreen = 14; break;
-            case 12: targetScreen = 15; break;
-            default: targetScreen = 0;
-          }
-        } else {
-          switch (index) {
-            case 0: targetScreen = 0; break;
-            case 1: targetScreen = 1; break;
-            case 2: targetScreen = 2; break;
-            case 3: targetScreen = 3; break;
-            case 4: targetScreen = 4; break;
-            case 5: targetScreen = 6; break;
-            case 6: targetScreen = 9; break;
-            case 7: targetScreen = 11; break;
-            case 8: targetScreen = 12; break;
-            case 9: targetScreen = 13; break;
-            case 10: targetScreen = 14; break;
-            case 11: targetScreen = 15; break;
-            default: targetScreen = 0;
-          }
-        }
-        setState(() => _selectedIndex = targetScreen);
+      onDestinationSelected: (int i) {
+        setState(() => _selectedIndex = filteredDestinations[i].index);
       },
       labelType: NavigationRailLabelType.none,
       leading: Padding(
         padding: const EdgeInsets.symmetric(vertical: 20),
         child: Image.asset('assets/icon.png', height: 32),
       ),
-      destinations: [
-        const NavigationRailDestination(icon: Icon(Icons.dashboard_rounded, color: Colors.white60), selectedIcon: Icon(Icons.dashboard_rounded), label: Text('لوحة التحكم')),
-        const NavigationRailDestination(icon: Icon(Icons.receipt_long_rounded, color: Colors.white60), selectedIcon: Icon(Icons.receipt_long_rounded), label: Text('شاشة البيع')),
-        const NavigationRailDestination(icon: Icon(Icons.bar_chart_rounded, color: Colors.white60), selectedIcon: Icon(Icons.bar_chart_rounded), label: Text('إحصائيات اليوم')),
-        const NavigationRailDestination(icon: Icon(Icons.shopping_cart_rounded, color: Colors.white60), selectedIcon: Icon(Icons.shopping_cart_rounded), label: Text('المشتريات')),
-        const NavigationRailDestination(icon: Icon(Icons.people_alt_rounded, color: Colors.white60), selectedIcon: Icon(Icons.people_alt_rounded), label: Text('إدارة الزبائن')),
-        if (auth.isManager())
-          const NavigationRailDestination(icon: Icon(Icons.badge_rounded, color: Colors.white60), selectedIcon: Icon(Icons.badge_rounded), label: Text('إدارة الموظفين')),
-        const NavigationRailDestination(icon: Icon(Icons.payments_rounded, color: Colors.white60), selectedIcon: Icon(Icons.payments_rounded), label: Text('مراجعة المدفوعات')),
-        const NavigationRailDestination(icon: Icon(Icons.payment_rounded, color: Colors.white60), selectedIcon: Icon(Icons.payment_rounded), label: Text('طرق الدفع')),
-        const NavigationRailDestination(icon: Icon(Icons.delete_sweep_rounded, color: Colors.white60), selectedIcon: Icon(Icons.delete_sweep_rounded), label: Text('المحذوفات')),
-        const NavigationRailDestination(icon: Icon(Icons.settings_rounded, color: Colors.white60), selectedIcon: Icon(Icons.settings_rounded), label: Text('الإعدادات')),
-        const NavigationRailDestination(icon: Icon(Icons.contact_support_rounded, color: Colors.white60), selectedIcon: Icon(Icons.contact_support_rounded), label: Text('تواصل معنا')),
-        const NavigationRailDestination(icon: Icon(Icons.info_outline_rounded, color: Colors.white60), selectedIcon: Icon(Icons.info_outline_rounded), label: Text('عن المطور')),
-        const NavigationRailDestination(icon: Icon(Icons.store_rounded, color: Colors.white60), selectedIcon: Icon(Icons.store_rounded), label: Text('الملف الشخصي')),
-      ],
+      destinations: filteredDestinations.map((d) => NavigationRailDestination(
+        icon: Icon(d.icon, color: Colors.white60),
+        selectedIcon: Icon(d.icon),
+        label: Text(d.label),
+      )).toList(),
     );
   }
 

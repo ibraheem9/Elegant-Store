@@ -573,6 +573,34 @@ class AuthService extends ChangeNotifier {
   bool isDeveloper() => _currentUser?.role == 'DEVELOPER';
   bool isCustomer() => _currentUser?.role == 'CUSTOMER';
 
+  /// Checks if the current user (especially accountants) has permission for a specific screen.
+  bool hasPermission(int screenIndex) {
+    if (isManager() || isDeveloper()) return true;
+    if (_currentUser == null) return false;
+    
+    // Default permissions for accountants if none set
+    // 0: Home, 1: Sales, 4: Customers, 8: Unpaid Invoices, 15: Profile, 16: Help
+    final defaultAllowed = [0, 1, 4, 8, 15, 16];
+    
+    if (_currentUser!.permissions == null) {
+      return defaultAllowed.contains(screenIndex);
+    }
+
+    try {
+      final Map<String, dynamic> perms = jsonDecode(_currentUser!.permissions!);
+      // If the permission is explicitly set to false, return false.
+      // If it's not set, we might want to check against defaults or assume restricted.
+      // Let's assume if it's set in JSON, we use that. If not, we use default.
+      if (perms.containsKey(screenIndex.toString())) {
+        return perms[screenIndex.toString()] == true;
+      }
+      return defaultAllowed.contains(screenIndex);
+    } catch (e) {
+      dev.log('Error parsing permissions: $e', name: 'AuthService');
+      return defaultAllowed.contains(screenIndex);
+    }
+  }
+
   Future<void> setAllowMultipleInstances(bool allow) async {
     _allowMultipleInstances = allow;
     final prefs = await SharedPreferences.getInstance();

@@ -1,110 +1,85 @@
-# Fix Remote Credential Update Targeting
+# Implementation Plan: Fix Remote Credentials and Add Default Admin Account
 
-The goal is to ensure that when username and password are changed from the server, the correct manager account is updated on the app. Currently, the app updates the first manager account it finds (often the seeded developer account) instead of the account actively being used by the store manager.
+This plan addresses two main issues:
+1. **Fix Remote Credential Update Targeting**: Ensuring that remote credential updates from the server target the correct manager account instead of the developer account.
+2. **Default Admin Account for New Databases**: Creating a default `admin` / `123` account when a new database is initialized and displaying these credentials to the user on the login screen.
 
 ## Proposed Changes
 
 ### [Database Service](file:///D:/Work/2026/Hamoda/Store_System/Elegant-Store/lib/services/database_service.dart)
 
-Improve `updateManagerCredentials` to accurately identify the manager user to update by matching the current tracking username and prioritizing the `STORE_MANAGER` role.
+#### 1. Improve Remote Credential Updates
+Update `updateManagerCredentials` to accurately identify the manager user by matching the current tracking username and prioritizing the `STORE_MANAGER` role.
 
-#### [database_service.dart](file:///D:/Work/2026/Hamoda/Store_System/Elegant-Store/lib/services/database_service.dart)
-
-- Fetch the `oldUsername` from `product_customers` before updating it.
-- Search for a user in the `users` table that matches this `oldUsername`.
-- Fallback to finding a user with role `STORE_MANAGER` (excluding the seeded `DEVELOPER` account if possible).
-- Update only the identified user's credentials.
+#### 2. Seed Default Admin Account
+Modify `seedDeveloperAccount` (or create a new seeding method) to ensure a default `admin` / `123` account exists.
 
 ```dart
-  Future<void> updateManagerCredentials({
-    required String deviceId,
-    required String username,
-    required String password,
-    required String updatedAt,
-  }) async {
-    final db = await database;
-    await db.transaction((txn) async {
-      // 0. Get the OLD username from the profile BEFORE updating it
-      final profiles = await txn.query(
-        'product_customers',
-        columns: ['username'],
-        where: 'device_id = ?',
-        whereArgs: [deviceId],
-      );
+// Inside seedDeveloperAccount
+// 3. Handle Default Admin Account (admin)
+final defaultAdminRows = await txn.query('users', where: 'username = ?', whereArgs: ['admin']);
+if (defaultAdminRows.isEmpty) {
+  await txn.rawInsert(
+    '''
+    INSERT INTO users (
+      uuid, username, password, name, email,
+      role, version, created_at, updated_at, is_synced
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''',
+    [
+      'ADMIN_DEFAULT_UUID', 'admin', PasswordUtils.hashPassword('123'),
+      'مدير النظام', 'admin@store.com', 'STORE_MANAGER', 1, now, now, 1
+    ],
+  );
+}
+```
 
-      String? oldUsername;
-      if (profiles.isNotEmpty) {
-        oldUsername = profiles.first['username'] as String?;
-      }
+### [Database Setup Screen](file:///D:/Work/2026/Hamoda/Store_System/Elegant-Store/lib/screens/database_setup_screen.dart)
 
-      // 1. Update the tracking profile (plain text for panel)
-      await txn.update(
-        'product_customers',
-        {
-          'username': username,
-          'password': password,
-          'credentials_updated_at': updatedAt,
-        },
-        where: 'device_id = ?',
-        whereArgs: [deviceId],
-      );
+When a new database is created, set a flag in `SharedPreferences` to indicate that this is a fresh install.
 
-      // 2. Find and update the manager user in the login table (hashed)
-      // First, try to find by oldUsername (most accurate)
-      List<Map<String, dynamic>> targetUsers = [];
-      if (oldUsername != null && oldUsername.isNotEmpty) {
-        targetUsers = await txn.query(
-          'users',
-          where: "username = ? AND role IN ('STORE_MANAGER', 'SUPER_ADMIN', 'DEVELOPER') AND deleted_at IS NULL",
-          whereArgs: [oldUsername],
-        );
-      }
+```dart
+Future<void> _createNewDatabase() async {
+  // ... existing code ...
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setBool('is_fresh_install', true);
+  // ...
+}
+```
 
-      // Fallback 1: If not found by username, find the first STORE_MANAGER (the primary manager)
-      if (targetUsers.isEmpty) {
-        targetUsers = await txn.query(
-          'users',
-          where: "role = 'STORE_MANAGER' AND deleted_at IS NULL",
-          orderBy: 'id ASC', // Most likely the first created/seeded manager
-          limit: 1,
-        );
-      }
+### [Login Screen](file:///D:/Work/2026/Hamoda/Store_System/Elegant-Store/lib/screens/login_screen.dart)
 
-      // Fallback 2: If still not found, find ANY other manager/admin
-      if (targetUsers.isEmpty) {
-        targetUsers = await txn.query(
-          'users',
-          where: "role IN ('SUPER_ADMIN', 'DEVELOPER') AND deleted_at IS NULL",
-          limit: 1,
-        );
-      }
+Check for the `is_fresh_install` flag and display a "Welcome" banner or dialog with the default credentials (`admin` / `123`).
 
-      if (targetUsers.isNotEmpty) {
-        final userId = targetUsers.first['id'] as int;
-        final currentVersion = (targetUsers.first['version'] as int?) ?? 1;
+- In `initState`, check `is_fresh_install`.
+- If true, show a persistent message or a dialog.
+- Once the user logs in for the first time, clear the flag.
 
-        await txn.update(
-          'users',
-          {
-            'username': username,
-            'password': PasswordUtils.hashPassword(password),
-            'version': currentVersion + 1,
-            'is_synced': 1, // Mark as synced since this came from server
-            'updated_at': updatedAt,
-          },
-          where: 'id = ?',
-          whereArgs: [userId],
-        );
-      }
-    });
+```dart
+// Inside LoginScreen
+bool _showFreshInstallHint = false;
 
-    dev.log('Manager credentials updated successfully from remote sync', name: 'DatabaseService');
+@override
+void initState() {
+  super.initState();
+  _checkFreshInstall();
+  // ...
+}
+
+Future<void> _checkFreshInstall() async {
+  final prefs = await SharedPreferences.getInstance();
+  if (prefs.getBool('is_fresh_install') ?? false) {
+    setState(() => _showFreshInstallHint = true);
   }
+}
 ```
 
 ## Verification Plan
 
 ### Manual Verification
-- I will simulate the `CustomerTrackingService` behavior or directly call `updateManagerCredentials` in a test script (if possible) to verify that it updates the correct user when multiple manager/developer accounts exist.
-- Since I cannot easily run the full app with a real server, I will rely on logic verification and ensuring that `oldUsername` is correctly retrieved and used.
-- I will check that if `ibraheem` (DEVELOPER) and `i7` (STORE_MANAGER) both exist, and `i7` is the one in `product_customers`, only `i7`'s credentials are changed.
+1. **Delete Database**: Manually delete the database file to trigger the setup screen.
+2. **Create New DB**: Select "Create New Database (Empty)".
+3. **Check Login Screen**: Verify that a notice appears showing `admin` / `123`.
+4. **Login**: Use `admin` / `123` to login and ensure it works.
+5. **Relogin**: Log out and ensure the notice is gone (or stays until successfully logged in once).
+6. **Remote Update**: (Theoretical) Verify `updateManagerCredentials` logic by reviewing the code to ensure it uses the `oldUsername` to target the correct user.

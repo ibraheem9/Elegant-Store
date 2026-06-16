@@ -97,7 +97,7 @@ class DatabaseService {
 
     final db = await openDatabase(
       path,
-      version: 15,
+      version: 16,
       onCreate: (db, version) async {
         await _createTables(db);
         await _createTriggers(db);
@@ -331,6 +331,17 @@ class DatabaseService {
             );
           } catch (_) {}
         }
+        if (oldVersion < 16) {
+          // v16: Add permissions column to users table
+          try {
+            await db.execute(
+              'ALTER TABLE users ADD COLUMN permissions TEXT',
+            );
+          } catch (e) {
+            dev.log('Error adding permissions column to users: $e',
+                name: 'DatabaseService');
+          }
+        }
       },
     );
     // Apply performance PRAGMAs AFTER the database is fully open.
@@ -373,7 +384,8 @@ class DatabaseService {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         deleted_at TEXT,
-        is_synced INTEGER DEFAULT 0
+        is_synced INTEGER DEFAULT 0,
+        permissions TEXT
       )''');
 
     await db.execute('''
@@ -393,7 +405,8 @@ class DatabaseService {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         deleted_at TEXT,
-        is_synced INTEGER DEFAULT 0
+        is_synced INTEGER DEFAULT 0,
+        permissions TEXT
       )''');
 
     await db.execute('''
@@ -484,7 +497,8 @@ class DatabaseService {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         deleted_at TEXT,
-        is_synced INTEGER DEFAULT 0
+        is_synced INTEGER DEFAULT 0,
+        permissions TEXT
       )''');
 
     await db.execute('''
@@ -506,7 +520,8 @@ class DatabaseService {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         deleted_at TEXT,
-        is_synced INTEGER DEFAULT 0
+        is_synced INTEGER DEFAULT 0,
+        permissions TEXT
       )''');
     // v9: Local notifications table — one row per (customer_id, type)
     await db.execute(NotificationRepository.createTableSql);

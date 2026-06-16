@@ -1,9 +1,13 @@
 # Task Management
 
-- [x] Research existing authentication and sync logic
-- [x] Investigate remote credential updates in `CustomerTrackingService`
-- [x] Identify cause of incorrect credential update targeting
-- [/] Fix remote credential update targeting
-	- [x] Create implementation plan
-	- [ ] Update `updateManagerCredentials` in `DatabaseService`
-- [ ] Verify fix
+- [/] Fix Remote Credential Sync and Add Default Admin
+    - [x] Research existing authentication and sync logic
+    - [x] Create implementation plan
+    - [/] Implement Database Service changes
+        - [ ] Fix `updateManagerCredentials` targeting
+        - [ ] Add `admin`/`123` seeding
+    - [ ] Implement Database Setup Screen changes
+        - [ ] Set `is_fresh_install` flag
+    - [ ] Implement Login Screen changes
+        - [ ] Display credentials hint for fresh installs
+    - [ ] Verify fix

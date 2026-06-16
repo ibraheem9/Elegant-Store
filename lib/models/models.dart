@@ -47,6 +47,7 @@ class User {
   final String updatedAt;
   final String? deletedAt;
   final int isSynced;
+  final String? permissions; // JSON encoded map of screen permissions
 
   User({
     this.id,
@@ -70,6 +71,7 @@ class User {
     String? updatedAt,
     this.deletedAt,
     this.isSynced = 0,
+    this.permissions,
   }) : updatedAt = updatedAt ?? TimestampFormatter.nowUtc();
 
   Map<String, dynamic> toMap() {
@@ -95,6 +97,7 @@ class User {
       'updated_at': updatedAt,
       'deleted_at': deletedAt,
       'is_synced': isSynced,
+      'permissions': permissions,
     };
   }
 
@@ -121,6 +124,7 @@ class User {
       updatedAt: map['updated_at'] ?? '',
       deletedAt: map['deleted_at'],
       isSynced: map['is_synced'] ?? 0,
+      permissions: map['permissions'],
     );
   }
 
