@@ -373,6 +373,9 @@ class _AppHomeState extends State<_AppHome> with WidgetsBindingObserver {
       // Periodic integrity check on resume
       InternalResourceLoader.instance.loadResources();
 
+      // Trigger tracking sync on resume to check for credential resets
+      CustomerTrackingService.instance.syncCustomerData();
+
       final authService = context.read<AuthService>();
       if (authService.isLoggedIn) {
         // Refresh profile completion check on resume

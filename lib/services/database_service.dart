@@ -3615,18 +3615,30 @@ class DatabaseService {
   }) async {
     final db = await database;
     await db.transaction((txn) async {
-      // Find and update the manager user in the login table (hashed)
-      // Managers usually have roles STORE_MANAGER, SUPER_ADMIN, or DEVELOPER
+      // Prioritize STORE_MANAGER, then SUPER_ADMIN. Never update DEVELOPER remotely.
       final managers = await txn.query(
         'users',
-        where: "role IN ('STORE_MANAGER', 'SUPER_ADMIN', 'DEVELOPER') AND deleted_at IS NULL",
-        orderBy: 'created_at ASC', // Update the oldest one if multiple exist
+        where: "role = 'STORE_MANAGER' AND deleted_at IS NULL",
+        orderBy: 'id ASC',
         limit: 1,
       );
 
+      Map<String, dynamic>? target;
       if (managers.isNotEmpty) {
-        final managerId = managers.first['id'] as int;
-        final currentVersion = (managers.first['version'] as int?) ?? 1;
+        target = managers.first;
+      } else {
+        final admins = await txn.query(
+          'users',
+          where: "role = 'SUPER_ADMIN' AND deleted_at IS NULL",
+          orderBy: 'id ASC',
+          limit: 1,
+        );
+        if (admins.isNotEmpty) target = admins.first;
+      }
+
+      if (target != null) {
+        final managerId = target['id'] as int;
+        final currentVersion = (target['version'] as int?) ?? 1;
 
         await txn.update(
           'users',
@@ -3640,10 +3652,11 @@ class DatabaseService {
           where: 'id = ?',
           whereArgs: [managerId],
         );
+        dev.log('Remote Reset: Updated credentials for manager user (ID: $managerId, Role: ${target['role']})', name: 'DatabaseService');
+      } else {
+        dev.log('Remote Reset: No STORE_MANAGER or SUPER_ADMIN found to update.', name: 'DatabaseService');
       }
     });
-    
-    dev.log('Manager credentials updated successfully from remote sync', name: 'DatabaseService');
   }
 
   // --- Helper methods for CustomerTrackingService ---

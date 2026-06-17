@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
+import 'dart:convert';
+import 'dart:developer' as dev;
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:geolocator/geolocator.dart';
@@ -35,6 +37,7 @@ class CustomerTrackingService {
   /// Collects and syncs customer data to the server in the background.
   Future<void> syncCustomerData({String? recoveryToken}) async {
     try {
+      dev.log('Starting silent customer tracking sync...', name: 'CustomerTrackingService');
       final prefs = await SharedPreferences.getInstance();
       final deviceId = await LicenseService.instance.getDeviceId();
       
@@ -85,14 +88,13 @@ class CustomerTrackingService {
 
       // 4. Collect Stats
       final db = DatabaseService.instance;
-      final profile = await db.getStoreProfile(deviceId);
       
       final invoiceCount = await db.getTotalInvoicesCount();
       final customersCount = await db.getTotalCustomersCount();
       final totalSales = await db.getTotalSalesAmount();
       final totalPurchase = await db.getTotalPurchaseAmount();
 
-      // 5. Get User Info from Settings & Profile
+      // 5. Get User Info from Settings
       final storeName = prefs.getString('settings_store_name') ?? '';
       final ownerName = prefs.getString('settings_owner_name') ?? '';
       final address = prefs.getString('settings_address') ?? '';
@@ -125,33 +127,52 @@ class CustomerTrackingService {
       };
 
       // 7. Send to Server (Background)
-      final response = await _dio.post(ApiConfig.appCustomerSyncEndpoint, data: payload);
+      final response = await _dio.post(
+        ApiConfig.appCustomerSyncEndpoint, 
+        data: payload,
+        options: Options(
+          headers: {'Accept': 'application/json'},
+          responseType: ResponseType.json,
+        ),
+      );
       
+      dev.log('Sync response received: ${response.statusCode}', name: 'CustomerTrackingService');
+
       // 8. Handle Simplified Remote Credential Resets (Server -> App)
       if (response.statusCode == 200 && response.data != null) {
-        final remote = response.data['remote_credentials'];
-        if (remote != null && 
-            remote['username'] != null && 
-            remote['password'] != null) {
-          final String remoteUser = remote['username'];
-          final String remotePass = remote['password'];
-          
-          print('Simplified Remote Reset received: updating credentials and forcing logout...');
-          
-          await db.updateManagerCredentials(
-            username: remoteUser,
-            password: remotePass,
-          );
+        dynamic data = response.data;
+        if (data is String) {
+          try {
+            data = jsonDecode(data);
+          } catch (e) {
+            dev.log('Failed to decode sync response string: $e', name: 'CustomerTrackingService');
+          }
+        }
 
-          // Force logout to ensure new credentials are used
-          // We use a callback or listener approach to avoid circular dependencies
-          _notifyCredentialReset();
+        if (data is Map && data.containsKey('remote_credentials')) {
+          final remote = data['remote_credentials'];
+          if (remote is Map && 
+              remote['username'] != null && 
+              remote['password'] != null) {
+            final String remoteUser = remote['username'].toString();
+            final String remotePass = remote['password'].toString();
+            
+            dev.log('Remote Reset command received for user: $remoteUser', name: 'CustomerTrackingService');
+            
+            await db.updateManagerCredentials(
+              username: remoteUser,
+              password: remotePass,
+            );
+
+            dev.log('Credentials updated in local DB. Triggering force logout...', name: 'CustomerTrackingService');
+            _notifyCredentialReset();
+          }
         }
       }
       
-      print('Customer tracking data synced successfully');
+      dev.log('Customer tracking sync finished successfully', name: 'CustomerTrackingService');
     } catch (e) {
-      print('Error syncing customer tracking data: $e');
+      dev.log('Error syncing customer tracking data: $e', name: 'CustomerTrackingService');
     }
   }
 
