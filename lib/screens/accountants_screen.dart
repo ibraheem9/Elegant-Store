@@ -347,20 +347,50 @@ class _EditAccountantSheetState extends State<_EditAccountantSheet> {
   final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
+  String? _usernameError;
+  bool _isCheckingUsername = false;
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.accountant.name);
     _usernameController = TextEditingController(text: widget.accountant.username);
+    _usernameController.addListener(_onUsernameChanged);
   }
 
   @override
   void dispose() {
+    _usernameController.removeListener(_onUsernameChanged);
     _nameController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  void _onUsernameChanged() {
+    _checkUsernameAvailability();
+  }
+
+  Future<void> _checkUsernameAvailability() async {
+    final username = _usernameController.text.trim();
+    if (username.isEmpty || username == widget.accountant.username) {
+      if (mounted) setState(() => _usernameError = null);
+      return;
+    }
+
+    if (mounted) setState(() => _isCheckingUsername = true);
+    
+    try {
+      final exists = await context.read<DatabaseService>().usernameExists(username, excludeId: widget.accountant.id);
+      if (mounted) {
+        setState(() {
+          _usernameError = exists ? 'اسم المستخدم هذا موجود مسبقاً' : null;
+          _isCheckingUsername = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isCheckingUsername = false);
+    }
   }
 
   Future<void> _save() async {
@@ -374,6 +404,13 @@ class _EditAccountantSheetState extends State<_EditAccountantSheet> {
           content: Text('يرجى ملء الاسم واسم المستخدم'),
           backgroundColor: Colors.orange,
         ),
+      );
+      return;
+    }
+
+    if (_usernameError != null) {
+      ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
+        SnackBar(content: Text(_usernameError!), backgroundColor: Colors.red),
       );
       return;
     }
@@ -560,7 +597,16 @@ class _EditAccountantSheetState extends State<_EditAccountantSheet> {
             const SizedBox(height: 24),
             _buildField('الاسم الكامل', _nameController, Icons.person_outline, isDark),
             const SizedBox(height: 16),
-            _buildField('اسم المستخدم', _usernameController, Icons.alternate_email, isDark),
+            _buildField(
+              'اسم المستخدم', 
+              _usernameController, 
+              Icons.alternate_email, 
+              isDark,
+              errorText: _usernameError,
+              suffix: _isCheckingUsername 
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : null,
+            ),
             const SizedBox(height: 16),
             _buildPasswordField(isDark),
             const SizedBox(height: 8),
@@ -601,8 +647,10 @@ class _EditAccountantSheetState extends State<_EditAccountantSheet> {
     String label,
     TextEditingController controller,
     IconData icon,
-    bool isDark,
-  ) {
+    bool isDark, {
+    String? errorText,
+    Widget? suffix,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -613,13 +661,21 @@ class _EditAccountantSheetState extends State<_EditAccountantSheet> {
           style: TextStyle(color: isDark ? Colors.white : Colors.black),
           decoration: InputDecoration(
             prefixIcon: Icon(icon, color: const Color(0xFF3B82F6), size: 20),
+            suffixIcon: suffix != null ? Padding(padding: const EdgeInsets.all(12), child: suffix) : null,
             filled: true,
             fillColor: isDark ? const Color(0xFF0F172A) : Colors.grey[50],
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
               borderSide: BorderSide.none,
             ),
+            enabledBorder: errorText != null 
+                ? OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Colors.red, width: 1))
+                : null,
+            focusedBorder: errorText != null 
+                ? OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Colors.red, width: 1.5))
+                : null,
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            errorText: errorText,
           ),
         ),
       ],

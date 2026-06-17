@@ -799,6 +799,23 @@ class DatabaseService {
     return null;
   }
 
+  /// Checks if a username already exists in the database (case-insensitive).
+  Future<bool> usernameExists(String username, {int? excludeId}) async {
+    final db = await database;
+    final r = await db.query(
+      'users',
+      columns: ['id'],
+      where: excludeId != null 
+          ? 'LOWER(username) = ? AND id != ? AND deleted_at IS NULL'
+          : 'LOWER(username) = ? AND deleted_at IS NULL',
+      whereArgs: excludeId != null 
+          ? [username.toLowerCase(), excludeId]
+          : [username.toLowerCase()],
+      limit: 1,
+    );
+    return r.isNotEmpty;
+  }
+
   /// Updates the password for a user identified by their unique UUID.
   /// This acts as a "Recovery Key" reset.
   Future<bool> resetPasswordWithUuid(String uuid, String newPassword) async {

@@ -122,12 +122,14 @@ class _DeveloperManagementScreenState extends State<DeveloperManagementScreen> {
                         columnSpacing: 20,
                         columns: const [
                           DataColumn(label: Text('الاسم', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('اسم المستخدم', style: TextStyle(fontWeight: FontWeight.bold))),
                           DataColumn(label: Text('الدور', style: TextStyle(fontWeight: FontWeight.bold))),
                           DataColumn(label: Text('إجراءات', style: TextStyle(fontWeight: FontWeight.bold))),
                         ],
                         rows: _staff.map((user) {
                           return DataRow(cells: [
                             DataCell(Text(user.name)),
+                            DataCell(Text(user.username)),
                             DataCell(Text(_translateRole(user.role))),
                             DataCell(
                               IconButton(

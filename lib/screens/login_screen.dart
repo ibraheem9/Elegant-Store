@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:developer' as dev;
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
@@ -169,6 +170,24 @@ class _LoginScreenState extends State<LoginScreen> {
     bool isResetting = false;
     bool obscureNew = true;
     bool obscureConfirm = true;
+    String? lockoutError;
+
+    Future<String?> checkLockout(String username) async {
+      final prefs = await SharedPreferences.getInstance();
+      final lockoutTime = prefs.getInt('recovery_lockout_$username') ?? 0;
+      if (lockoutTime > 0) {
+        final remaining = DateTime.fromMillisecondsSinceEpoch(lockoutTime).difference(DateTime.now());
+        if (remaining.isNegative) {
+          await prefs.remove('recovery_lockout_$username');
+          await prefs.remove('recovery_attempts_$username');
+          return null;
+        }
+        final hours = remaining.inHours;
+        final minutes = remaining.inMinutes % 60;
+        return 'عذراً، هذا الحساب محظور من المحاولة لمدة $hours ساعة و $minutes دقيقة بسبب محاولات خاطئة متكررة.';
+      }
+      return null;
+    }
 
     if (!mounted) return;
 
@@ -195,6 +214,22 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (lockoutError != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.red.withOpacity(0.3)),
+                      ),
+                      child: Text(
+                        lockoutError!,
+                        style: const TextStyle(color: Colors.red, fontSize: 13, fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   if (step == 1) ...[
                     const Text('الخطوة 1: أدخل اسم المستخدم الخاص بك'),
                     const SizedBox(height: 16),
@@ -289,26 +324,68 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: const Text('السابق'),
               ),
             ElevatedButton(
-              onPressed: isResetting ? null : () async {
+              onPressed: isResetting || lockoutError != null ? null : () async {
                 if (!formKey.currentState!.validate()) return;
+
+                final cleanUsername = usernameCtrl.text.trim();
 
                 if (step < 3) {
                   // Verify user exists in step 1
                   if (step == 1) {
                     setDialogState(() => isResetting = true);
-                    final user = await context.read<DatabaseService>().getUserByUsername(usernameCtrl.text.trim());
+                    
+                    // Check lockout before proceeding
+                    final lockout = await checkLockout(cleanUsername);
+                    if (lockout != null) {
+                      setDialogState(() {
+                        lockoutError = lockout;
+                        isResetting = false;
+                      });
+                      return;
+                    }
+
+                    final user = await context.read<DatabaseService>().getUserByUsername(cleanUsername);
                     setDialogState(() => isResetting = false);
                     if (user == null) {
                       if (context.mounted) AppSnackBar.error(context, 'اسم المستخدم غير موجود');
                       return;
                     }
+                  } else if (step == 2) {
+                    // Validate recovery key early with lockout mechanism
+                    setDialogState(() => isResetting = true);
+                    final user = await context.read<DatabaseService>().getUserByUsername(cleanUsername);
+                    final prefs = await SharedPreferences.getInstance();
+                    
+                    if (user == null || user.uuid != recoveryKeyCtrl.text.trim()) {
+                      // Wrong key - track attempts
+                      int attempts = (prefs.getInt('recovery_attempts_$cleanUsername') ?? 0) + 1;
+                      await prefs.setInt('recovery_attempts_$cleanUsername', attempts);
+                      
+                      if (attempts >= 5) {
+                        final lockoutUntil = DateTime.now().add(const Duration(days: 1)).millisecondsSinceEpoch;
+                        await prefs.setInt('recovery_lockout_$cleanUsername', lockoutUntil);
+                        setDialogState(() {
+                          lockoutError = 'لقد استنفدت جميع المحاولات. تم حظرك لمدة 24 ساعة.';
+                          isResetting = false;
+                        });
+                      } else {
+                        setDialogState(() => isResetting = false);
+                        if (context.mounted) AppSnackBar.error(context, 'مفتاح الاستعادة غير صحيح. محاولاتك المتبقية: ${5 - attempts}');
+                      }
+                      return;
+                    }
+                    
+                    // Correct key - reset attempts
+                    await prefs.remove('recovery_attempts_$cleanUsername');
+                    setDialogState(() => isResetting = false);
                   }
+                  
                   setDialogState(() => step++);
                 } else {
                   // Final step: Reset password
                   setDialogState(() => isResetting = true);
                   final success = await context.read<AuthService>().resetPassword(
-                    usernameCtrl.text.trim(),
+                    cleanUsername,
                     recoveryKeyCtrl.text.trim(),
                     newPasswordCtrl.text,
                   );

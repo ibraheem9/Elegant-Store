@@ -27,6 +27,8 @@ class _DeveloperUserEditScreenState extends State<DeveloperUserEditScreen> {
   bool _isLoading = false;
   bool _isPasswordHashed = false;
   String? _originalPassword;
+  String? _usernameError;
+  bool _isCheckingUsername = false;
 
   final List<String> _roles = ['STORE_MANAGER', 'SUPER_ADMIN', 'ACCOUNTANT'];
 
@@ -40,10 +42,39 @@ class _DeveloperUserEditScreenState extends State<DeveloperUserEditScreen> {
     _passwordController = TextEditingController(); // Initially empty
     _selectedRole = widget.user.role;
     
+    _usernameController.addListener(_onUsernameChanged);
+
     // Fetch current password if possible, or just leave it empty for "no change"
     // Actually the user wants to "reset all passwords", so maybe I should allow setting a new one.
     // I'll check if I can get the password from the DB.
     _loadCurrentPassword();
+  }
+
+  void _onUsernameChanged() {
+    _checkUsernameAvailability();
+  }
+
+  Future<void> _checkUsernameAvailability() async {
+    final username = _usernameController.text.trim();
+    if (username.isEmpty || username == widget.user.username) {
+      if (mounted) setState(() => _usernameError = null);
+      return;
+    }
+
+    if (mounted) setState(() => _isCheckingUsername = true);
+    
+    try {
+      final db = context.read<DatabaseService>();
+      final exists = await db.usernameExists(username, excludeId: widget.user.id);
+      if (mounted) {
+        setState(() {
+          _usernameError = exists ? 'اسم المستخدم هذا موجود مسبقاً' : null;
+          _isCheckingUsername = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isCheckingUsername = false);
+    }
   }
 
   Future<void> _loadCurrentPassword() async {
@@ -70,6 +101,7 @@ class _DeveloperUserEditScreenState extends State<DeveloperUserEditScreen> {
 
   @override
   void dispose() {
+    _usernameController.removeListener(_onUsernameChanged);
     _nameController.dispose();
     _usernameController.dispose();
     _emailController.dispose();
@@ -80,6 +112,10 @@ class _DeveloperUserEditScreenState extends State<DeveloperUserEditScreen> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_usernameError != null) {
+      AppSnackBar.error(context, _usernameError!);
+      return;
+    }
 
     setState(() => _isLoading = true);
     try {
@@ -117,7 +153,14 @@ class _DeveloperUserEditScreenState extends State<DeveloperUserEditScreen> {
         Navigator.pop(context, true);
       }
     } catch (e) {
-      if (mounted) AppSnackBar.error(context, 'خطأ في الحفظ: $e');
+      if (mounted) {
+        final errorMsg = e.toString();
+        if (errorMsg.contains('UNIQUE constraint failed: users.username')) {
+          AppSnackBar.error(context, 'خطأ: اسم المستخدم هذا موجود مسبقاً');
+        } else {
+          AppSnackBar.error(context, 'خطأ في الحفظ: $e');
+        }
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -152,6 +195,13 @@ class _DeveloperUserEditScreenState extends State<DeveloperUserEditScreen> {
                     label: 'اسم المستخدم',
                     icon: Icons.alternate_email,
                     validator: (v) => v!.isEmpty ? 'يرجى إدخال اسم المستخدم' : null,
+                    errorText: _usernameError,
+                    suffix: _isCheckingUsername 
+                      ? const Padding(
+                          padding: EdgeInsets.all(12.0),
+                          child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                        )
+                      : null,
                   ),
                   const SizedBox(height: 16),
                   _buildTextField(
@@ -204,6 +254,8 @@ class _DeveloperUserEditScreenState extends State<DeveloperUserEditScreen> {
     required String label,
     required IconData icon,
     String? Function(String?)? validator,
+    String? errorText,
+    Widget? suffix,
   }) {
     return TextFormField(
       controller: controller,
@@ -214,7 +266,15 @@ class _DeveloperUserEditScreenState extends State<DeveloperUserEditScreen> {
         labelStyle: const TextStyle(inherit: true),
         floatingLabelAlignment: FloatingLabelAlignment.start,
         prefixIcon: Icon(icon, color: const Color(0xFF1E3A8A)),
+        suffixIcon: suffix,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        errorText: errorText,
+        enabledBorder: errorText != null 
+          ? OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.red, width: 1))
+          : null,
+        focusedBorder: errorText != null 
+          ? OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.red, width: 1.5))
+          : null,
       ),
       validator: validator,
     );

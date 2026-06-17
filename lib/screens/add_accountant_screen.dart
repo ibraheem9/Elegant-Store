@@ -19,6 +19,52 @@ class _AddAccountantScreenState extends State<AddAccountantScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
+  String? _usernameError;
+  bool _isCheckingUsername = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _usernameController.addListener(_onUsernameChanged);
+  }
+
+  @override
+  void dispose() {
+    _usernameController.removeListener(_onUsernameChanged);
+    _nameController.dispose();
+    _usernameController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  void _onUsernameChanged() {
+    final username = _usernameController.text.trim();
+    if (username.isEmpty) {
+      if (mounted) setState(() => _usernameError = null);
+      return;
+    }
+    // Simple debounce would be better, but let's do it on focus lost or after a delay
+    // For now, let's use a delayed check
+  }
+
+  Future<void> _checkUsernameAvailability() async {
+    final username = _usernameController.text.trim();
+    if (username.isEmpty) return;
+
+    if (mounted) setState(() => _isCheckingUsername = true);
+    
+    try {
+      final exists = await context.read<DatabaseService>().usernameExists(username);
+      if (mounted) {
+        setState(() {
+          _usernameError = exists ? 'اسم المستخدم هذا موجود مسبقاً' : null;
+          _isCheckingUsername = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isCheckingUsername = false);
+    }
+  }
 
   Future<void> _saveAccountant() async {
     if (_nameController.text.isEmpty || _usernameController.text.isEmpty || _passwordController.text.isEmpty) {
@@ -28,7 +74,12 @@ class _AddAccountantScreenState extends State<AddAccountantScreen> {
       return;
     }
 
-    setState(() => _isLoading = true);
+    if (_usernameError != null) {
+      ScaffoldMessenger.of(context)..hideCurrentSnackBar()..showSnackBar(
+        SnackBar(content: Text(_usernameError!), backgroundColor: Colors.red),
+      );
+      return;
+    }
 
     try {
       final db = context.read<DatabaseService>();
@@ -49,7 +100,7 @@ class _AddAccountantScreenState extends State<AddAccountantScreen> {
         performedById: auth.currentUser?.id,
         performedByName: auth.currentUser?.name ?? auth.currentUser?.username,
       );
-      final actUser = context.read<AuthService>().currentUser;
+      final actUser = auth.currentUser;
       db.logActivity(
         targetId: newAccId,
         targetType: 'ACCOUNTANT',
@@ -200,7 +251,20 @@ class _AddAccountantScreenState extends State<AddAccountantScreen> {
                 const SizedBox(height: 32),
                 _buildField('الاسم الكامل للموظف', _nameController, Icons.person, isDark),
                 const SizedBox(height: 20),
-                _buildField('اسم المستخدم للدخول', _usernameController, Icons.alternate_email, isDark),
+                _buildField(
+                  'اسم المستخدم للدخول', 
+                  _usernameController, 
+                  Icons.alternate_email, 
+                  isDark,
+                  onChanged: (_) => _checkUsernameAvailability(),
+                  errorText: _usernameError,
+                  suffixIcon: _isCheckingUsername 
+                      ? const Padding(
+                          padding: EdgeInsets.all(12.0),
+                          child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                        )
+                      : null,
+                ),
                 const SizedBox(height: 20),
                 _buildField(
                     'كلمة المرور', _passwordController, Icons.lock, isDark,
@@ -262,7 +326,7 @@ class _AddAccountantScreenState extends State<AddAccountantScreen> {
 
   Widget _buildField(String label, TextEditingController controller,
       IconData icon, bool isDark,
-      {bool obscure = false, Widget? suffixIcon}) {
+      {bool obscure = false, Widget? suffixIcon, String? errorText, Function(String)? onChanged}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -272,6 +336,7 @@ class _AddAccountantScreenState extends State<AddAccountantScreen> {
         TextField(
           controller: controller,
           obscureText: obscure,
+          onChanged: onChanged,
           style: TextStyle(color: isDark ? Colors.white : Colors.black),
           decoration: InputDecoration(
             prefixIcon: Icon(icon, color: const Color(0xFF3B82F6)),
@@ -281,7 +346,14 @@ class _AddAccountantScreenState extends State<AddAccountantScreen> {
             border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide.none),
+            enabledBorder: errorText != null 
+                ? OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Colors.red, width: 1))
+                : null,
+            focusedBorder: errorText != null 
+                ? OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Colors.red, width: 1.5))
+                : null,
             hintText: 'أدخل $label',
+            errorText: errorText,
           ),
         ),
       ],
