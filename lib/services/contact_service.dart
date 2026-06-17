@@ -34,6 +34,11 @@ class ContactInfo {
       whatsapp == null &&
       address == null &&
       workingHours == null;
+
+  /// Returns the server-provided WhatsApp number or the default fallback.
+  String get whatsappNumber => (whatsapp != null && whatsapp!.isNotEmpty)
+      ? whatsapp!
+      : ApiConfig.defaultWhatsApp;
 }
 
 /// Result of a contact form submission.

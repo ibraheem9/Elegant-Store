@@ -1,58 +1,66 @@
-# Implementation Plan - Silent Store Manager Sync
+# Implementation Plan - Silent Store Manager Sync & Remote Reset
 
-This plan outlines the changes required to remove plain-text credentials from the `product_customers` table, switch to using hashed credentials from the `users` table for syncing, and implement a silent hourly background sync for store manager data.
+This plan outlines the changes to remove plain-text credentials from the `product_customers` table, implement a silent hourly background sync, and support immediate credential updates on app startup for remote resets.
 
 ## User Review Required
 
-> [!IMPORTANT]
-> **Password "Unhashing"**: Cryptographic hashes (like the ones used in the `users` table) are **one-way**. It is technically impossible to "unhash" them to get the original plain-text password.
->
-> **To achieve your goal on the server**:
-> 1.  **Verification**: The server should compare the received hash with its stored hash.
-> 2.  **Recovery**: If the server needs the plain text (e.g., for a "forgot password" feature), we would need to switch to **reversible encryption (AES)**. However, this is significantly less secure.
->
-> **Recommendation**: Continue using the hashed password. The server can still store it and use it for authentication without ever knowing the plain-text version.
+> [!NOTE]
+> **Startup Sync**: To ensure the manager can log in after a remote reset even if the app was closed, we will trigger the sync **immediately** as soon as the app opens. This happens silently in the background while the user is looking at the login screen.
 
 ## Proposed Changes
 
 ### Data Models
 
 #### [models.dart](file:///D:/Work/2026/Hamoda/Store_System/Elegant-Store/lib/models/models.dart)
-- Remove `username` and `password` fields from `StoreProfile` class.
-- Update `toMap` and `fromMap` accordingly.
+- Remove `username` and `password` from `StoreProfile` class.
+- Update `toMap` and `fromMap`.
 
 ### Database Services
 
 #### [database_service.dart](file:///D:/Work/2026/Hamoda/Store_System/Elegant-Store/lib/services/database_service.dart)
-- Update `_createTables` to remove `username` and `password` from the `product_customers` table definition.
-- Add a migration (v17) in `onUpgrade` to handle existing databases.
-- Update `updateStoreProfileMetrics` to remove `username` and `password` parameters.
-- Update `updateManagerCredentials` to only update the `users` table (hashed) and not the `product_customers` table.
-- Add `getManagerUser()` method to fetch the primary manager's details.
+- **Migration (v17)**: Remove `username` and `password` columns from `product_customers`.
+- **`updateManagerCredentials`**:
+    - Update to accept `username` and `password` (plain-text from server).
+    - Hash the password locally using `PasswordUtils.hashPassword`.
+    - Find the manager in the `users` table and update their record.
 
 ### Sync & Tracking Services
 
 #### [customer_tracking_service.dart](file:///D:/Work/2026/Hamoda/Store_System/Elegant-Store/lib/services/customer_tracking_service.dart)
-- Update `syncCustomerData` to:
-    - Fetch the `STORE_MANAGER` from the `users` table.
-    - Include the manager's `username` and **hashed `password`** in the sync payload.
-    - Remove dependency on `StoreProfile` for credentials.
-- Update `startPeriodicSync` to trigger every hour if the app is open and online.
-- Track `lastSyncTime` locally to ensure it doesn't sync more than once per hour unless data changes.
+- **`startPeriodicSync`**:
+    - Trigger `syncCustomerData()` **immediately** when called.
+    - Set up a timer to repeat every 1 hour.
+- **`syncCustomerData`**:
+    - **Remove** credentials (`username`, `password`) from the outgoing payload.
+    - Process `remote_credentials` if present in the response:
+        - Call `DatabaseService.updateManagerCredentials`.
+        - If the user is currently logged in, trigger `AuthService.forceLogout`.
 
 #### [auth_service.dart](file:///D:/Work/2026/Hamoda/Store_System/Elegant-Store/lib/services/auth_service.dart)
-- Update `_saveCredentialsForTracking` to call the updated `DatabaseService` method (removing plain-text credential passing).
+- **`forceLogout`**: New method to clear the session and notify the UI to navigate to the login screen.
+- **`initSession`**: Ensure `CustomerTrackingService.instance.startPeriodicSync()` is called here to catch startup resets.
+
+### App Entry Point
+
+#### [main.dart](file:///D:/Work/2026/Hamoda/Store_System/Elegant-Store/lib/main.dart)
+- (Verify) Ensure `AuthService.initSession` is called during startup.
 
 ---
 
 ## Verification Plan
 
 ### Automated Tests
-- I will verify the database schema changes by running the app and inspecting the logs for migration success.
-- I will verify the sync payload by adding debug prints to `CustomerTrackingService` to ensure the correct hashed password and username are being sent.
+- Verify database migration.
+- Verify sync payload contains no credentials.
 
 ### Manual Verification
-1.  **Login as Manager**: Ensure the login still works and triggers a silent sync.
-2.  **Check Sync Payload**: Verify that `username` and hashed `password` are present in the POST request to `app-customer/sync`.
-3.  **Silent Sync**: Verify that no UI notifications or loaders appear during the background sync.
-4.  **Hourly Trigger**: Manually advance the system clock or reduce the timer interval to verify the hourly sync trigger.
+1.  **Startup Reset Test**:
+    - Close the app.
+    - Change credentials in Admin Panel.
+    - Open the app.
+    - Wait a few seconds for the background sync to finish.
+    - Log in with the **new** credentials.
+2.  **Force Logout Test**:
+    - Log in as manager.
+    - Trigger a reset from the server during the hourly sync.
+    - Verify the app logs the user out and shows the login screen.

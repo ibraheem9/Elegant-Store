@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/license_service.dart';
 import '../services/contact_service.dart';
+import '../core/config/api_config.dart';
 
 /// Cache key for the persisted WhatsApp number.
 const _kWhatsappCacheKey = 'cached_whatsapp_number';
@@ -62,6 +63,11 @@ class _LicenseGateScreenState extends State<LicenseGateScreen> {
   // ── WhatsApp number: cache-first, then refresh from API ───────────────────
 
   Future<void> _loadWhatsappNumber() async {
+    // 0. Initialize with default as the bare minimum fallback.
+    if (mounted) {
+      setState(() => _whatsappNumber = ApiConfig.defaultWhatsApp);
+    }
+
     // 1. Load cached value immediately so the button is usable offline.
     final prefs = await SharedPreferences.getInstance();
     final cached = prefs.getString(_kWhatsappCacheKey);

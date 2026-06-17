@@ -194,9 +194,6 @@ Future<void> _startApp() async {
   final authService = AuthService(dbService, syncService);
   final telemetryService = TelemetryService(dbService);
   
-  // Start periodic tracking sync (8 AM & 10 PM)
-  CustomerTrackingService.instance.startPeriodicSync();
-  
   // initSession with timeout to prevent splash screen hang
   try {
     await authService.initSession().timeout(

@@ -10,4 +10,7 @@ class ApiConfig {
   
   /// Endpoint for syncing app customer tracking and usage stats.
   static const String appCustomerSyncEndpoint = 'app-customer/sync';
+
+  /// Default WhatsApp support number used as a fallback.
+  static const String defaultWhatsApp = '970567228380';
 }

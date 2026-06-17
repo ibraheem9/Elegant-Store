@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/contact_service.dart';
+import '../core/config/api_config.dart';
 
 /// Maximum number of images allowed per request.
 const int _kMaxImages = 3;
@@ -309,7 +310,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
           const SizedBox(height: 30),
 
           // WhatsApp Button (Moved to bottom)
-          const _WhatsAppButton(),
+          _WhatsAppButton(phone: _contactInfo?.whatsapp),
 
           const SizedBox(height: 50),
         ],
@@ -525,11 +526,15 @@ class _AddImageButton extends StatelessWidget {
 }
 
 class _WhatsAppButton extends StatelessWidget {
-  const _WhatsAppButton();
-  final String phone = "970567228380";
+  const _WhatsAppButton({this.phone});
+  final String? phone;
 
   Future<void> _launchWhatsApp() async {
-    final Uri url = Uri.parse("https://wa.me/$phone");
+    final number = (phone != null && phone!.isNotEmpty)
+        ? phone!
+        : ApiConfig.defaultWhatsApp;
+
+    final Uri url = Uri.parse("https://wa.me/$number");
     if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
       debugPrint('Could not launch $url');
     }

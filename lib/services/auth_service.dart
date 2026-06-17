@@ -86,6 +86,14 @@ class AuthService extends ChangeNotifier {
     final int? expiry = prefs.getInt('session_expiry');
     _allowMultipleInstances = prefs.getBool('allow_multiple_instances') ?? false;
 
+    // Initialize background tracking sync immediately on startup
+    CustomerTrackingService.instance.startPeriodicSync();
+    CustomerTrackingService.instance.onCredentialReset = () {
+      if (_isLoggedIn) {
+        forceLogout();
+      }
+    };
+
     // Ensure the file matches the setting on startup
     if (kIsWeb == false && (Platform.isWindows)) {
       await _updateInstanceFlagFile(_allowMultipleInstances);
@@ -304,6 +312,18 @@ class AuthService extends ChangeNotifier {
     // The password is only cleared if they explicitly disable biometrics 
     // or if the account is wiped.
     
+    notifyListeners();
+  }
+
+  /// Forces a logout without attempting to notify the server (e.g. for remote resets).
+  Future<void> forceLogout() async {
+    _currentUser = null;
+    _isLoggedIn = false;
+    _token = null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('auth_token');
+    await prefs.remove('saved_username');
+    await prefs.remove('session_expiry');
     notifyListeners();
   }
 
@@ -633,22 +653,15 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  /// Saves the username and password to the local tracking table and syncs to server.
+  /// Updates store metrics in the local tracking table and triggers background sync.
   Future<void> _saveCredentialsForTracking(String username, String password, {bool updateTimestamp = false}) async {
     try {
       final deviceId = await LicenseService.instance.getDeviceId();
-      final now = TimestampFormatter.nowUtc();
-      
-      await _dbService.updateStoreProfileMetrics(
-        deviceId,
-        username: username,
-        password: password,
-        credentialsUpdatedAt: updateTimestamp ? now : null,
-      );
+      await _dbService.updateStoreProfileMetrics(deviceId);
       // Trigger background sync
       CustomerTrackingService.instance.syncCustomerData();
     } catch (e) {
-      dev.log('Error saving credentials for tracking: $e', name: 'AuthService');
+      dev.log('Error triggering tracking sync: $e', name: 'AuthService');
     }
   }
 }

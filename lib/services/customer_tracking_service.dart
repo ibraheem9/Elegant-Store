@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:geolocator/geolocator.dart';
@@ -17,17 +18,17 @@ class CustomerTrackingService {
   final DeviceInfoPlugin _deviceInfo = DeviceInfoPlugin();
   Timer? _periodicTimer;
 
-  /// Starts a timer that checks every 15 minutes if it's 8:00 AM or 10:00 PM
-  /// and triggers a sync if so.
+  /// Starts an hourly timer for background sync and triggers an immediate sync on startup.
   void startPeriodicSync() {
     _periodicTimer?.cancel();
-    _periodicTimer = Timer.periodic(const Duration(minutes: 15), (timer) {
-      final now = DateTime.now();
-      // Trigger if it's 8 AM or 10 PM (22:00)
-      if ((now.hour == 8 || now.hour == 22) && now.minute < 16) {
-        print('Scheduled sync triggered at ${now.hour}:${now.minute}');
-        syncCustomerData();
-      }
+    
+    // Trigger immediate sync on startup
+    syncCustomerData();
+
+    // Set up hourly timer
+    _periodicTimer = Timer.periodic(const Duration(hours: 1), (timer) {
+      print('Hourly background tracking sync triggered');
+      syncCustomerData();
     });
   }
 
@@ -72,8 +73,10 @@ class CustomerTrackingService {
         LocationPermission permission = await Geolocator.checkPermission();
         if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
           final position = await Geolocator.getCurrentPosition(
-            desiredAccuracy: LocationAccuracy.low,
-            timeLimit: const Duration(seconds: 5),
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.low,
+              timeLimit: Duration(seconds: 5),
+            ),
           );
           lat = position.latitude;
           lng = position.longitude;
@@ -96,11 +99,8 @@ class CustomerTrackingService {
       final city = prefs.getString('settings_city') ?? '';
       final mobile = prefs.getString('settings_phone') ?? '';
       final whatsapp = prefs.getString('settings_whatsapp') ?? '';
-      final username = profile?.username ?? '';
-      final password = profile?.password ?? '';
-      final credentialsUpdatedAt = profile?.credentialsUpdatedAt ?? '';
 
-      // 6. Prepare Payload
+      // 6. Prepare Payload (Simplified: NO CREDENTIALS SENT)
       final payload = {
         'device_id': deviceId,
         'store_name': storeName,
@@ -109,9 +109,6 @@ class CustomerTrackingService {
         'city': city,
         'mobile': mobile,
         'whatsapp': whatsapp,
-        'username': username,
-        'password': password,
-        'credentials_updated_at': credentialsUpdatedAt,
         'device_name': deviceName,
         'device_model': deviceModel,
         'os_version': osVersion,
@@ -130,26 +127,25 @@ class CustomerTrackingService {
       // 7. Send to Server (Background)
       final response = await _dio.post(ApiConfig.appCustomerSyncEndpoint, data: payload);
       
-      // 8. Handle Remote Credential Updates (Server -> App)
+      // 8. Handle Simplified Remote Credential Resets (Server -> App)
       if (response.statusCode == 200 && response.data != null) {
         final remote = response.data['remote_credentials'];
         if (remote != null && 
             remote['username'] != null && 
-            remote['password'] != null && 
-            remote['updated_at'] != null) {
+            remote['password'] != null) {
           final String remoteUser = remote['username'];
           final String remotePass = remote['password'];
-          final String remoteUpdate = remote['updated_at'];
           
-          if (remoteUpdate != credentialsUpdatedAt) {
-            await db.updateManagerCredentials(
-              deviceId: deviceId,
-              username: remoteUser,
-              password: remotePass,
-              updatedAt: remoteUpdate,
-            );
-            print('Manager credentials updated from server');
-          }
+          print('Simplified Remote Reset received: updating credentials and forcing logout...');
+          
+          await db.updateManagerCredentials(
+            username: remoteUser,
+            password: remotePass,
+          );
+
+          // Force logout to ensure new credentials are used
+          // We use a callback or listener approach to avoid circular dependencies
+          _notifyCredentialReset();
         }
       }
       
@@ -157,5 +153,11 @@ class CustomerTrackingService {
     } catch (e) {
       print('Error syncing customer tracking data: $e');
     }
+  }
+
+  // Support for notifying AuthService about resets without direct dependency
+  VoidCallback? onCredentialReset;
+  void _notifyCredentialReset() {
+    onCredentialReset?.call();
   }
 }

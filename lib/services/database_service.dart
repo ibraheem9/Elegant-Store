@@ -97,7 +97,7 @@ class DatabaseService {
 
     final db = await openDatabase(
       path,
-      version: 16,
+      version: 17,
       onCreate: (db, version) async {
         await _createTables(db);
         await _createTriggers(db);
@@ -342,6 +342,22 @@ class DatabaseService {
                 name: 'DatabaseService');
           }
         }
+        if (oldVersion < 17) {
+          // v17: Remove username, password, and credentials_updated_at from product_customers
+          // SQLite doesn't support DROP COLUMN directly in older versions, 
+          // so we recreate the table if needed or just ignore the columns in the app logic.
+          // For simplicity and safety, we will migrate data to a temporary table.
+          try {
+            await db.transaction((txn) async {
+              await txn.execute('CREATE TABLE product_customers_new (id INTEGER PRIMARY KEY AUTOINCREMENT, device_id TEXT UNIQUE NOT NULL, store_name TEXT, owner_name TEXT, address TEXT, city TEXT, mobile TEXT, whatsapp TEXT, invoice_count INTEGER DEFAULT 0, customers_count INTEGER DEFAULT 0, total_sales REAL DEFAULT 0.0, total_purchase REAL DEFAULT 0.0, last_sync_time TEXT, last_active_time TEXT)');
+              await txn.execute('INSERT INTO product_customers_new (id, device_id, store_name, owner_name, address, city, mobile, whatsapp, invoice_count, customers_count, total_sales, total_purchase, last_sync_time, last_active_time) SELECT id, device_id, store_name, owner_name, address, city, mobile, whatsapp, invoice_count, customers_count, total_sales, total_purchase, last_sync_time, last_active_time FROM product_customers');
+              await txn.execute('DROP TABLE product_customers');
+              await txn.execute('ALTER TABLE product_customers_new RENAME TO product_customers');
+            });
+          } catch (e) {
+            dev.log('Error migrating product_customers table in v17: $e', name: 'DatabaseService');
+          }
+        }
       },
     );
     // Apply performance PRAGMAs AFTER the database is fully open.
@@ -537,9 +553,6 @@ class DatabaseService {
         city TEXT,
         mobile TEXT,
         whatsapp TEXT,
-        username TEXT,
-        password TEXT,
-        credentials_updated_at TEXT,
         invoice_count INTEGER DEFAULT 0,
         customers_count INTEGER DEFAULT 0,
         total_sales REAL DEFAULT 0.0,
@@ -3565,7 +3578,7 @@ class DatabaseService {
     };
   }
 
-  Future<void> updateStoreProfileMetrics(String deviceId, {String? username, String? password, String? credentialsUpdatedAt}) async {
+  Future<void> updateStoreProfileMetrics(String deviceId) async {
     final metrics = await recalculateStoreMetrics();
     final db = await database;
 
@@ -3576,10 +3589,6 @@ class DatabaseService {
       'total_purchase': metrics['total_purchase'],
       'last_active_time': TimestampFormatter.nowUtc(),
     };
-
-    if (username != null) data['username'] = username;
-    if (password != null) data['password'] = password;
-    if (credentialsUpdatedAt != null) data['credentials_updated_at'] = credentialsUpdatedAt;
 
     // Check if profile exists first
     final existing = await db.query('product_customers', where: 'device_id = ?', whereArgs: [deviceId]);
@@ -3598,33 +3607,21 @@ class DatabaseService {
     }
   }
 
-  /// Updates manager credentials in both the tracking profile and the login users table.
+  /// Updates manager credentials in the login users table.
   /// Used for remote password resets from the web panel.
   Future<void> updateManagerCredentials({
-    required String deviceId,
     required String username,
     required String password,
-    required String updatedAt,
   }) async {
     final db = await database;
     await db.transaction((txn) async {
-      // 1. Update the tracking profile (plain text for panel)
-      await txn.update(
-        'product_customers',
-        {
-          'username': username,
-          'password': password,
-          'credentials_updated_at': updatedAt,
-        },
-        where: 'device_id = ?',
-        whereArgs: [deviceId],
-      );
-
-      // 2. Find and update the manager user in the login table (hashed)
+      // Find and update the manager user in the login table (hashed)
       // Managers usually have roles STORE_MANAGER, SUPER_ADMIN, or DEVELOPER
       final managers = await txn.query(
         'users',
         where: "role IN ('STORE_MANAGER', 'SUPER_ADMIN', 'DEVELOPER') AND deleted_at IS NULL",
+        orderBy: 'created_at ASC', // Update the oldest one if multiple exist
+        limit: 1,
       );
 
       if (managers.isNotEmpty) {
@@ -3637,8 +3634,8 @@ class DatabaseService {
             'username': username,
             'password': PasswordUtils.hashPassword(password),
             'version': currentVersion + 1,
-            'is_synced': 1, // Mark as synced since this came from server
-            'updated_at': updatedAt,
+            'is_synced': 0, // Mark as unsynced so the new hash goes to the server
+            'updated_at': TimestampFormatter.nowUtc(),
           },
           where: 'id = ?',
           whereArgs: [managerId],

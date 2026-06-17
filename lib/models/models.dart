@@ -634,9 +634,6 @@ class StoreProfile {
   final String? city;
   final String? mobile;
   final String? whatsapp;
-  final String? username;
-  final String? password;
-  final String? credentialsUpdatedAt;
   final int invoiceCount;
   final int customersCount;
   final double totalSales;
@@ -653,9 +650,6 @@ class StoreProfile {
     this.city,
     this.mobile,
     this.whatsapp,
-    this.username,
-    this.password,
-    this.credentialsUpdatedAt,
     this.invoiceCount = 0,
     this.customersCount = 0,
     this.totalSales = 0.0,
@@ -674,9 +668,6 @@ class StoreProfile {
       'city': city,
       'mobile': mobile,
       'whatsapp': whatsapp,
-      'username': username,
-      'password': password,
-      'credentials_updated_at': credentialsUpdatedAt,
       'invoice_count': invoiceCount,
       'customers_count': customersCount,
       'total_sales': _roundMoney(totalSales),
@@ -696,9 +687,6 @@ class StoreProfile {
       city: map['city'],
       mobile: map['mobile'],
       whatsapp: map['whatsapp'],
-      username: map['username'],
-      password: map['password'],
-      credentialsUpdatedAt: map['credentials_updated_at'],
       invoiceCount: map['invoice_count'] ?? 0,
       customersCount: map['customers_count'] ?? 0,
       totalSales: _toDouble(map['total_sales']),
@@ -715,9 +703,6 @@ class StoreProfile {
     String? city,
     String? mobile,
     String? whatsapp,
-    String? username,
-    String? password,
-    String? credentialsUpdatedAt,
     int? invoiceCount,
     int? customersCount,
     double? totalSales,
@@ -734,9 +719,6 @@ class StoreProfile {
       city: city ?? this.city,
       mobile: mobile ?? this.mobile,
       whatsapp: whatsapp ?? this.whatsapp,
-      username: username ?? this.username,
-      password: password ?? this.password,
-      credentialsUpdatedAt: credentialsUpdatedAt ?? this.credentialsUpdatedAt,
       invoiceCount: invoiceCount ?? this.invoiceCount,
       customersCount: customersCount ?? this.customersCount,
       totalSales: totalSales ?? this.totalSales,
