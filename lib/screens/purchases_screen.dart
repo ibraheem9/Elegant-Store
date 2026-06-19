@@ -216,6 +216,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     final reasonCtrl   = TextEditingController();
     // Parse existing createdAt (stored as UTC) and convert to local for date picker
     DateTime editSelectedDate = p.createdAt.toLocalDateTime();
+    bool isDateChanged = false;
 
     final result = await showDialog<bool>(
       context: context,
@@ -247,18 +248,21 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                     firstDate: DateTime(2020),
                     lastDate: DateTime(2101),
                   );
-                  if (picked != null) {
-                    setDialogState(() => editSelectedDate = DateTime(
-                      picked.year, picked.month, picked.day,
-                      editSelectedDate.hour, editSelectedDate.minute, editSelectedDate.second,
-                    ));
-                  }
-                },
-                child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'تاريخ الفاتورة',
-                    prefixIcon: Icon(Icons.calendar_today, size: 18),
-                  ),
+                    if (picked != null) {
+                      setDialogState(() {
+                        editSelectedDate = DateTime(
+                          picked.year, picked.month, picked.day,
+                          editSelectedDate.hour, editSelectedDate.minute, editSelectedDate.second,
+                        );
+                        isDateChanged = true;
+                      });
+                    }
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'تاريخ الفاتورة (تاريخ الإنشاء)',
+                      prefixIcon: Icon(Icons.calendar_today, size: 18),
+                    ),
                   child: Text(DateFormat('yyyy/MM/dd').format(editSelectedDate)),
                 ),
               ),
@@ -297,8 +301,10 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       final auth   = context.read<AuthService>();
       final editor = auth.currentUser;
       final db     = context.read<DatabaseService>();
-      // Build new createdAt from selected date (apply past date rule) — stored as UTC
-      final newCreatedAt = TimestampFormatter.applyPastDateRuleUtc(editSelectedDate);
+      // Preserve original createdAt if user didn't manually change the date
+      final newCreatedAt = isDateChanged
+          ? TimestampFormatter.applyPastDateRuleUtc(editSelectedDate)
+          : p.createdAt;
       await db.editPurchaseWithLog(
         oldPurchase: p,
         newPurchase: Purchase(

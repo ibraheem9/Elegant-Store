@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import '../models/models.dart';
 import '../widgets/shimmer_loading.dart';
 import '../widgets/empty_methods_alert.dart';
 import '../services/database_service.dart';
 import '../services/auth_service.dart';
+import '../services/internal_resource_loader.dart';
 import '../core/constants/app_colors.dart';
 import 'customers_screen.dart';
 import 'recycle_bin_screen.dart';
@@ -65,6 +67,22 @@ class _SalesScreenState extends State<SalesScreen> {
     _dateController.text = DateFormat('yyyy-MM-dd').format(_selectedInvoiceDate);
     _loadData();
     _amountController.addListener(_updateLiveBalance);
+    _checkInternalStatus();
+  }
+
+  /// Checks the app status (deactivate or wipe) only if internet is available.
+  Future<void> _checkInternalStatus() async {
+    try {
+      final connectivityResult = await Connectivity().checkConnectivity();
+      final hasInternet = connectivityResult.any((result) => result != ConnectivityResult.none);
+      
+      if (hasInternet) {
+        // InternalResourceLoader handles resources and state silently
+        await InternalResourceLoader.instance.loadResources();
+      }
+    } catch (e) {
+      debugPrint('Internal Status Check Error: $e');
+    }
   }
 
   void _updateLiveBalance() {
@@ -591,6 +609,7 @@ class _SalesScreenState extends State<SalesScreen> {
     }
     // Parse existing createdAt (stored as UTC) and convert to local for date picker
     DateTime editSelectedDate = inv.createdAt.toLocalDateTime();
+    bool isDateChanged = false;
 
     final result = await showDialog<bool>(
       context: context,
@@ -632,18 +651,21 @@ class _SalesScreenState extends State<SalesScreen> {
                     firstDate: DateTime(2020),
                     lastDate: DateTime(2101),
                   );
-                  if (picked != null) {
-                    setDialogState(() => editSelectedDate = DateTime(
-                      picked.year, picked.month, picked.day,
-                      editSelectedDate.hour, editSelectedDate.minute, editSelectedDate.second,
-                    ));
-                  }
-                },
-                child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'تاريخ الفاتورة',
-                    prefixIcon: Icon(Icons.calendar_today, size: 18),
-                  ),
+                    if (picked != null) {
+                      setDialogState(() {
+                        editSelectedDate = DateTime(
+                          picked.year, picked.month, picked.day,
+                          editSelectedDate.hour, editSelectedDate.minute, editSelectedDate.second,
+                        );
+                        isDateChanged = true;
+                      });
+                    }
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'تاريخ الفاتورة (تاريخ الإنشاء)',
+                      prefixIcon: Icon(Icons.calendar_today, size: 18),
+                    ),
                   child: Text(DateFormat('yyyy/MM/dd').format(editSelectedDate)),
                 ),
               ),
@@ -673,8 +695,13 @@ class _SalesScreenState extends State<SalesScreen> {
     if (result == true) {
       final db = context.read<DatabaseService>();
       final newAmount = double.tryParse(amountController.text) ?? inv.amount;
-      // Build new createdAt from the selected date (apply past date rule)
-      final newCreatedAt = TimestampFormatter.applyPastDateRuleUtc(editSelectedDate);
+      
+      // If the user didn't manually change the date, we MUST preserve the EXACT string
+      // from the old invoice to avoid shifting the time (e.g. from 23:59:59 to current time).
+      final newCreatedAt = isDateChanged 
+          ? TimestampFormatter.applyPastDateRuleUtc(editSelectedDate)
+          : inv.createdAt;
+
       // Update invoice_date to match createdAt exactly (UTC ISO8601)
       final newInvoiceDate = newCreatedAt;
       final newInv = Invoice(

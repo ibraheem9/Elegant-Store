@@ -837,6 +837,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         TextEditingController(text: calculatedDebt > 0 ? _fmt(calculatedDebt) : '');
     final notesController = TextEditingController();
     PaymentMethod? selectedMethod = methods.isNotEmpty ? methods.first : null;
+    DateTime selectedDate = DateTime.now();
 
     showDialog(
       context: context,
@@ -851,6 +852,29 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                 Text('إجمالي الدين: ${_fmt(calculatedDebt)} ₪',
                     style: const TextStyle(
                         fontWeight: FontWeight.bold, fontSize: 18, color: Colors.red)),
+              const SizedBox(height: 16),
+              // Date picker
+              InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: selectedDate,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2101),
+                  );
+                  if (picked != null) {
+                    setDialogState(() => selectedDate = picked);
+                  }
+                },
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: 'تاريخ الدفعة',
+                    prefixIcon: const Icon(Icons.calendar_today, size: 18),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: Text(DateFormat('yyyy/MM/dd').format(selectedDate)),
+                ),
+              ),
               const SizedBox(height: 16),
               TextField(
                 controller: amountController,
@@ -897,6 +921,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                   amount: amount,
                   paymentMethodId: selectedMethod!.id!,
                   notes: 'سداد ديون: ${notesController.text}',
+                  date: selectedDate,
                   performedById: _actUser?.id,
                   performedByName: _actUser?.name ?? _actUser?.username,
                 );
@@ -1000,6 +1025,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
 
     // Parse existing createdAt (stored as UTC) and convert to local for date picker
     DateTime editSelectedDate = inv.createdAt.toLocalDateTime();
+    bool isDateChanged = false;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1045,15 +1071,18 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                     lastDate: DateTime(2101),
                   );
                   if (picked != null) {
-                    setDialogState(() => editSelectedDate = DateTime(
-                      picked.year, picked.month, picked.day,
-                      editSelectedDate.hour, editSelectedDate.minute, editSelectedDate.second,
-                    ));
+                    setDialogState(() {
+                      editSelectedDate = DateTime(
+                        picked.year, picked.month, picked.day,
+                        editSelectedDate.hour, editSelectedDate.minute, editSelectedDate.second,
+                      );
+                      isDateChanged = true;
+                    });
                   }
                 },
                 child: InputDecorator(
                   decoration: InputDecoration(
-                    labelText: 'تاريخ الفاتورة',
+                    labelText: 'تاريخ الفاتورة (تاريخ الإنشاء)',
                     prefixIcon: const Icon(Icons.calendar_today, size: 18),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   ),
@@ -1111,8 +1140,10 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     
     final reason = reasonController.text.trim();
     
-    // Build new createdAt from the selected date (apply past date rule) — stored as UTC
-    final nowUtc = TimestampFormatter.applyPastDateRuleUtc(editSelectedDate);
+    // If user didn't change the date, preserve EXACT original createdAt string
+    final nowUtc = isDateChanged 
+        ? TimestampFormatter.applyPastDateRuleUtc(editSelectedDate)
+        : inv.createdAt;
 
     final newInv = Invoice(
       id: inv.id,
