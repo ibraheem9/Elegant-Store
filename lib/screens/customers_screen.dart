@@ -1290,6 +1290,11 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                               const SizedBox(height: 4),
                               Text(summary, style: const TextStyle(fontSize: 12, color: Colors.black87)),
                             ],
+                            // Creation date for CREATE action
+                            if (action == 'CREATE') ...[
+                              const SizedBox(height: 4),
+                              Text('تاريخ الإنشاء: $dateStr', style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
+                            ],
                             // Old → New values (only when a specific field changed)
                             if (hasFieldChange) ...[
                               const SizedBox(height: 4),

@@ -838,7 +838,12 @@ class _SalesScreenState extends State<SalesScreen> {
                                       summary ?? 'تغيير $fieldLabel',
                                       style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                                     ),
-                                    if (oldVal != null && newVal != null && rawField != 'MULTIPLE')
+                                    if (action == 'CREATE')
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: Text('تاريخ الإنشاء: $displayTime', style: const TextStyle(fontSize: 13, color: Colors.blueGrey)),
+                                      )
+                                    else if (oldVal != null && newVal != null && rawField != 'MULTIPLE' && oldVal != '-' && newVal != '-')
                                       Padding(
                                         padding: const EdgeInsets.only(top: 4),
                                         child: Text('من: $oldVal  ←  إلى: $newVal', style: const TextStyle(fontSize: 13, color: Colors.blueGrey)),

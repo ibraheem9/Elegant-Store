@@ -347,8 +347,11 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                   child: Text('لا توجد تعديلات مسجلة'),
                 )
               : Builder(builder: (_) {
-                    // Filter out null→null entries (no meaningful change)
+                    // Filter out null→null entries (no meaningful change), but keep CREATE/DELETE
                     final filtered = history.where((h) {
+                      final action = h['action'] as String? ?? 'UPDATE';
+                      if (action == 'CREATE' || action == 'DELETE') return true;
+                      
                       final oldVal = h['old_value'] as String?;
                       final newVal = h['new_value'] as String?;
                       return !(oldVal == null && newVal == null);
@@ -408,7 +411,10 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                                 ],
                               ]),
                               const SizedBox(height: 2),
-                              if (fieldName.isNotEmpty)
+                              if (action == 'CREATE')
+                                Text('تاريخ الإنشاء: ${DateFormat('yyyy/MM/dd HH:mm').format(DateTime.tryParse(h['created_at'] as String? ?? '') ?? DateTime.now())}',
+                                    style: const TextStyle(fontSize: 12, color: Colors.blueGrey))
+                              else if (fieldName.isNotEmpty)
                                 Text('من: $displayOld  →  إلى: $displayNew',
                                     style: const TextStyle(fontSize: 12)),
                               if (h['edit_reason'] != null && h['edit_reason'].toString().isNotEmpty)
