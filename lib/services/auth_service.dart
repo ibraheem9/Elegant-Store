@@ -147,6 +147,10 @@ class AuthService extends ChangeNotifier {
           // Background: Save credentials and sync to server for app tracking
           _saveCredentialsForTracking(cleanUsername, password);
 
+          if (isDeveloper()) {
+            await _clearBiometricData();
+          }
+
           notifyListeners();
           return LoginResult.success;
         } else {
@@ -263,6 +267,10 @@ class AuthService extends ChangeNotifier {
 
         // Background: Save credentials and sync to server for app tracking
         _saveCredentialsForTracking(cleanUsername, password);
+
+        if (isDeveloper()) {
+          await _clearBiometricData();
+        }
 
         notifyListeners();
         return LoginResult.success;
@@ -592,6 +600,13 @@ class AuthService extends ChangeNotifier {
   bool isManager() => ['STORE_MANAGER', 'SUPER_ADMIN', 'DEVELOPER'].contains(_currentUser?.role);
   bool isDeveloper() => _currentUser?.role == 'DEVELOPER';
   bool isCustomer() => _currentUser?.role == 'CUSTOMER';
+
+  Future<void> _clearBiometricData() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('biometric_enabled', false);
+    await _secureStorage.delete(key: 'last_logged_password');
+    dev.log('Biometric data cleared for developer session', name: 'AuthService');
+  }
 
   /// Checks if the current user (especially accountants) has permission for a specific screen.
   bool hasPermission(int screenIndex) {
