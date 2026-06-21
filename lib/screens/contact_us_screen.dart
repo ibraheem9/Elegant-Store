@@ -13,7 +13,8 @@ const int _kMaxImages = 3;
 const int _kMaxImageBytes = 2 * 1024 * 1024;
 
 class ContactUsScreen extends StatefulWidget {
-  const ContactUsScreen({super.key});
+  final bool showAppBar;
+  const ContactUsScreen({super.key, this.showAppBar = true});
 
   @override
   State<ContactUsScreen> createState() => _ContactUsScreenState();
@@ -153,7 +154,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: isDark ? Colors.transparent : const Color(0xFFF1F5F9),
-        appBar: AppBar(
+        appBar: widget.showAppBar ? AppBar(
           title: const Text('تواصل معنا', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           centerTitle: true,
           backgroundColor: isDark ? const Color(0xFF071028) : Colors.white,
@@ -164,7 +165,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
             tooltip: 'رجوع',
           ),
           foregroundColor: isDark ? Colors.white : Colors.black87,
-        ),
+        ) : null,
         body: _submitted ? _buildSuccessState(theme) : _buildForm(theme, isDark),
       ),
     );

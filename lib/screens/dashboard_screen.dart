@@ -207,7 +207,7 @@ class DashboardScreenState extends State<DashboardScreen> {
       case 10: return PurchasesMethodsScreen(key: _purchasesMethodsKey);
       case 11: return const RecycleBinScreen();
       case 12: return const SettingsScreen();
-      case 13: return const ContactUsScreen();
+      case 13: return const ContactUsScreen(showAppBar: false);
       case 14: return const AboutUsScreen();
       case 15: return const ProfileScreen();
       case 16: return const HelpScreen();
