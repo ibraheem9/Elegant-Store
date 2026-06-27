@@ -240,8 +240,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           content: TextField(
             controller: ctrl,
             obscureText: true,
-            textAlign: TextAlign.right,
-            decoration: const InputDecoration(labelText: 'كلمة المرور'),
+            textAlign: TextAlign.left,
+            textDirection: TextDirection.ltr,
+            decoration: const InputDecoration(
+              labelText: 'كلمة المرور',
+              hintTextDirection: TextDirection.rtl,
+            ),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
@@ -818,11 +822,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return TextField(
       controller: controller,
       obscureText: obscure,
+      textAlign: TextAlign.left,
+      textDirection: TextDirection.ltr,
       style: TextStyle(color: isDark ? Colors.white : Colors.black),
       decoration: InputDecoration(
         labelText: label,
         labelStyle:
             TextStyle(color: isDark ? Colors.grey : Colors.black54),
+        hintTextDirection: TextDirection.rtl,
         prefixIcon: Icon(icon, color: const Color(0xFF0B74FF)),
         suffixIcon: suffixIcon,
         filled: true,

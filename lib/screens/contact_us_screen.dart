@@ -1,8 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import '../services/contact_service.dart';
 import '../core/config/api_config.dart';
 
@@ -30,6 +32,12 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
 
   final _contactService = ContactService();
   final _picker = ImagePicker();
+
+  final _phoneMaskFormatter = MaskTextInputFormatter(
+    mask: '#### ### ###',
+    filter: {"#": RegExp(r'[0-9]')},
+    type: MaskAutoCompletionType.lazy,
+  );
 
   ContactInfo? _contactInfo;
   bool _loadingInfo = true;
@@ -229,6 +237,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
                       label: 'رقم الهاتف',
                       icon: Icons.phone_outlined,
                       keyboardType: TextInputType.phone,
+                      inputFormatters: [_phoneMaskFormatter],
                     ),
 
                     const SizedBox(height: 24),
@@ -401,6 +410,7 @@ class _FormField extends StatelessWidget {
     this.maxLines = 1,
     this.keyboardType,
     this.validator,
+    this.inputFormatters,
   });
 
   final TextEditingController controller;
@@ -409,16 +419,21 @@ class _FormField extends StatelessWidget {
   final int maxLines;
   final TextInputType? keyboardType;
   final String? Function(String?)? validator;
+  final List<TextInputFormatter>? inputFormatters;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return TextFormField(
+    final isPhone = keyboardType == TextInputType.phone;
+
+    Widget textField = TextFormField(
       controller: controller,
       maxLines: maxLines,
       keyboardType: keyboardType,
       validator: validator,
-      textDirection: TextDirection.rtl,
+      inputFormatters: inputFormatters,
+      textDirection: isPhone ? TextDirection.ltr : TextDirection.rtl,
+      textAlign: isPhone ? TextAlign.left : TextAlign.start,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, size: 20),
@@ -428,6 +443,14 @@ class _FormField extends StatelessWidget {
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       ),
     );
+
+    if (isPhone) {
+      return Directionality(
+        textDirection: TextDirection.ltr,
+        child: textField,
+      );
+    }
+    return textField;
   }
 }
 

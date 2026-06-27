@@ -7,6 +7,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 import 'services/database_service.dart';
 import 'services/auth_service.dart';
@@ -364,7 +365,25 @@ class _AppHomeState extends State<_AppHome> with WidgetsBindingObserver {
     context.read<TelemetryService>().checkProfileCompletion();
 
     // We no longer trigger automatic sync on login as requested.
-    // SyncManager is now manual.
+    // SyncManager is now manual, but we check connectivity on start.
+    _checkConnectivityAndSync();
+  }
+
+  Future<void> _checkConnectivityAndSync() async {
+    // Only trigger if logged in and profile is complete
+    final telemetryService = context.read<TelemetryService>();
+    if (!telemetryService.isProfileComplete) return;
+
+    // First: Check connectivity and update last active time on server
+    final connectivityResult = await Connectivity().checkConnectivity();
+    if (connectivityResult != ConnectivityResult.none) {
+      // ignore: unawaited_futures
+      telemetryService.syncInBackground();
+    }
+
+    // Second: Trigger full data sync
+    final syncManager = context.read<SyncManager>();
+    await syncManager.forceSyncNow();
   }
 
   @override
@@ -380,6 +399,9 @@ class _AppHomeState extends State<_AppHome> with WidgetsBindingObserver {
       if (authService.isLoggedIn) {
         // Refresh profile completion check on resume
         context.read<TelemetryService>().checkProfileCompletion();
+
+        // Also update last active time and sync on resume
+        _checkConnectivityAndSync();
       }
     }
   }

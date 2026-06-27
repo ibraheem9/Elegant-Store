@@ -2,9 +2,10 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:sqflite/sqflite.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+import 'license_service.dart';
 import 'auth_service.dart';
 import 'database_service.dart';
 
@@ -47,8 +48,17 @@ class DeviceSyncService {
     if (_deviceId != null) return _deviceId!;
 
     try {
-      final prefs = await SharedPreferences.getInstance();
+      // Priority 1: Hardware ID from LicenseService (most stable)
+      final hardwareId = await LicenseService.instance.getDeviceId();
+      if (hardwareId.isNotEmpty) {
+        _deviceId = hardwareId;
+        // Save to prefs as well for backward compatibility / other services
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('device_id', hardwareId);
+        return hardwareId;
+      }
 
+      final prefs = await SharedPreferences.getInstance();
       // Check if device ID already exists
       String? savedDeviceId = prefs.getString('device_id');
 
@@ -58,7 +68,7 @@ class DeviceSyncService {
         return _deviceId!;
       }
 
-      // Generate new device ID
+      // Generate new device ID if LicenseService failed
       final deviceInfo = DeviceInfoPlugin();
       String deviceId;
 
@@ -575,21 +585,80 @@ class DeviceSyncService {
       await _databaseService.updateStoreProfileMetrics(deviceId);
       
       final profile = await _databaseService.getStoreProfile(deviceId);
-      final info = await _databaseService.getDeviceInfo(deviceId);
-      
       if (profile == null) return false;
+
+      final prefs = await SharedPreferences.getInstance();
+
+      // 1. Collect Device Info
+      final deviceInfo = DeviceInfoPlugin();
+      String deviceName = 'Unknown';
+      String deviceModel = 'Unknown';
+      String osVersion = 'Unknown';
+      
+      try {
+        if (defaultTargetPlatform == TargetPlatform.android) {
+          final androidInfo = await deviceInfo.androidInfo;
+          deviceName = androidInfo.host;
+          deviceModel = '${androidInfo.manufacturer} ${androidInfo.model}';
+          osVersion = 'Android ${androidInfo.version.release}';
+        } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+          final iosInfo = await deviceInfo.iosInfo;
+          deviceName = iosInfo.name;
+          deviceModel = iosInfo.utsname.machine;
+          osVersion = 'iOS ${iosInfo.systemVersion}';
+        } else if (defaultTargetPlatform == TargetPlatform.windows) {
+          final winInfo = await deviceInfo.windowsInfo;
+          deviceName = winInfo.computerName;
+          deviceModel = winInfo.productName;
+          osVersion = 'Windows ${winInfo.releaseId}';
+        }
+      } catch (e) {
+        debugPrint('[DeviceSync] Error getting device info for profile sync: $e');
+      }
+
+      // 2. Collect App Info
+      String appVersion = 'Unknown';
+      try {
+        final packageInfo = await PackageInfo.fromPlatform();
+        appVersion = packageInfo.version;
+      } catch (e) {
+        debugPrint('[DeviceSync] Error getting package info: $e');
+      }
+
+      // 3. Get Recovery Token
+      final recoveryToken = prefs.getString('last_user_uuid') ?? '';
+
+      // 4. Prepare Flat Payload matching TelemetryService
+      final payload = {
+        'device_id': deviceId,
+        'store_name': profile.storeName ?? '',
+        'owner_name': profile.ownerName ?? '',
+        'address': profile.address ?? '',
+        'city': profile.city ?? '',
+        'mobile': profile.mobile ?? '',
+        'whatsapp': profile.whatsapp ?? '',
+        'device_name': deviceName,
+        'device_model': deviceModel,
+        'os_version': osVersion,
+        'app_version': appVersion,
+        'latitude': null, // DeviceSyncService doesn't typically handle geolocator
+        'longitude': null,
+        'invoice_count': profile.invoiceCount,
+        'customers_count': profile.customersCount,
+        'total_sales': profile.totalSales,
+        'total_purchase': profile.totalPurchase,
+        'recovery_token': recoveryToken,
+        'last_sync_time': profile.lastSyncTime ?? DateTime.now().toIso8601String(),
+        'last_active_time': profile.lastActiveTime ?? DateTime.now().toIso8601String(),
+      };
 
       final response = await _dio.post(
         ApiConfig.profileSyncEndpoint,
-        data: {
-          'profile': profile.toMap(),
-          'device_info': info?.toMap(),
-          'device_id': deviceId,
-        },
+        data: payload,
       );
 
       if (response.statusCode == 200 && response.data['success'] == true) {
-        debugPrint('[DeviceSync] Profile synced successfully to separate endpoint');
+        debugPrint('[DeviceSync] Profile synced successfully to ${ApiConfig.profileSyncEndpoint}');
         return true;
       }
       return false;

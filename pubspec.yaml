@@ -44,6 +44,7 @@ dependencies:
   url_launcher: ^6.3.1
   window_manager: ^0.5.1
   bcrypt: ^1.2.0
+  mask_text_input_formatter: ^2.5.0
 
 dev_dependencies:
   flutter_test:

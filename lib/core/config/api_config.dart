@@ -5,8 +5,7 @@ class ApiConfig {
   static const String dataSyncEndpoint = 'sync/device';
   
   /// Endpoint for syncing store profile and business metrics.
-  /// User will provide the actual link later.
-  static const String profileSyncEndpoint = 'profile/sync'; // Placeholder
+  static const String profileSyncEndpoint = 'app-customer/sync';
   
   /// Endpoint for syncing app customer tracking and usage stats.
   static const String appCustomerSyncEndpoint = 'app-customer/sync';

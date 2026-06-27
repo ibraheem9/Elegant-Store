@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/auth_service.dart';
@@ -106,6 +107,12 @@ class _CustomerFormBodyState extends State<_CustomerFormBody> {
   late bool _isPermanent;
   late bool _isUnlimited;
   bool _isSaving = false;
+
+  final _phoneMaskFormatter = MaskTextInputFormatter(
+    mask: '#### ### ###',
+    filter: {"#": RegExp(r'[0-9]')},
+    type: MaskAutoCompletionType.lazy,
+  );
 
   // Per-field error messages
   String? _nameError;
@@ -215,6 +222,7 @@ class _CustomerFormBodyState extends State<_CustomerFormBody> {
               icon: Icons.phone_android,
               isDark: isDark,
               keyboardType: TextInputType.phone,
+              inputFormatters: [_phoneMaskFormatter],
             ),
 
             // ── Transfer names ────────────────────────────────────────────
@@ -398,7 +406,9 @@ class _CustomerFormBodyState extends State<_CustomerFormBody> {
             maxLines: maxLines,
             keyboardType: keyboardType,
             textAlign: textAlign,
-            textDirection: textAlign == TextAlign.left ? ui.TextDirection.ltr : null,
+            textDirection: (keyboardType == TextInputType.phone || textAlign == TextAlign.left) 
+                ? ui.TextDirection.ltr 
+                : null,
             inputFormatters: inputFormatters,
             onChanged: onChanged,
             style: TextStyle(color: isDark ? Colors.white : Colors.black),
@@ -560,6 +570,8 @@ Future<void> _performSave(
       ? -1
       : (double.tryParse(ctrl.creditLimit.text) ?? 100.0);
 
+  final cleanPhone = ctrl.phone.text.replaceAll(RegExp(r'\D'), '');
+
   final userData = User(
     id: customer?.id,
     uuid: customer?.uuid ?? '',
@@ -568,7 +580,7 @@ Future<void> _performSave(
         customer?.username ?? 'cust_${DateTime.now().millisecondsSinceEpoch}',
     name: ctrl.name.text.trim(),
     nickname: ctrl.nickname.text.trim(),
-    phone: ctrl.phone.text.trim(),
+    phone: cleanPhone,
     role: 'CUSTOMER',
     isPermanentCustomer: isPermanent ? 1 : 0,
     creditLimit: isPermanent ? limit : 0.0,

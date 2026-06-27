@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'device_sync_service.dart';
 import 'database_service.dart';
 import 'sync_service.dart';
@@ -213,6 +214,14 @@ class SyncManager extends ChangeNotifier {
 
   /// Force immediate sync (ignoring interval)
   Future<bool> forceSyncNow() async {
+    // Check connectivity first
+    final connectivityResult = await Connectivity().checkConnectivity();
+    if (connectivityResult == ConnectivityResult.none) {
+      debugPrint('SyncManager: No internet connection, skipping sync');
+      _updateProgress(0.0, "لا يوجد اتصال بالإنترنت للمزامنة");
+      return false;
+    }
+
     if (_deviceSyncService.isSyncing) {
       debugPrint('SyncManager: Sync already in progress, skipping forceSyncNow');
       return true; // Consider it a success if a sync is already happening

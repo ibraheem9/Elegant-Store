@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import '../services/database_service.dart';
 import '../services/device_sync_service.dart';
 import '../services/auth_service.dart';
@@ -8,6 +10,7 @@ import '../models/models.dart';
 import '../utils/timestamp_formatter.dart';
 import '../services/theme_service.dart';
 import '../services/customer_tracking_service.dart';
+import '../services/telemetry_service.dart';
 import '../widgets/whatsapp_input.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -25,6 +28,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _cityController = TextEditingController();
   final _mobileController = TextEditingController();
   final _whatsappController = TextEditingController();
+
+  final _mobileMaskFormatter = MaskTextInputFormatter(
+    mask: '#### ### ###',
+    filter: {"#": RegExp(r'[0-9]')},
+    type: MaskAutoCompletionType.lazy,
+  );
+
+  final _whatsappMaskFormatter = MaskTextInputFormatter(
+    mask: '### ### ####',
+    filter: {"#": RegExp(r'[0-9]')},
+    type: MaskAutoCompletionType.lazy,
+  );
+
   String _whatsappCountryCode = '+970';
 
   bool _isLoading = true;
@@ -52,7 +68,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _isLoading = true);
     try {
       final db = context.read<DatabaseService>();
-      final authService = context.read<AuthService>();
       final deviceSync = context.read<DeviceSyncService>();
       final deviceId = await deviceSync.getDeviceId();
 
@@ -109,10 +124,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final deviceSync = context.read<DeviceSyncService>();
       final deviceId = await deviceSync.getDeviceId();
 
-      String whatsappText = _whatsappController.text.trim();
-      if (whatsappText.startsWith('0')) {
-        whatsappText = whatsappText.substring(1);
-      }
+      final cleanMobile = _mobileController.text.replaceAll(RegExp(r'\D'), '');
+      String whatsappText = _whatsappController.text.replaceAll(RegExp(r'\D'), '');
+      
       final fullWhatsapp = '$_whatsappCountryCode$whatsappText';
 
       final newProfile = (_profile ?? StoreProfile(deviceId: deviceId)).copyWith(
@@ -120,7 +134,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ownerName: _ownerNameController.text.trim(),
         address: _addressController.text.trim(),
         city: _cityController.text.trim(),
-        mobile: _mobileController.text.trim(),
+        mobile: cleanMobile,
         whatsapp: fullWhatsapp,
         lastActiveTime: TimestampFormatter.nowUtc(),
       );
@@ -134,10 +148,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await prefs.setString('settings_owner_name', _ownerNameController.text.trim());
       await prefs.setString('settings_address', _addressController.text.trim());
       await prefs.setString('settings_city', _cityController.text.trim());
-      await prefs.setString('settings_phone', _mobileController.text.trim());
+      await prefs.setString('settings_phone', cleanMobile);
       await prefs.setString('settings_whatsapp', fullWhatsapp);
 
       // Trigger immediate sync to server
+      // The updateAndUploadProfile call already handles uploading to telemetry endpoint
+      // but here we are in ProfileScreen which uses direct DB calls usually.
+      // We should use TelemetryService for consistent upload.
+      final telemetry = context.read<TelemetryService>();
+      await telemetry.updateAndUploadProfile(
+        storeName: _storeNameController.text.trim(),
+        ownerName: _ownerNameController.text.trim(),
+        address: _addressController.text.trim(),
+        city: _cityController.text.trim(),
+        phoneNumber: cleanMobile,
+        whatsappNumber: fullWhatsapp,
+      );
+
+      // Trigger tracking sync to server for other metrics
       // ignore: unawaited_futures
       CustomerTrackingService.instance.syncCustomerData(
         recoveryToken: authService.currentUser?.uuid,
@@ -210,78 +238,77 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                       // ── Store Information ──────────────────────────────────────────
                       _buildSection('معلومات المتجر', isDark, [
-                        _buildResponsiveInputs(isMobile, isDark, [
-                          _buildTextField(
-                            'اسم المتجر',
-                            _storeNameController,
-                            Icons.store_rounded,
-                            isDark,
-                            enabled: canEdit,
-                            validator: (v) => v == null || v.trim().isEmpty ? 'يرجى إدخال اسم المتجر' : null,
-                          ),
-                          _buildTextField(
-                            'اسم المالك',
-                            _ownerNameController,
-                            Icons.person_rounded,
-                            isDark,
-                            enabled: canEdit,
-                            validator: (v) => v == null || v.trim().isEmpty ? 'يرجى إدخال اسم المالك' : null,
-                          ),
-                        ]),
+                        _buildTextField(
+                          'اسم المتجر',
+                          _storeNameController,
+                          Icons.store_rounded,
+                          isDark,
+                          enabled: canEdit,
+                          validator: (v) => v == null || v.trim().isEmpty ? 'يرجى إدخال اسم المتجر' : null,
+                        ),
                         const SizedBox(height: 16),
-                        _buildResponsiveInputs(isMobile, isDark, [
-                          _buildTextField(
-                            'العنوان',
-                            _addressController,
-                            Icons.location_on_rounded,
-                            isDark,
-                            enabled: canEdit,
-                            validator: (v) => v == null || v.trim().isEmpty ? 'يرجى إدخال العنوان' : null,
-                          ),
-                          _buildTextField(
-                            'المدينة',
-                            _cityController,
-                            Icons.location_city_rounded,
-                            isDark,
-                            enabled: canEdit,
-                            validator: (v) => v == null || v.trim().isEmpty ? 'يرجى إدخال المدينة' : null,
-                          ),
-                        ]),
+                        _buildTextField(
+                          'اسم المالك',
+                          _ownerNameController,
+                          Icons.person_rounded,
+                          isDark,
+                          enabled: canEdit,
+                          validator: (v) => v == null || v.trim().isEmpty ? 'يرجى إدخال اسم المالك' : null,
+                        ),
                         const SizedBox(height: 16),
-                        _buildResponsiveInputs(isMobile, isDark, [
-                          _buildTextField(
-                            'رقم الهاتف (جوال)',
-                            _mobileController,
-                            Icons.phone_android_rounded,
-                            isDark,
-                            keyboardType: TextInputType.phone,
-                            enabled: canEdit,
-                            validator: (v) {
-                              if (v == null || v.trim().isEmpty) return 'يرجى إدخال رقم الجوال';
-                              final clean = v.trim();
-                              if (!RegExp(r'^(059|056)[0-9]{7}$').hasMatch(clean)) {
-                                return 'رقم غير صحيح (يجب أن يبدأ بـ 059 أو 056 ويتكون من 10 أرقام)';
-                              }
-                              return null;
-                            },
-                          ),
-                          WhatsAppInput(
-                            label: 'واتساب (WhatsApp)',
-                            selectedCountryCode: _whatsappCountryCode,
-                            controller: _whatsappController,
-                            onCountryCodeChanged: (v) => setState(() => _whatsappCountryCode = v!),
-                            isDark: isDark,
-                            enabled: canEdit,
-                            validator: (v) {
-                              if (v == null || v.trim().isEmpty) return 'يرجى إدخال رقم الواتساب';
-                              final clean = v.trim();
-                              if (!RegExp(r'^0?5[69][0-9]{7}$').hasMatch(clean)) {
-                                return 'رقم غير صحيح (يجب أن يتكون من 9 أرقام بعد رمز الدولة)';
-                              }
-                              return null;
-                            },
-                          ),
-                        ]),
+                        _buildTextField(
+                          'المدينة',
+                          _cityController,
+                          Icons.location_city_rounded,
+                          isDark,
+                          enabled: canEdit,
+                          validator: (v) => v == null || v.trim().isEmpty ? 'يرجى إدخال المدينة' : null,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildTextField(
+                          'العنوان',
+                          _addressController,
+                          Icons.location_on_rounded,
+                          isDark,
+                          enabled: canEdit,
+                          validator: (v) => v == null || v.trim().isEmpty ? 'يرجى إدخال العنوان' : null,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildTextField(
+                          'رقم الهاتف (جوال)',
+                          _mobileController,
+                          Icons.phone_android_rounded,
+                          isDark,
+                          keyboardType: TextInputType.phone,
+                          enabled: canEdit,
+                          inputFormatters: [_mobileMaskFormatter],
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) return 'يرجى إدخال رقم الجوال';
+                            final clean = v.replaceAll(RegExp(r'\D'), '');
+                            if (clean.length < 9) {
+                              return 'رقم هاتف غير صحيح';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        WhatsAppInput(
+                          label: 'واتساب (WhatsApp)',
+                          selectedCountryCode: _whatsappCountryCode,
+                          controller: _whatsappController,
+                          onCountryCodeChanged: (v) => setState(() => _whatsappCountryCode = v!),
+                          isDark: isDark,
+                          enabled: canEdit,
+                          inputFormatters: [_whatsappMaskFormatter],
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) return 'يرجى إدخال رقم الواتساب';
+                            final clean = v.replaceAll(RegExp(r'\D'), '');
+                            if (clean.length < 9) {
+                              return 'رقم غير صحيح (يجب أن يتكون من 9 أرقام بعد رمز الدولة)';
+                            }
+                            return null;
+                          },
+                        ),
                       ]),
 
                       const SizedBox(height: 32),
@@ -336,13 +363,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Row(crossAxisAlignment: CrossAxisAlignment.start, children: children.expand((w) => [Expanded(child: w), const SizedBox(width: 16)]).toList()..removeLast());
   }
 
-  Widget _buildTextField(String label, TextEditingController controller, IconData icon, bool isDark, {TextInputType? keyboardType, bool enabled = true, String? Function(String?)? validator}) {
-    return TextFormField(
+  Widget _buildTextField(String label, TextEditingController controller, IconData icon, bool isDark, {TextInputType? keyboardType, bool enabled = true, String? Function(String?)? validator, List<TextInputFormatter>? inputFormatters}) {
+    final bool isPhone = keyboardType == TextInputType.phone;
+    Widget textField = TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       enabled: enabled,
       validator: validator,
+      inputFormatters: inputFormatters,
       style: TextStyle(color: isDark ? Colors.white : (enabled ? Colors.black : Colors.black54)),
+      textAlign: isPhone ? TextAlign.left : TextAlign.start,
+      textDirection: isPhone ? TextDirection.ltr : null,
       decoration: InputDecoration(
         labelText: label,
         labelStyle: TextStyle(color: isDark ? Colors.grey : Colors.black54),
@@ -369,6 +400,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
     );
+
+    if (isPhone) {
+      return Directionality(
+        textDirection: TextDirection.ltr,
+        child: textField,
+      );
+    }
+    return textField;
   }
 
   Widget _buildMetricCard(String label, String value, IconData icon, Color color) {

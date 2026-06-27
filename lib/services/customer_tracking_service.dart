@@ -37,14 +37,14 @@ class CustomerTrackingService {
   /// Collects and syncs customer data to the server in the background.
   Future<void> syncCustomerData({String? recoveryToken}) async {
     try {
-      dev.log('Starting silent customer tracking sync...', name: 'CustomerTrackingService');
-      final prefs = await SharedPreferences.getInstance();
+      // 1. Get Unified Device ID
       final deviceId = await LicenseService.instance.getDeviceId();
+      final prefs = await SharedPreferences.getInstance();
       
       // Use provided token or try to get from prefs if saved (for background)
       final actualRecoveryToken = recoveryToken ?? prefs.getString('last_user_uuid') ?? '';
       
-      // 1. Collect Device Info
+      // 2. Collect Device Info
       String deviceName = 'Unknown';
       String deviceModel = 'Unknown';
       String osVersion = 'Unknown';
@@ -94,13 +94,15 @@ class CustomerTrackingService {
       final totalSales = await db.getTotalSalesAmount();
       final totalPurchase = await db.getTotalPurchaseAmount();
 
-      // 5. Get User Info from Settings
-      final storeName = prefs.getString('settings_store_name') ?? '';
-      final ownerName = prefs.getString('settings_owner_name') ?? '';
-      final address = prefs.getString('settings_address') ?? '';
-      final city = prefs.getString('settings_city') ?? '';
-      final mobile = prefs.getString('settings_phone') ?? '';
-      final whatsapp = prefs.getString('settings_whatsapp') ?? '';
+      // 5. Get User Info from DB (Primary) or Settings (Fallback)
+      final profile = await db.getStoreProfile(deviceId);
+      
+      final storeName = profile?.storeName ?? prefs.getString('settings_store_name') ?? '';
+      final ownerName = profile?.ownerName ?? prefs.getString('settings_owner_name') ?? '';
+      final address = profile?.address ?? prefs.getString('settings_address') ?? '';
+      final city = profile?.city ?? prefs.getString('settings_city') ?? '';
+      final mobile = profile?.mobile ?? prefs.getString('settings_phone') ?? '';
+      final whatsapp = profile?.whatsapp ?? prefs.getString('settings_whatsapp') ?? '';
 
       // 6. Prepare Payload (Simplified: NO CREDENTIALS SENT)
       final payload = {

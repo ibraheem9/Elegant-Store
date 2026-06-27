@@ -4,7 +4,11 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'license_service.dart';
+import 'customer_tracking_service.dart';
+import 'auth_service.dart';
 import 'package:uuid/uuid.dart';
 import '../models/models.dart';
 import 'database_service.dart';
@@ -36,6 +40,14 @@ class TelemetryService extends ChangeNotifier {
   }
 
   Future<String> getOrCreateDeviceId() async {
+    // Priority: License fingerprint (most stable across installs)
+    final hardwareId = await LicenseService.instance.getDeviceId();
+    if (hardwareId.isNotEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('device_id', hardwareId);
+      return hardwareId;
+    }
+
     final prefs = await SharedPreferences.getInstance();
     String? deviceId = prefs.getString('device_id');
     if (deviceId == null || deviceId.isEmpty) {
@@ -132,12 +144,94 @@ class TelemetryService extends ChangeNotifier {
     await _dbService.saveStoreProfile(profile);
     _isProfileComplete = await _dbService.isProfileComplete(deviceId);
     notifyListeners(); // Notify UI that profile has changed
+    
+    // Trigger comprehensive sync
     await uploadProfile(profile);
+
+    // Also trigger CustomerTrackingService to ensure consistent stats & metadata
+    // ignore: unawaited_futures
+    CustomerTrackingService.instance.syncCustomerData();
   }
 
   Future<bool> uploadProfile(StoreProfile profile) async {
     try {
-      final response = await _dio.post('sync/telemetry', data: profile.toMap());
+      final prefs = await SharedPreferences.getInstance();
+      final deviceId = profile.deviceId;
+      
+      // 1. Collect Device Info
+      final deviceInfo = DeviceInfoPlugin();
+      String deviceName = 'Unknown';
+      String deviceModel = 'Unknown';
+      String osVersion = 'Unknown';
+      
+      try {
+        if (Platform.isAndroid) {
+          final androidInfo = await deviceInfo.androidInfo;
+          deviceName = androidInfo.host;
+          deviceModel = '${androidInfo.manufacturer} ${androidInfo.model}';
+          osVersion = 'Android ${androidInfo.version.release}';
+        } else if (Platform.isIOS) {
+          final iosInfo = await deviceInfo.iosInfo;
+          deviceName = iosInfo.name;
+          deviceModel = iosInfo.utsname.machine;
+          osVersion = 'iOS ${iosInfo.systemVersion}';
+        } else if (Platform.isWindows) {
+          final winInfo = await deviceInfo.windowsInfo;
+          deviceName = winInfo.computerName;
+          deviceModel = winInfo.productName;
+          osVersion = 'Windows ${winInfo.releaseId}';
+        }
+      } catch (e) {
+        dev.log('Error getting device info for sync: $e', name: 'TelemetryService');
+      }
+
+      // 2. Collect App Info
+      String appVersion = 'Unknown';
+      try {
+        final packageInfo = await PackageInfo.fromPlatform();
+        appVersion = packageInfo.version;
+      } catch (e) {
+        dev.log('Error getting package info: $e', name: 'TelemetryService');
+      }
+
+      // 3. Collect Location (Silent)
+      double? lat, lng;
+      try {
+        final position = await getCurrentLocation();
+        if (position != null) {
+          lat = position.latitude;
+          lng = position.longitude;
+        }
+      } catch (_) {}
+
+      // 4. Get Recovery Token
+      final recoveryToken = prefs.getString('last_user_uuid') ?? '';
+
+      // 5. Prepare Flat Payload
+      final payload = {
+        'device_id': deviceId,
+        'store_name': profile.storeName ?? '',
+        'owner_name': profile.ownerName ?? '',
+        'address': profile.address ?? '',
+        'city': profile.city ?? '',
+        'mobile': profile.mobile ?? '',
+        'whatsapp': profile.whatsapp ?? '',
+        'device_name': deviceName,
+        'device_model': deviceModel,
+        'os_version': osVersion,
+        'app_version': appVersion,
+        'latitude': lat,
+        'longitude': lng,
+        'invoice_count': profile.invoiceCount,
+        'customers_count': profile.customersCount,
+        'total_sales': profile.totalSales,
+        'total_purchase': profile.totalPurchase,
+        'recovery_token': recoveryToken,
+        'last_sync_time': profile.lastSyncTime ?? DateTime.now().toIso8601String(),
+        'last_active_time': profile.lastActiveTime ?? DateTime.now().toIso8601String(),
+      };
+
+      final response = await _dio.post(ApiConfig.appCustomerSyncEndpoint, data: payload);
       
       if (response.statusCode == 200) {
         final updatedProfile = profile.copyWith(

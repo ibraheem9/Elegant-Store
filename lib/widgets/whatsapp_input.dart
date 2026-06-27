@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class WhatsAppInput extends StatelessWidget {
   final String label;
@@ -9,6 +10,7 @@ class WhatsAppInput extends StatelessWidget {
   final String? Function(String?)? validator;
   final bool enabled;
   final bool isDark;
+  final List<TextInputFormatter>? inputFormatters;
 
   const WhatsAppInput({
     Key? key,
@@ -19,11 +21,11 @@ class WhatsAppInput extends StatelessWidget {
     this.validator,
     this.enabled = true,
     this.isDark = false,
+    this.inputFormatters,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final borderColor = isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0);
     final fillColor = isDark ? const Color(0xFF071028) : Colors.grey[50];
 
@@ -73,6 +75,7 @@ class WhatsAppInput extends StatelessWidget {
                     validator: validator,
                     textAlign: TextAlign.left,
                     keyboardType: TextInputType.phone,
+                    inputFormatters: inputFormatters,
                     style: TextStyle(
                       color: isDark ? Colors.white : (enabled ? Colors.black : Colors.black54),
                     ),

@@ -1,12 +1,15 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../services/telemetry_service.dart';
 import '../services/database_service.dart';
 import '../services/license_service.dart';
 import '../services/import_service.dart';
+import '../services/sync_manager.dart';
 import '../widgets/whatsapp_input.dart';
+import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
   const ProfileSetupScreen({Key? key}) : super(key: key);
@@ -23,6 +26,19 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final _cityController = TextEditingController();
   final _phoneController = TextEditingController();
   final _whatsappController = TextEditingController();
+
+  final _phoneMaskFormatter = MaskTextInputFormatter(
+    mask: '#### ### ###',
+    filter: {"#": RegExp(r'[0-9]')},
+    type: MaskAutoCompletionType.lazy,
+  );
+
+  final _whatsappMaskFormatter = MaskTextInputFormatter(
+    mask: '### ### ####',
+    filter: {"#": RegExp(r'[0-9]')},
+    type: MaskAutoCompletionType.lazy,
+  );
+
   String _selectedCountryCode = '+970';
   bool _isLoading = false;
   bool _isDataRealConfirmed = false;
@@ -60,6 +76,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
           );
           // Trigger a refresh of the profile completion status
           await context.read<TelemetryService>().checkProfileCompletion();
+          
+          // Also trigger sync after import
+          context.read<SyncManager>().forceSyncNow();
         } else if (result.message != 'لم يتم اختيار أي ملف.') {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -94,15 +113,17 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
   String? _validatePhone(String? value) {
     if (value == null || value.isEmpty) return 'يرجى إدخال رقم الهاتف';
-    if (!RegExp(r'^05[69]\d{7}$').hasMatch(value)) {
-      return 'يرجى إدخال رقم فلسطيني صحيح (059xxxxxxx)';
+    final cleanValue = value.replaceAll(RegExp(r'\D'), '');
+    if (cleanValue.length < 9) {
+      return 'يرجى إدخال رقم هاتف صحيح';
     }
     return null;
   }
 
   String? _validateWhatsapp(String? value) {
     if (value == null || value.isEmpty) return 'يرجى إدخال رقم واتساب';
-    if (!RegExp(r'^0?\d{9}$').hasMatch(value)) {
+    final cleanValue = value.replaceAll(RegExp(r'\D'), '');
+    if (!RegExp(r'^\d{9}$').hasMatch(cleanValue)) {
       return 'يرجى إدخال 9 أرقام بعد رمز الدولة';
     }
     return null;
@@ -114,23 +135,25 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     setState(() => _isLoading = true);
     try {
       final telemetry = context.read<TelemetryService>();
-      String whatsappText = _whatsappController.text.trim();
-      if (whatsappText.startsWith('0')) {
-        whatsappText = whatsappText.substring(1);
-      }
+      final cleanPhone = _phoneController.text.replaceAll(RegExp(r'\D'), '');
+      String whatsappText = _whatsappController.text.replaceAll(RegExp(r'\D'), '');
+      
       final fullWhatsapp = '$_selectedCountryCode$whatsappText';
       await telemetry.updateAndUploadProfile(
         storeName: _storeNameController.text.trim(),
         ownerName: _ownerNameController.text.trim(),
         address: _addressController.text.trim(),
         city: _cityController.text.trim(),
-        phoneNumber: _phoneController.text.trim(),
+        phoneNumber: cleanPhone,
         whatsappNumber: fullWhatsapp,
       );
       // Navigation will be handled by main.dart because we notify listeners or state changes
       if (mounted) {
         // Trigger a refresh of the profile completion status in TelemetryService
         await telemetry.checkProfileCompletion();
+
+        // Trigger immediate sync as requested
+        context.read<SyncManager>().forceSyncNow();
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -213,36 +236,29 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                         hint: 'الاسم الكامل',
                       ),
                       const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildTextField(
-                              controller: _cityController,
-                              label: 'المدينة',
-                              icon: Icons.location_city_rounded,
-                              hint: 'غزة، نابلس، إلخ',
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _buildTextField(
-                              controller: _addressController,
-                              label: 'العنوان',
-                              icon: Icons.map_rounded,
-                              hint: 'اسم الشارع',
-                            ),
-                          ),
-                        ],
+                      _buildTextField(
+                        controller: _cityController,
+                        label: 'المدينة',
+                        icon: Icons.location_city_rounded,
+                        hint: 'غزة، نابلس، إلخ',
+                      ),
+                      const SizedBox(height: 16),
+                      _buildTextField(
+                        controller: _addressController,
+                        label: 'العنوان',
+                        icon: Icons.map_rounded,
+                        hint: 'اسم الشارع',
                       ),
                       const SizedBox(height: 16),
                       _buildTextField(
                         controller: _phoneController,
                         label: 'رقم الهاتف',
                         icon: Icons.phone_android_rounded,
-                        hint: '059xxxxxxx',
+                        hint: '059 000 0000',
                         validator: _validatePhone,
                         keyboardType: TextInputType.phone,
                         textAlign: TextAlign.left,
+                        inputFormatters: [_phoneMaskFormatter],
                       ),
                       const SizedBox(height: 16),
                       WhatsAppInput(
@@ -252,6 +268,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                         onCountryCodeChanged: (v) => setState(() => _selectedCountryCode = v!),
                         validator: _validateWhatsapp,
                         isDark: isDark,
+                        inputFormatters: [_whatsappMaskFormatter],
                       ),
                       const SizedBox(height: 24),
                       Container(
@@ -325,13 +342,16 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     String? Function(String?)? validator,
     TextInputType? keyboardType,
     TextAlign textAlign = TextAlign.start,
+    List<dynamic>? inputFormatters,
   }) {
-    return TextFormField(
+    final bool isPhone = keyboardType == TextInputType.phone;
+    Widget textField = TextFormField(
       controller: controller,
       validator: validator ?? (v) => v == null || v.isEmpty ? 'هذا الحقل مطلوب' : null,
       keyboardType: keyboardType,
-      textAlign: textAlign,
-      textDirection: textAlign == TextAlign.left ? ui.TextDirection.ltr : null,
+      textAlign: isPhone ? TextAlign.left : textAlign,
+      textDirection: isPhone ? ui.TextDirection.ltr : (textAlign == TextAlign.left ? ui.TextDirection.ltr : null),
+      inputFormatters: inputFormatters != null ? List<TextInputFormatter>.from(inputFormatters) : null,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
@@ -340,5 +360,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
     );
+
+    if (isPhone) {
+      return Directionality(
+        textDirection: ui.TextDirection.ltr,
+        child: textField,
+      );
+    }
+    return textField;
   }
 }
