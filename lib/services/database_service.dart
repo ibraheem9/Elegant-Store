@@ -3587,7 +3587,7 @@ class DatabaseService {
       'invoice_count': metrics['invoice_count'],
       'total_sales': metrics['total_sales'],
       'total_purchase': metrics['total_purchase'],
-      'last_active_time': TimestampFormatter.nowUtc(),
+      'last_active_time': TimestampFormatter.nowWithOffset(),
     };
 
     // Check if profile exists first

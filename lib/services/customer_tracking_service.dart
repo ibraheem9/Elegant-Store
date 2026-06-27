@@ -9,6 +9,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/config/api_config.dart';
+import '../utils/timestamp_formatter.dart';
 import 'database_service.dart';
 import 'license_service.dart';
 
@@ -124,8 +125,8 @@ class CustomerTrackingService {
         'total_sales': totalSales,
         'total_purchase': totalPurchase,
         'recovery_token': actualRecoveryToken,
-        'last_sync_time': DateTime.now().toIso8601String(),
-        'last_active_time': DateTime.now().toIso8601String(),
+        'last_sync_time': TimestampFormatter.nowWithOffset(),
+        'last_active_time': TimestampFormatter.nowWithOffset(),
       };
 
       // 7. Send to Server (Background)

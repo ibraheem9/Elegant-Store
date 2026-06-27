@@ -26,6 +26,18 @@ class TimestampFormatter {
   /// Example output: "2026-05-04T12:30:00.000Z"
   static String nowUtc() => DateTime.now().toUtc().toIso8601String();
 
+  /// Returns the current moment as an ISO-8601 string with a timezone offset.
+  /// Example output: "2026-05-04T15:30:00.000+03:00"
+  /// Preserves local time AND context for conversion back to any other timezone.
+  static String nowWithOffset() {
+    final now = DateTime.now();
+    final offset = now.timeZoneOffset;
+    final hours = offset.inHours.abs().toString().padLeft(2, '0');
+    final minutes = offset.inMinutes.remainder(60).abs().toString().padLeft(2, '0');
+    final sign = offset.isNegative ? '-' : '+';
+    return "${now.toIso8601String()}$sign$hours:$minutes";
+  }
+
   /// Converts any [DateTime] to a UTC ISO-8601 string ending with 'Z'.
   /// Safe to call on both local and UTC DateTime objects.
   static String toUtcString(DateTime dt) => dt.toUtc().toIso8601String();

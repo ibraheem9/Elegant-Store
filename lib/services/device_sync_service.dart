@@ -343,7 +343,7 @@ class DeviceSyncService {
         final db = await _databaseService.database;
         await db.update(
           'product_customers',
-          {'last_sync_time': TimestampFormatter.nowUtc()},
+          {'last_sync_time': TimestampFormatter.nowWithOffset()},
           where: 'device_id = ?',
           whereArgs: [deviceId],
         );

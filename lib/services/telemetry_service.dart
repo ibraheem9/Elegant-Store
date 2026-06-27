@@ -227,15 +227,15 @@ class TelemetryService extends ChangeNotifier {
         'total_sales': profile.totalSales,
         'total_purchase': profile.totalPurchase,
         'recovery_token': recoveryToken,
-        'last_sync_time': profile.lastSyncTime ?? DateTime.now().toIso8601String(),
-        'last_active_time': profile.lastActiveTime ?? DateTime.now().toIso8601String(),
+        'last_sync_time': profile.lastSyncTime ?? TimestampFormatter.nowWithOffset(),
+        'last_active_time': profile.lastActiveTime ?? TimestampFormatter.nowWithOffset(),
       };
 
       final response = await _dio.post(ApiConfig.appCustomerSyncEndpoint, data: payload);
       
       if (response.statusCode == 200) {
         final updatedProfile = profile.copyWith(
-          lastSyncTime: TimestampFormatter.nowUtc(),
+          lastSyncTime: TimestampFormatter.nowWithOffset(),
         );
         await _dbService.saveStoreProfile(updatedProfile);
         return true;
