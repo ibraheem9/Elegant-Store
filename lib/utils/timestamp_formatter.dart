@@ -27,20 +27,11 @@ class TimestampFormatter {
   /// Returns the current moment as an ISO-8601 string with a timezone offset.
   /// Example output: "2026-05-04T15:30:00.000+03:00"
   /// Preserves local time AND context for conversion back to any other timezone.
-  static String nowWithOffset() {
-    return toLocalizedIsoString(DateTime.now());
-  }
+  static String nowWithOffset() => nowUtc();
 
   /// Converts any [DateTime] to an ISO-8601 string with its local timezone offset.
   /// This is the preferred way to save timestamps globally in the app.
-  static String toLocalizedIsoString(DateTime dt) {
-    final offset = dt.timeZoneOffset;
-    final hours = offset.inHours.abs().toString().padLeft(2, '0');
-    final minutes = offset.inMinutes.remainder(60).abs().toString().padLeft(2, '0');
-    final sign = offset.isNegative ? '-' : '+';
-    // Use .toIso8601String() which handles the date/time part correctly for local objects
-    return "${dt.toIso8601String()}$sign$hours:$minutes";
-  }
+  static String toLocalizedIsoString(DateTime dt) => dt.toUtc().toIso8601String();
 
   /// Converts any [DateTime] to a UTC ISO-8601 string ending with 'Z'.
   /// Use [toLocalizedIsoString] instead for localized storage.

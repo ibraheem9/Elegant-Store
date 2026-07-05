@@ -19,6 +19,8 @@ import 'customer_tracking_service.dart';
 import 'license_service.dart';
 import 'dart:developer' as dev;
 
+import 'telemetry_service.dart';
+
 /// Result of a login attempt.
 enum LoginResult {
   success,
@@ -673,8 +675,13 @@ class AuthService extends ChangeNotifier {
     try {
       final deviceId = await LicenseService.instance.getDeviceId();
       await _dbService.updateStoreProfileMetrics(deviceId);
-      // Trigger background sync
+      
+      // 1. Trigger CustomerTrackingService sync
       CustomerTrackingService.instance.syncCustomerData();
+
+      // 2. Trigger TelemetryService sync for immediate "Last Active" update on dashboard
+      // ignore: unawaited_futures
+      TelemetryService(_dbService).syncInBackground();
     } catch (e) {
       dev.log('Error triggering tracking sync: $e', name: 'AuthService');
     }
