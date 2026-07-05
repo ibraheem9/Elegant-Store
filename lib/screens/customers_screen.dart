@@ -1142,7 +1142,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     
     // If user didn't change the date, preserve EXACT original createdAt string
     final nowUtc = isDateChanged 
-        ? TimestampFormatter.applyPastDateRuleUtc(editSelectedDate)
+        ? TimestampFormatter.applyPastDateRuleLocalized(editSelectedDate)
         : inv.createdAt;
 
     final newInv = Invoice(
@@ -1159,7 +1159,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
       version: inv.version,
       createdAt: nowUtc,
-      updatedAt: TimestampFormatter.nowUtc(),
+      updatedAt: TimestampFormatter.nowWithOffset(),
       isSynced: 0,
     );
     final db = context.read<DatabaseService>();

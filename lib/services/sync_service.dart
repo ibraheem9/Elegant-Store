@@ -211,7 +211,7 @@ class SyncService extends ChangeNotifier {
     required int invoicesDownloaded,
     required int recordsUpdated,
   }) async {
-    final localTimestamp = TimestampFormatter.nowUtc();
+    final localTimestamp = TimestampFormatter.nowWithOffset();
     
     final details = SyncDetails(
       lastSyncTime: localTimestamp,
@@ -363,7 +363,7 @@ class SyncService extends ChangeNotifier {
         });
 
         // Also update the local "Last Sync" display time for the Push phase
-        final localTimestamp = TimestampFormatter.nowUtc();
+        final localTimestamp = TimestampFormatter.nowWithOffset();
         await _prefs.setString('last_sync_time_local', localTimestamp);
         
         // Update SyncDetails for the Push phase
@@ -445,7 +445,7 @@ class SyncService extends ChangeNotifier {
         });
 
         await _dbService.recalculateAllBalances();
-        final localTimestamp = TimestampFormatter.nowUtc();
+        final localTimestamp = TimestampFormatter.nowWithOffset();
         if (serverTimestamp != null) {
           await _prefs.setString('last_sync_time', serverTimestamp);
         }
@@ -913,7 +913,7 @@ class SyncService extends ChangeNotifier {
       final Map<String, dynamic> tableCounts =
           _safeMap(metaData['tables']) ?? {};
       final String serverTimestamp =
-          _safeString(metaData['timestamp']) ?? TimestampFormatter.nowUtc();
+          _safeString(metaData['timestamp']) ?? TimestampFormatter.nowWithOffset();
       final allTables = [..._parentTables, ..._childTables];
       int totalRecords = 0;
       for (final key in allTables) {
@@ -978,7 +978,7 @@ class SyncService extends ChangeNotifier {
       // ── Step 4: Recalculate balances and save timestamps ─────────────
       _setRestoreProgress(0.92, 'جاري إعادة حساب الأرصدة…');
       await _dbService.recalculateAllBalances();
-      final localTimestamp = TimestampFormatter.nowUtc();
+      final localTimestamp = TimestampFormatter.nowWithOffset();
       await _prefs.setString('last_sync_time', serverTimestamp);
       await _prefs.setString('last_sync_time_local', localTimestamp);
       await _saveSyncDetails(SyncDetails(
@@ -1123,7 +1123,7 @@ class SyncService extends ChangeNotifier {
       throw Exception(metaData['message'] ?? 'فشل تحميل معلومات البيانات');
     }
     final Map<String, dynamic> tableCounts = _safeMap(metaData['tables']) ?? {};
-    final String timestamp = _safeString(metaData['timestamp']) ?? TimestampFormatter.nowUtc();
+    final String timestamp = _safeString(metaData['timestamp']) ?? TimestampFormatter.nowWithOffset();
 
     int totalRecords = 0;
     for (final key in [..._parentTables, ..._childTables]) {
@@ -1270,7 +1270,7 @@ class SyncService extends ChangeNotifier {
       }
 
       final String exportedAt =
-          (payload['exported_at'] as String?) ?? TimestampFormatter.nowUtc();
+          (payload['exported_at'] as String?) ?? TimestampFormatter.nowWithOffset();
 
       // Count total records for progress
       int totalRecords = 0;
@@ -1323,7 +1323,7 @@ class SyncService extends ChangeNotifier {
       onProgress?.call(0.92, 'جاري إعادة حساب الأرصدة…');
       await _dbService.recalculateAllBalances();
 
-      final localTimestamp = TimestampFormatter.nowUtc();
+      final localTimestamp = TimestampFormatter.nowWithOffset();
       await _prefs.setString('last_sync_time', exportedAt);
       await _prefs.setString('last_sync_time_local', localTimestamp);
       await _saveSyncDetails(SyncDetails(

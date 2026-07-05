@@ -187,7 +187,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
       paidAmount: newPaidAmount, notes: notes + editLog,
       paymentStatus: newStatus, paymentMethodId: selectedMethod.id,
       type: inv.type, version: inv.version, isSynced: 0,
-      createdAt: inv.createdAt, updatedAt: TimestampFormatter.nowUtc(),
+      createdAt: inv.createdAt, updatedAt: TimestampFormatter.nowWithOffset(),
     ));
 
     db.logActivity(

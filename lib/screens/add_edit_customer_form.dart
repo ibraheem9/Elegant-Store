@@ -589,7 +589,7 @@ Future<void> _performSave(
         : 0.0,
     transferNames: ctrl.transferNames.text.trim(),
     notes: ctrl.notes.text.trim(),
-    createdAt: customer?.createdAt ?? TimestampFormatter.nowUtc(),
+    createdAt: customer?.createdAt ?? TimestampFormatter.nowWithOffset(),
   );
 
   if (customer == null) {

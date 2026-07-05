@@ -292,7 +292,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       totalAppPurchases:      _appPurchases,
       totalSalesCash:         _totalCashSales,
       totalSalesCredit:       _appSales,
-      createdAt:              TimestampFormatter.toUtcString(_cashBoxDate),
+      createdAt:              TimestampFormatter.toLocalizedIsoString(_cashBoxDate),
     );
     await db.insertDailyStatistics(stats);
     setState(() {

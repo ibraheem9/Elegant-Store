@@ -136,7 +136,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         city: _cityController.text.trim(),
         mobile: cleanMobile,
         whatsapp: fullWhatsapp,
-        lastActiveTime: TimestampFormatter.nowUtc(),
+        lastActiveTime: TimestampFormatter.nowWithOffset(),
       );
 
       await db.saveStoreProfile(newProfile);

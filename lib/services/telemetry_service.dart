@@ -137,7 +137,7 @@ class TelemetryService extends ChangeNotifier {
       invoiceCount: (metrics['invoice_count'] as num?)?.toInt() ?? existing?.invoiceCount ?? 0,
       totalSales: (metrics['total_sales'] as num?)?.toDouble() ?? existing?.totalSales ?? 0.0,
       totalPurchase: (metrics['total_purchase'] as num?)?.toDouble() ?? existing?.totalPurchase ?? 0.0,
-      lastActiveTime: TimestampFormatter.nowUtc(),
+      lastActiveTime: TimestampFormatter.nowWithOffset(),
       lastSyncTime: existing?.lastSyncTime,
     );
 
@@ -257,7 +257,7 @@ class TelemetryService extends ChangeNotifier {
         invoiceCount: (metrics['invoice_count'] as num?)?.toInt(),
         totalSales: (metrics['total_sales'] as num?)?.toDouble(),
         totalPurchase: (metrics['total_purchase'] as num?)?.toDouble(),
-        lastActiveTime: TimestampFormatter.nowUtc(),
+        lastActiveTime: TimestampFormatter.nowWithOffset(),
       );
       await uploadProfile(refreshedProfile);
     }

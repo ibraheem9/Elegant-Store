@@ -451,8 +451,8 @@ class ExportService {
     }
 
     final Map<String, dynamic> exportData = {};
-    final String startStr = TimestampFormatter.toUtcString(startDate.copyWith(hour: 0, minute: 0, second: 0));
-    final String endStr = TimestampFormatter.toUtcString(endDate.copyWith(hour: 23, minute: 59, second: 59));
+    final String startStr = TimestampFormatter.toLocalizedIsoString(startDate.copyWith(hour: 0, minute: 0, second: 0));
+    final String endStr = TimestampFormatter.toLocalizedIsoString(endDate.copyWith(hour: 23, minute: 59, second: 59));
 
     for (final table in tablesToInclude) {
       if (!_tableOrder.contains(table)) continue;

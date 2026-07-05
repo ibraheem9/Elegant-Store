@@ -21,34 +21,52 @@ class TimestampFormatter {
   // ---------------------------------------------------------------------------
 
   /// Returns the current moment as a UTC ISO-8601 string ending with 'Z'.
-  /// Use this instead of `DateTime.now().toIso8601String()` everywhere.
-  ///
-  /// Example output: "2026-05-04T12:30:00.000Z"
+  /// Use [nowWithOffset] instead for localized storage.
   static String nowUtc() => DateTime.now().toUtc().toIso8601String();
 
   /// Returns the current moment as an ISO-8601 string with a timezone offset.
   /// Example output: "2026-05-04T15:30:00.000+03:00"
   /// Preserves local time AND context for conversion back to any other timezone.
   static String nowWithOffset() {
-    final now = DateTime.now();
-    final offset = now.timeZoneOffset;
+    return toLocalizedIsoString(DateTime.now());
+  }
+
+  /// Converts any [DateTime] to an ISO-8601 string with its local timezone offset.
+  /// This is the preferred way to save timestamps globally in the app.
+  static String toLocalizedIsoString(DateTime dt) {
+    final offset = dt.timeZoneOffset;
     final hours = offset.inHours.abs().toString().padLeft(2, '0');
     final minutes = offset.inMinutes.remainder(60).abs().toString().padLeft(2, '0');
     final sign = offset.isNegative ? '-' : '+';
-    return "${now.toIso8601String()}$sign$hours:$minutes";
+    // Use .toIso8601String() which handles the date/time part correctly for local objects
+    return "${dt.toIso8601String()}$sign$hours:$minutes";
   }
 
   /// Converts any [DateTime] to a UTC ISO-8601 string ending with 'Z'.
-  /// Safe to call on both local and UTC DateTime objects.
+  /// Use [toLocalizedIsoString] instead for localized storage.
   static String toUtcString(DateTime dt) => dt.toUtc().toIso8601String();
 
-  /// Applies the "end-of-day" rule for past dates, then returns a UTC string.
+  /// Applies the "end-of-day" rule for past dates, then returns a Localized string.
   ///
   /// Rule:
-  ///   • If [date] is before today (local) → set time to 23:59:59 local, then convert to UTC.
-  ///   • If [date] is today or in the future → use current local time, then convert to UTC.
-  ///
-  /// This is the canonical function to call when the user picks a date for an invoice.
+  ///   • If [date] is before today (local) → set time to 23:59:59 local, then add offset.
+  ///   • If [date] is today or in the future → use current local time, then add offset.
+  static String applyPastDateRuleLocalized(DateTime date) {
+    final now = DateTime.now();
+    final todayLocal = DateTime(now.year, now.month, now.day);
+    final inputLocal = DateTime(date.year, date.month, date.day);
+
+    DateTime localResult;
+    if (inputLocal.isBefore(todayLocal)) {
+      localResult = DateTime(date.year, date.month, date.day, 23, 59, 59);
+    } else {
+      localResult = DateTime(
+          date.year, date.month, date.day, now.hour, now.minute, now.second);
+    }
+    return toLocalizedIsoString(localResult);
+  }
+
+  /// Legacy UTC version. Use [applyPastDateRuleLocalized] instead.
   static String applyPastDateRuleUtc(DateTime date) {
     final now = DateTime.now();
     final todayLocal = DateTime(now.year, now.month, now.day);
@@ -56,10 +74,8 @@ class TimestampFormatter {
 
     DateTime localResult;
     if (inputLocal.isBefore(todayLocal)) {
-      // Past date: treat as end-of-business-day in local time
       localResult = DateTime(date.year, date.month, date.day, 23, 59, 59);
     } else {
-      // Today or future: use the current clock time
       localResult = DateTime(
           date.year, date.month, date.day, now.hour, now.minute, now.second);
     }

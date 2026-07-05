@@ -404,7 +404,7 @@ class _SalesScreenState extends State<SalesScreen> {
           phone: _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
           role: 'CUSTOMER',
           isPermanentCustomer: 0,
-          createdAt: TimestampFormatter.nowUtc(),
+          createdAt: TimestampFormatter.nowWithOffset(),
         );
         final id = await db.insertUser(
           newUser,
@@ -420,7 +420,7 @@ class _SalesScreenState extends State<SalesScreen> {
         status = (customer.isPermanentCustomer == 1) ? 'DEFERRED' : 'UNPAID';
       }
 
-      final combinedDateTimeUtc = TimestampFormatter.applyPastDateRuleUtc(_selectedInvoiceDate);
+      final combinedDateTimeUtc = TimestampFormatter.applyPastDateRuleLocalized(_selectedInvoiceDate);
 
       final invoice = Invoice(
         userId: customer.id!,
@@ -487,7 +487,7 @@ class _SalesScreenState extends State<SalesScreen> {
           phone: _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
           role: 'CUSTOMER',
           isPermanentCustomer: 0,
-          createdAt: TimestampFormatter.nowUtc(),
+          createdAt: TimestampFormatter.nowWithOffset(),
         );
         final id = await db.insertUser(
           newUser,
@@ -699,7 +699,7 @@ class _SalesScreenState extends State<SalesScreen> {
       // If the user didn't manually change the date, we MUST preserve the EXACT string
       // from the old invoice to avoid shifting the time (e.g. from 23:59:59 to current time).
       final newCreatedAt = isDateChanged 
-          ? TimestampFormatter.applyPastDateRuleUtc(editSelectedDate)
+          ? TimestampFormatter.applyPastDateRuleLocalized(editSelectedDate)
           : inv.createdAt;
 
       // Update invoice_date to match createdAt exactly (UTC ISO8601)

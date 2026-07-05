@@ -72,7 +72,7 @@ class User {
     this.deletedAt,
     this.isSynced = 0,
     this.permissions,
-  }) : updatedAt = updatedAt ?? TimestampFormatter.nowUtc();
+  }) : updatedAt = updatedAt ?? TimestampFormatter.nowWithOffset();
 
   Map<String, dynamic> toMap() {
     return {
@@ -173,8 +173,8 @@ class PaymentMethod {
     String? createdAt,
     String? updatedAt,
     this.isSynced = 0,
-  })  : createdAt = createdAt ?? TimestampFormatter.nowUtc(),
-        updatedAt = updatedAt ?? TimestampFormatter.nowUtc();
+  })  : createdAt = createdAt ?? TimestampFormatter.nowWithOffset(),
+        updatedAt = updatedAt ?? TimestampFormatter.nowWithOffset();
 
   Map<String, dynamic> toMap() {
     return {
@@ -292,7 +292,7 @@ class Invoice {
     this.userUuid,
     this.customerIsPermanent = 0,
     this.lastEditedBy,
-  }) : updatedAt = updatedAt ?? TimestampFormatter.nowUtc();
+  }) : updatedAt = updatedAt ?? TimestampFormatter.nowWithOffset();
 
   Map<String, dynamic> toMap() {
     return {
@@ -388,7 +388,7 @@ class FinancialTransaction {
     this.isSynced = 0,
     this.buyerUuid,
     this.invoiceUuid,
-  }) : updatedAt = updatedAt ?? TimestampFormatter.nowUtc();
+  }) : updatedAt = updatedAt ?? TimestampFormatter.nowWithOffset();
 
   Map<String, dynamic> toMap() {
     return {
@@ -471,7 +471,7 @@ class Purchase {
     String? updatedAt,
     this.deletedAt,
     this.isSynced = 0,
-  }) : updatedAt = updatedAt ?? TimestampFormatter.nowUtc();
+  }) : updatedAt = updatedAt ?? TimestampFormatter.nowWithOffset();
 
   Map<String, dynamic> toMap() {
     return {
@@ -554,7 +554,7 @@ class DailyStatistics {
     required this.createdAt,
     String? updatedAt,
     this.isSynced = 0,
-  }) : updatedAt = updatedAt ?? TimestampFormatter.nowUtc();
+  }) : updatedAt = updatedAt ?? TimestampFormatter.nowWithOffset();
 
   Map<String, dynamic> toMap() {
     return {

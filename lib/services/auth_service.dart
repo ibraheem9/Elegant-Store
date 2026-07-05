@@ -226,7 +226,7 @@ class AuthService extends ChangeNotifier {
           await prefs.remove('last_sync_time');
         }
 
-        final now = TimestampFormatter.nowUtc();
+        final now = TimestampFormatter.nowWithOffset();
 
         // Prepare data for local DB
         final Map<String, dynamic> localUserDataMap = {
@@ -350,7 +350,7 @@ class AuthService extends ChangeNotifier {
         return false;
       }
 
-      final now = TimestampFormatter.nowUtc();
+      final now = TimestampFormatter.nowWithOffset();
       await db.update(
         'users',
         {'name': name, 'username': cleanNewUsername, 'updated_at': now, 'is_synced': 0},
@@ -412,7 +412,7 @@ class AuthService extends ChangeNotifier {
       }
 
       // 2. Update local database and mark as unsynced
-      final now = TimestampFormatter.nowUtc();
+      final now = TimestampFormatter.nowWithOffset();
       await db.update(
         'users',
         {'password': PasswordUtils.hashPassword(newPass), 'updated_at': now, 'is_synced': 0},

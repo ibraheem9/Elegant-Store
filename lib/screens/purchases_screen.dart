@@ -160,7 +160,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           paymentSource: _selectedMethod?.type == 'app' ? 'APP' : 'CASH',
           paymentMethodId: _selectedMethod?.id,
           notes:         _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
-          createdAt:     TimestampFormatter.toUtcString(dt),
+          createdAt:     TimestampFormatter.toLocalizedIsoString(dt),
         ),
         performedById: actUser?.id,
         performedByName: actUser?.name ?? actUser?.username,
@@ -303,7 +303,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       final db     = context.read<DatabaseService>();
       // Preserve original createdAt if user didn't manually change the date
       final newCreatedAt = isDateChanged
-          ? TimestampFormatter.applyPastDateRuleUtc(editSelectedDate)
+          ? TimestampFormatter.applyPastDateRuleLocalized(editSelectedDate)
           : p.createdAt;
       await db.editPurchaseWithLog(
         oldPurchase: p,
