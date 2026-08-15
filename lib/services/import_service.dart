@@ -244,16 +244,28 @@ class ImportService {
             // Strip fields that don't exist in the local SQLite table to prevent errors
             row.removeWhere((key, _) => !validColumns.contains(key));
 
+            // ── Legacy Mapping ──────────────────────────────────────────────
+            // Map old hardcoded system UUIDs to new standard system UUIDs
+            if (table == 'users' && uuid != null) {
+              if (uuid.startsWith('dev-ibraheem-abd-elhadi')) {
+                row['uuid'] = 'D3V82B91X92K0L1M9P3Q7R5S';
+              } else if (uuid.startsWith('admin-ibraheem-store')) {
+                row['uuid'] = 'A1M9N2B8V3C7X4Z5L6K0J1H';
+              }
+            }
+
+            final String? finalUuid = row['uuid'] as String?;
+
             // ── Step 1: Look up by UUID or Device ID ───────────────────────
             int? existingId;
-            if (uuid != null) {
-              existingId = uuidToIdCache.containsKey(table) ? uuidToIdCache[table]![uuid] : null;
+            if (finalUuid != null) {
+              existingId = uuidToIdCache.containsKey(table) ? uuidToIdCache[table]![finalUuid] : null;
             } else if (deviceId != null) {
               existingId = secondaryKeyCache[deviceId];
             }
 
             // ── Step 2: Fallback lookup by secondary unique field ──────────
-            if (existingId == null && uuid != null && secondaryField != null) {
+            if (existingId == null && finalUuid != null && secondaryField != null) {
               final secondaryValue = row[secondaryField] as String?;
               if (secondaryValue != null) {
                 existingId = secondaryKeyCache[secondaryValue];
@@ -261,13 +273,13 @@ class ImportService {
                   // Patch the UUID in DB so future lookups work by UUID
                   await txn.update(
                     table,
-                    {'uuid': uuid},
+                    {'uuid': finalUuid},
                     where: 'id = ?',
                     whereArgs: [existingId],
                   );
                   // Update caches
                   if (uuidToIdCache.containsKey(table)) {
-                    uuidToIdCache[table]![uuid] = existingId;
+                    uuidToIdCache[table]![finalUuid] = existingId;
                   }
                   debugPrint(
                     '[ImportService] [$table] UUID patched for $secondaryField=$secondaryValue',
@@ -295,11 +307,11 @@ class ImportService {
                 row.remove('id'); // never overwrite the local auto-increment id
                 if (validColumns.contains('is_synced')) row['is_synced'] = 0;
                 
-                // Special case for developers/managers to prevent password overwrites
+                // Special case for system accounts to prevent password overwrites
                 // if they are already in the DB with correct credentials.
                 if (table == 'users') {
                   final String? incomingRole = row['role'] as String?;
-                  if (incomingRole == 'DEVELOPER') {
+                  if (incomingRole == 'DEVELOPER' || incomingRole == 'STORE_MANAGER' || incomingRole == 'SUPER_ADMIN') {
                     row.remove('password');
                     row.remove('username');
                   }
@@ -337,9 +349,9 @@ class ImportService {
 
               if (newId > 0) {
                 // Update caches so subsequent tables can resolve this FK
-                if (uuid != null) {
+                if (finalUuid != null) {
                   uuidToIdCache[table] ??= {};
-                  uuidToIdCache[table]![uuid] = newId;
+                  uuidToIdCache[table]![finalUuid] = newId;
                 }
                 if (secondaryField != null) {
                   final secVal = row[secondaryField] as String?;
@@ -349,7 +361,7 @@ class ImportService {
               } else {
                 // INSERT OR IGNORE skipped the row — log as warning
                 errors.add(
-                  '[$table] تم تخطي سجل (تعارض في القيد الفريد): uuid=$uuid, device_id=$deviceId',
+                  '[$table] تم تخطي سجل (تعارض في القيد الفريد): uuid=$finalUuid, device_id=$deviceId',
                 );
               }
             }

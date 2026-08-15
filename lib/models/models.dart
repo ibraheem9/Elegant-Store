@@ -156,6 +156,7 @@ class PaymentMethod {
   final String createdAt;
   final String updatedAt;
   final int isSynced;
+  final int? partnerId;
 
   PaymentMethod({
     this.id,
@@ -173,6 +174,7 @@ class PaymentMethod {
     String? createdAt,
     String? updatedAt,
     this.isSynced = 0,
+    this.partnerId,
   })  : createdAt = createdAt ?? TimestampFormatter.nowWithOffset(),
         updatedAt = updatedAt ?? TimestampFormatter.nowWithOffset();
 
@@ -193,6 +195,7 @@ class PaymentMethod {
       'created_at': createdAt,
       'updated_at': updatedAt,
       'is_synced': isSynced,
+      'partner_id': partnerId,
     };
   }
 
@@ -213,6 +216,7 @@ class PaymentMethod {
       createdAt: map['created_at'],
       updatedAt: map['updated_at'] ?? '',
       isSynced: map['is_synced'] ?? 0,
+      partnerId: map['partner_id'],
     );
   }
 
@@ -222,7 +226,7 @@ class PaymentMethod {
   @override
   int get hashCode => id.hashCode;
 
-  PaymentMethod copyWith({int? sortOrder}) {
+  PaymentMethod copyWith({int? sortOrder, int? partnerId}) {
     return PaymentMethod(
       id: id,
       uuid: uuid,
@@ -237,6 +241,7 @@ class PaymentMethod {
       createdAt: createdAt,
       updatedAt: updatedAt,
       isSynced: isSynced,
+      partnerId: partnerId ?? this.partnerId,
     );
   }
 }
@@ -763,6 +768,42 @@ class DeviceInfoModel {
       deviceModel: map['device_model'],
       locationLat: map['location_lat'] != null ? (map['location_lat'] as num).toDouble() : null,
       locationLong: map['location_long'] != null ? (map['location_long'] as num).toDouble() : null,
+    );
+  }
+}
+
+class Partner {
+  final int? id;
+  final String uuid;
+  final String name;
+  final String createdAt;
+  final String updatedAt;
+
+  Partner({
+    this.id,
+    this.uuid = '',
+    required this.name,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'uuid': uuid,
+      'name': name,
+      'created_at': createdAt,
+      'updated_at': updatedAt,
+    };
+  }
+
+  factory Partner.fromMap(Map<String, dynamic> map) {
+    return Partner(
+      id: map['id'],
+      uuid: map['uuid'] ?? '',
+      name: map['name'] ?? '',
+      createdAt: map['created_at'] ?? '',
+      updatedAt: map['updated_at'] ?? '',
     );
   }
 }

@@ -8,7 +8,7 @@ import '../services/database_service.dart';
 import '../widgets/shimmer_loading.dart';
 
 // ── Filter mode ────────────────────────────────────────────────────────────
-enum _FilterMode { day, week, month, year, custom }
+enum _FilterMode { day, week, month, year, all, custom }
 
 class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({Key? key}) : super(key: key);
@@ -44,6 +44,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   // Credits
   double _totalCredits        = 0.0;  // global sum of abs(balance) for balance < 0
   double _netCustomerBalance  = 0.0;  // sum(balance) for all customers
+  // Aggregated Cash Sales for ranges
+  double _aggregatedCashSales = 0.0;
   // Cash box
   double _yesterdayCash       = 0.0;
   bool   _isLoading           = false;
@@ -68,6 +70,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         return DateTime(_selectedDate.year, _selectedDate.month, 1);
       case _FilterMode.year:
         return DateTime(_selectedDate.year, 1, 1);
+      case _FilterMode.all:
+        return DateTime(2020, 1, 1);
       case _FilterMode.custom:
         return _rangeStart ?? _selectedDate;
     }
@@ -85,6 +89,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         return DateTime(_selectedDate.year, _selectedDate.month + 1, 0, 23, 59, 59);
       case _FilterMode.year:
         return DateTime(_selectedDate.year, 12, 31, 23, 59, 59);
+      case _FilterMode.all:
+        return DateTime.now().add(const Duration(days: 365)); // Ensure it covers everything
       case _FilterMode.custom:
         return _rangeEnd != null
             ? DateTime(_rangeEnd!.year, _rangeEnd!.month, _rangeEnd!.day, 23, 59, 59)
@@ -104,6 +110,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         return DateFormat('MMMM yyyy', 'ar').format(_selectedDate);
       case _FilterMode.year:
         return 'سنة ${_selectedDate.year}';
+      case _FilterMode.all:
+        return 'كافة الإحصائيات';
       case _FilterMode.custom:
         return DateFormat('dd/MM/yyyy').format(_selectedDate);
     }
@@ -152,6 +160,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       _appPurchases        = detailedStats['app_purchases']         ?? 0.0;
       _totalCredits        = detailedStats['total_credits']         ?? 0.0;
       _netCustomerBalance  = detailedStats['net_balance']           ?? 0.0;
+      _aggregatedCashSales = detailedStats['aggregated_cash_sales'] ?? 0.0;
       _yesterdayCash       = yesterdayCash;
       _monthlyData         = monthly;
       if (savedStats != null) {
@@ -241,6 +250,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   ///                      – total cash in box yesterday
   ///                      – total cash debt repayments (deposits)
   double get _totalCashSales {
+    if (!_isSingleDay) return _aggregatedCashSales;
     if (!_cashEntered) return 0.0;
     final todayCash = double.tryParse(_todayCashController.text) ?? 0.0;
     return todayCash
@@ -397,6 +407,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       (_FilterMode.week,   'أسبوع'),
       (_FilterMode.month,  'شهر'),
       (_FilterMode.year,   'سنة'),
+      (_FilterMode.all,    'الكل'),
       (_FilterMode.custom, 'تاريخ محدد'),
     ];
     final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFF0F172A);
@@ -468,6 +479,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         break;
       case _FilterMode.year:
         dateText = 'سنة ${_selectedDate.year}';
+        break;
+      case _FilterMode.all:
+        dateText = 'كافة الإحصائيات (منذ البداية)';
         break;
       case _FilterMode.custom:
         dateText = DateFormat('dd-MM-yyyy EEEE', 'ar').format(_selectedDate);

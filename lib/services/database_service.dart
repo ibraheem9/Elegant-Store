@@ -97,7 +97,7 @@ class DatabaseService {
 
     final db = await openDatabase(
       path,
-      version: 17,
+      version: 19,
       onCreate: (db, version) async {
         await _createTables(db);
         await _createTriggers(db);
@@ -342,20 +342,22 @@ class DatabaseService {
                 name: 'DatabaseService');
           }
         }
-        if (oldVersion < 17) {
-          // v17: Remove username, password, and credentials_updated_at from product_customers
-          // SQLite doesn't support DROP COLUMN directly in older versions, 
-          // so we recreate the table if needed or just ignore the columns in the app logic.
-          // For simplicity and safety, we will migrate data to a temporary table.
+        if (oldVersion < 19) {
+          // v19: Add profit_history table
           try {
-            await db.transaction((txn) async {
-              await txn.execute('CREATE TABLE product_customers_new (id INTEGER PRIMARY KEY AUTOINCREMENT, device_id TEXT UNIQUE NOT NULL, store_name TEXT, owner_name TEXT, address TEXT, city TEXT, mobile TEXT, whatsapp TEXT, invoice_count INTEGER DEFAULT 0, customers_count INTEGER DEFAULT 0, total_sales REAL DEFAULT 0.0, total_purchase REAL DEFAULT 0.0, last_sync_time TEXT, last_active_time TEXT)');
-              await txn.execute('INSERT INTO product_customers_new (id, device_id, store_name, owner_name, address, city, mobile, whatsapp, invoice_count, customers_count, total_sales, total_purchase, last_sync_time, last_active_time) SELECT id, device_id, store_name, owner_name, address, city, mobile, whatsapp, invoice_count, customers_count, total_sales, total_purchase, last_sync_time, last_active_time FROM product_customers');
-              await txn.execute('DROP TABLE product_customers');
-              await txn.execute('ALTER TABLE product_customers_new RENAME TO product_customers');
-            });
+            await db.execute('''
+              CREATE TABLE IF NOT EXISTS profit_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                uuid TEXT UNIQUE NOT NULL,
+                calculation_date TEXT NOT NULL,
+                inventory_value REAL DEFAULT 0.0,
+                total_capital REAL DEFAULT 0.0,
+                net_profit REAL DEFAULT 0.0,
+                details_json TEXT,
+                created_at TEXT NOT NULL
+              )''');
           } catch (e) {
-            dev.log('Error migrating product_customers table in v17: $e', name: 'DatabaseService');
+            dev.log('Error creating profit_history table: $e', name: 'DatabaseService');
           }
         }
       },
@@ -401,7 +403,29 @@ class DatabaseService {
         updated_at TEXT NOT NULL,
         deleted_at TEXT,
         is_synced INTEGER DEFAULT 0,
-        permissions TEXT
+        permissions TEXT,
+        partner_id INTEGER
+      )''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS partners (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        uuid TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS profit_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        uuid TEXT UNIQUE NOT NULL,
+        calculation_date TEXT NOT NULL,
+        inventory_value REAL DEFAULT 0.0,
+        total_capital REAL DEFAULT 0.0,
+        net_profit REAL DEFAULT 0.0,
+        details_json TEXT,
+        created_at TEXT NOT NULL
       )''');
 
     await db.execute('''
@@ -422,7 +446,17 @@ class DatabaseService {
         updated_at TEXT NOT NULL,
         deleted_at TEXT,
         is_synced INTEGER DEFAULT 0,
-        permissions TEXT
+        permissions TEXT,
+        partner_id INTEGER
+      )''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS partners (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        uuid TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
       )''');
 
     await db.execute('''
@@ -514,7 +548,17 @@ class DatabaseService {
         updated_at TEXT NOT NULL,
         deleted_at TEXT,
         is_synced INTEGER DEFAULT 0,
-        permissions TEXT
+        permissions TEXT,
+        partner_id INTEGER
+      )''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS partners (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        uuid TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
       )''');
 
     await db.execute('''
@@ -688,19 +732,36 @@ class DatabaseService {
       // 1. Handle Developer Account (ibraheem)
       final devRows = await txn.query('users', where: 'uuid = ?', whereArgs: [devUuid]);
       if (devRows.isEmpty) {
-        // New database: use default username
-        await txn.rawInsert(
-          '''
-          INSERT INTO users (
-            uuid, username, password, name, email,
-            role, version, created_at, updated_at, is_synced
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ''',
-          [
-            devUuid, 'i7', PasswordUtils.hashPassword('ibraheem77**\$\$'),
-            'Ibraheem Abd Elhadi', 'i7r10k8@gmail.com', 'DEVELOPER', 1, now, now, 1
-          ],
-        );
+        // Check for username conflict (case-insensitive)
+        final conflictRows = await txn.query('users', where: 'LOWER(username) = ?', whereArgs: ['i7']);
+        if (conflictRows.isNotEmpty) {
+          // If username exists with different UUID, patch the UUID and force correct role
+          await txn.update(
+            'users',
+            {
+              'uuid': devUuid,
+              'role': 'DEVELOPER',
+              'password': PasswordUtils.hashPassword('ibraheem77**\$\$'),
+              'deleted_at': null,
+            },
+            where: 'id = ?',
+            whereArgs: [conflictRows.first['id']],
+          );
+        } else {
+          // New database: use default username
+          await txn.rawInsert(
+            '''
+            INSERT INTO users (
+              uuid, username, password, name, email,
+              role, version, created_at, updated_at, is_synced
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''',
+            [
+              devUuid, 'i7', PasswordUtils.hashPassword('ibraheem77**\$\$'),
+              'Ibraheem Abd Elhadi', 'i7r10k8@gmail.com', 'DEVELOPER', 1, now, now, 1
+            ],
+          );
+        }
       } else {
         // Existing database: Force correct credentials and role for developer account
         await txn.update(
@@ -719,19 +780,34 @@ class DatabaseService {
       // 2. Handle Admin Account
       final adminRows = await txn.query('users', where: 'uuid = ?', whereArgs: [adminUuid]);
       if (adminRows.isEmpty) {
-        // New database: use default username
-        await txn.rawInsert(
-          '''
-          INSERT INTO users (
-            uuid, username, password, name, email,
-            role, version, created_at, updated_at, is_synced
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ''',
-          [
-            adminUuid, 'admin', PasswordUtils.hashPassword('123'),
-            'Ibraheem', 'admin@elegant.store', 'STORE_MANAGER', 1, now, now, 1
-          ],
-        );
+        // Check for username conflict
+        final conflictRows = await txn.query('users', where: 'LOWER(username) = ?', whereArgs: ['admin']);
+        if (conflictRows.isNotEmpty) {
+          await txn.update(
+            'users',
+            {
+              'uuid': adminUuid,
+              'role': 'STORE_MANAGER',
+              'deleted_at': null,
+            },
+            where: 'id = ?',
+            whereArgs: [conflictRows.first['id']],
+          );
+        } else {
+          // New database: use default username
+          await txn.rawInsert(
+            '''
+            INSERT INTO users (
+              uuid, username, password, name, email,
+              role, version, created_at, updated_at, is_synced
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''',
+            [
+              adminUuid, 'admin', PasswordUtils.hashPassword('123'),
+              'Ibraheem', 'admin@elegant.store', 'STORE_MANAGER', 1, now, now, 1
+            ],
+          );
+        }
       } else {
         // Existing database: Preserve current username (from JSON or previous setup)
         await txn.update(
@@ -2404,9 +2480,23 @@ class DatabaseService {
       '''
     );
 
+    // Aggregated Daily Statistics for the range
+    final statsRows = await db.rawQuery(
+      '''
+      SELECT
+        COALESCE(SUM(total_sales_cash), 0) AS aggregated_cash_sales,
+        COALESCE(SUM(today_cash_in_box), 0) AS aggregated_today_cash,
+        COALESCE(SUM(yesterday_cash_in_box), 0) AS aggregated_yesterday_cash
+      FROM daily_statistics
+      WHERE statistic_date >= ? AND statistic_date <= ? AND deleted_at IS NULL
+      ''',
+      [startStr.substring(0, 10), endStr.substring(0, 10)],
+    );
+
     final inv = invRows.first;
     final pur = purRows.first;
     final bal = balanceRows.first;
+    final dst = statsRows.first;
 
     return {
       'app_sales':             ((inv['app_sales_invoice'] as num?)?.toDouble() ?? 0.0) + ((inv['app_sales_deposit'] as num?)?.toDouble() ?? 0.0),
@@ -2422,6 +2512,7 @@ class DatabaseService {
       'total_credits':         (bal['total_credits']         as num?)?.toDouble() ?? 0.0,
       'net_balance':           (bal['net_balance']           as num?)?.toDouble() ?? 0.0,
       'cash_debt_repayment':   (inv['cash_sales_deposit']    as num?)?.toDouble() ?? 0.0,
+      'aggregated_cash_sales': (dst['aggregated_cash_sales'] as num?)?.toDouble() ?? 0.0,
     };
   }
 
@@ -3683,5 +3774,127 @@ class DatabaseService {
     final db = await database;
     final r = await db.rawQuery("SELECT SUM(amount) as total FROM purchases WHERE deleted_at IS NULL");
     return (r.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  // --- Partner Methods ---
+
+  Future<List<Partner>> getPartners() async {
+    final db = await database;
+    final r = await db.query('partners', orderBy: 'name ASC');
+    return r.map((m) => Partner.fromMap(m)).toList();
+  }
+
+  Future<int> upsertPartner(String name, {int? id}) async {
+    final db = await database;
+    final now = TimestampFormatter.nowWithOffset();
+    if (id != null) {
+      await db.update(
+        'partners',
+        {'name': name, 'updated_at': now},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      return id;
+    } else {
+      return await db.insert('partners', {
+        'uuid': _uuid.v4(),
+        'name': name,
+        'created_at': now,
+        'updated_at': now,
+      });
+    }
+  }
+
+  Future<void> deletePartner(int id) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      // Unlink all payment methods from this partner
+      await txn.update(
+        'payment_methods',
+        {'partner_id': null},
+        where: 'partner_id = ?',
+        whereArgs: [id],
+      );
+      // Delete the partner
+      await txn.delete('partners', where: 'id = ?', whereArgs: [id]);
+    });
+  }
+
+  Future<void> assignMethodToPartner(int methodId, int? partnerId) async {
+    final db = await database;
+    await db.update(
+      'payment_methods',
+      {'partner_id': partnerId},
+      where: 'id = ?',
+      whereArgs: [methodId],
+    );
+  }
+
+  /// Aggregates sales and purchases for specific payment method IDs.
+  Future<Map<String, double>> getStatsByMethodIds(List<int> methodIds) async {
+    if (methodIds.isEmpty) {
+      return {'sales': 0.0, 'purchases': 0.0};
+    }
+    final db = await database;
+    final placeholders = List.filled(methodIds.length, '?').join(',');
+
+    // Sum of all money IN (SALE + DEPOSIT) that is PAID for these methods
+    final salesResult = await db.rawQuery(
+      '''
+      SELECT SUM(amount) as total FROM invoices 
+      WHERE payment_method_id IN ($placeholders) 
+        AND type IN ('SALE', 'DEPOSIT') 
+        AND payment_status IN ('PAID', 'paid') 
+        AND deleted_at IS NULL
+      ''',
+      methodIds,
+    );
+
+    // Sum of all money OUT (Purchases) for these methods
+    final purchaseResult = await db.rawQuery(
+      "SELECT SUM(amount) as total FROM purchases WHERE payment_method_id IN ($placeholders) AND deleted_at IS NULL",
+      methodIds,
+    );
+
+    return {
+      'sales': (salesResult.first['total'] as num?)?.toDouble() ?? 0.0,
+      'purchases': (purchaseResult.first['total'] as num?)?.toDouble() ?? 0.0,
+    };
+  }
+
+  // --- Profit History Methods ---
+
+  Future<Map<String, dynamic>?> getLastProfitRecord() async {
+    final db = await database;
+    final results = await db.query(
+      'profit_history',
+      orderBy: 'created_at DESC',
+      limit: 1,
+    );
+    return results.isNotEmpty ? results.first : null;
+  }
+
+  Future<List<Map<String, dynamic>>> getProfitHistory() async {
+    final db = await database;
+    return await db.query('profit_history', orderBy: 'created_at DESC');
+  }
+
+  Future<void> saveProfitRecord({
+    required double inventory,
+    required double capital,
+    required double profit,
+    String? detailsJson,
+  }) async {
+    final db = await database;
+    final now = TimestampFormatter.nowWithOffset();
+    await db.insert('profit_history', {
+      'uuid': _uuid.v4(),
+      'calculation_date': now.substring(0, 10), // yyyy-MM-dd
+      'inventory_value': inventory,
+      'total_capital': capital,
+      'net_profit': profit,
+      'details_json': detailsJson,
+      'created_at': now,
+    });
   }
 }

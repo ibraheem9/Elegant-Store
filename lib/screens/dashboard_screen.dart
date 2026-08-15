@@ -1,3 +1,5 @@
+import 'profit_history_screen.dart';
+import 'profit_calculation_screen.dart';
 import 'help_screen.dart';
 import '../utils/app_snackbar.dart';
 import 'package:flutter/services.dart';
@@ -791,6 +793,16 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
                         builder: (ctx, snap) {
                           final total = (snap.data?['total_sales'] ?? 0.0) as double;
                           return _buildStatCard('إجمالي مبيعات اليوم', '${total.toStringAsFixed(2)} ₪', Icons.trending_up_rounded, const Color(0xFF8B5CF6), isDark);
+                        },
+                      ),
+                      _buildStatCard(
+                        'إدارة الأرباح',
+                        'السجل والتحكم',
+                        Icons.calculate_rounded,
+                        Colors.teal,
+                        isDark,
+                        onTap: () {
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfitHistoryScreen()));
                         },
                       ),
                     ],

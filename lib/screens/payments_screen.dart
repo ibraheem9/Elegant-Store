@@ -64,6 +64,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
       } else if (filter == 'month') {
         _startDate = DateTime(now.year, now.month, 1);
         _endDate   = DateTime(now.year, now.month, now.day, 23, 59, 59);
+      } else if (filter == 'all') {
+        _startDate = DateTime(2020, 1, 1);
+        _endDate   = DateTime(now.year, now.month, now.day, 23, 59, 59).add(const Duration(days: 365));
       }
     });
     _loadData();
@@ -300,6 +303,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
       case 'today':  label = 'اليوم'; break;
       case 'week':   label = 'أسبوع'; break;
       case 'month':  label = 'شهر'; break;
+      case 'all':    label = 'الكل'; break;
       default:
         label = '${DateFormat('d/M').format(_startDate)}–${DateFormat('d/M').format(_endDate)}';
     }
@@ -330,6 +334,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         const PopupMenuItem(value: 'today',  child: Text('اليوم')),
         const PopupMenuItem(value: 'week',   child: Text('أسبوع')),
         const PopupMenuItem(value: 'month',  child: Text('شهر')),
+        const PopupMenuItem(value: 'all',    child: Text('الكل')),
         const PopupMenuItem(value: 'custom', child: Text('تاريخ محدد')),
       ],
       child: Container(
