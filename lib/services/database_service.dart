@@ -375,6 +375,21 @@ class DatabaseService {
     // Ensure the default accounts exist on every startup
     await seedDeveloperAccount(db);
 
+    // Purge obsolete history entries (CREATE actions & non-invoice/transaction/purchase activity) to optimize storage size
+    try {
+      await db.execute("UPDATE edit_history SET action = 'UPDATE' WHERE action IS NULL");
+      await db.execute('''
+        DELETE FROM edit_history
+        WHERE action = 'CREATE'
+           OR target_type NOT IN ('INVOICE', 'TRANSACTION', 'PURCHASE')
+           OR summary LIKE 'إضافة %'
+           OR summary LIKE '%جديدة%'
+           OR summary LIKE '%جديد%'
+      ''');
+    } catch (e) {
+      dev.log('History purge skipped: $e', name: 'DatabaseService');
+    }
+
     return db;
   }
 
@@ -1162,95 +1177,24 @@ class DatabaseService {
     map['updated_at'] = now;
     map['is_synced'] = 0;
     final userId = await db.insert('users', map);
-
-    await logActivity(
-      targetId: userId,
-      targetType: 'CUSTOMER',
-      action: 'CREATE',
-      summary: 'إضافة زبون جديد: ${u.name}',
-      performedById: performedById,
-      performedByName: performedByName,
-      createdAt: now,
-    );
-
     return userId;
   }
 
   Future<void> updateUser(User newUser, User oldUser, {int? performedById, String? performedByName, String? reason}) async {
     final db = await database;
     final now = TimestampFormatter.nowWithOffset();
-    await db.transaction((txn) async {
-      await txn.update(
-        'users',
-        {
-          ...newUser.toMap(),
-          'id': newUser.id,
-          'version': (oldUser.version) + 1,
-          'is_synced': 0,
-          'updated_at': now,
-        },
-        where: 'id = ?',
-        whereArgs: [newUser.id],
-      );
-
-      // Log changes
-      if (newUser.name != oldUser.name) {
-        await logActivityInTxn(
-          txn: txn,
-          targetId: newUser.id!,
-          targetType: 'CUSTOMER',
-          action: 'UPDATE',
-          fieldName: 'name',
-          oldValue: oldUser.name,
-          newValue: newUser.name,
-          reason: reason,
-          performedById: performedById,
-          performedByName: performedByName,
-        );
-      }
-      if (newUser.username != oldUser.username) {
-        await logActivityInTxn(
-          txn: txn,
-          targetId: newUser.id!,
-          targetType: 'CUSTOMER',
-          action: 'UPDATE',
-          fieldName: 'username',
-          oldValue: oldUser.username,
-          newValue: newUser.username,
-          reason: reason,
-          performedById: performedById,
-          performedByName: performedByName,
-        );
-      }
-      if (newUser.phone != oldUser.phone) {
-        await logActivityInTxn(
-          txn: txn,
-          targetId: newUser.id!,
-          targetType: 'CUSTOMER',
-          action: 'UPDATE',
-          fieldName: 'phone',
-          oldValue: oldUser.phone,
-          newValue: newUser.phone,
-          reason: reason,
-          performedById: performedById,
-          performedByName: performedByName,
-        );
-      }
-      if (newUser.creditLimit != oldUser.creditLimit) {
-        await logActivityInTxn(
-          txn: txn,
-          targetId: newUser.id!,
-          targetType: 'CUSTOMER',
-          action: 'UPDATE',
-          fieldName: 'credit_limit',
-          oldValue: oldUser.creditLimit?.toString(),
-          newValue: newUser.creditLimit?.toString(),
-          reason: reason,
-          performedById: performedById,
-          performedByName: performedByName,
-        );
-      }
-    });
+    await db.update(
+      'users',
+      {
+        ...newUser.toMap(),
+        'id': newUser.id,
+        'version': (oldUser.version) + 1,
+        'is_synced': 0,
+        'updated_at': now,
+      },
+      where: 'id = ?',
+      whereArgs: [newUser.id],
+    );
 
     // Refresh ceiling warning in case credit_limit changed.
     if (newUser.role == 'CUSTOMER') {
@@ -1382,26 +1326,14 @@ class DatabaseService {
       map['paid_amount'] = finalPaidAmount;
       map['payment_status'] = finalStatus;
       map['version'] = 1;
-      map['created_by_name'] = performedByName;
-      map['created_by_id'] = performedById;
+      map['created_by_name'] = performedByName ?? inv.createdByName;
+      map['created_by_id'] = performedById ?? inv.createdById;
       // Preserve the accountant's manually entered date if provided; fall back to now.
       map['created_at'] = (inv.createdAt.isNotEmpty) ? inv.createdAt : now;
       // On insert, updated_at matches created_at (accountant's date).
       map['updated_at'] = map['created_at'];
       map['is_synced'] = 0;
       final invoiceId = await txn.insert('invoices', map);
-
-      // Log 'CREATE' activity inside the transaction to ensure correct attribution
-      await logActivityInTxn(
-        txn: txn,
-        targetId: invoiceId,
-        targetType: 'INVOICE',
-        action: 'CREATE',
-        summary: 'فاتورة جديدة للزبون ${inv.customerName ?? ""} بمبلغ ${inv.amount.toStringAsFixed(2)} NIS',
-        performedById: performedById,
-        performedByName: performedByName,
-        createdAt: map['created_at'],
-      );
 
       return invoiceId;
     }).then((invoiceId) async {
@@ -1838,18 +1770,6 @@ class DatabaseService {
         'is_synced': 0,
       });
 
-      // Log 'CREATE' activity inside the transaction
-      await logActivityInTxn(
-        txn: txn,
-        targetId: invId,
-        targetType: 'INVOICE',
-        action: 'CREATE',
-        summary: 'تسجيل دفعة سداد بمبلغ ${amount.toStringAsFixed(2)} NIS',
-        performedById: performedById,
-        performedByName: performedByName,
-        createdAt: now,
-      );
-
       await txn.insert('transactions', {
         'uuid': _uuid.v4(),
         'buyer_id': userId,
@@ -1860,6 +1780,8 @@ class DatabaseService {
         'payment_method_id': paymentMethodId,
         'notes': notes,
         'version': 1,
+        'created_by_name': performedByName,
+        'created_by_id': performedById,
         'created_at': now,
         'updated_at': now,
         'is_synced': 0,
@@ -2076,8 +1998,10 @@ class DatabaseService {
     await db.transaction((txn) async {
       final effectiveDate = date ?? DateTime.now();
       final now = TimestampFormatter.toLocalizedIsoString(effectiveDate);
-      final invId = await txn.insert('invoices', {
+      final storeManagerId = customer.getStoreManagerIdLocal();
+      await txn.insert('invoices', {
         'uuid': _uuid.v4(),
+        'store_manager_id': storeManagerId,
         'user_id': customer.id,
         'invoice_date': now,
         'amount': amount,
@@ -2093,25 +2017,16 @@ class DatabaseService {
         'is_synced': 0,
       });
 
-      // Log 'CREATE' activity inside the transaction
-      await logActivityInTxn(
-        txn: txn,
-        targetId: invId,
-        targetType: 'INVOICE',
-        action: 'CREATE',
-        summary: 'سحب نقدي للزبون ${customer.name} بمبلغ ${amount.toStringAsFixed(2)} NIS',
-        performedById: performedById,
-        performedByName: performedByName,
-        createdAt: now,
-      );
-
       await txn.insert('purchases', {
         'uuid': _uuid.v4(),
+        'store_manager_id': storeManagerId,
         'merchant_name': 'سحب نقدي: ${customer.name}',
         'amount': amount,
         'payment_source': 'CASH',
         'notes': 'سحب نقدي كدين للمشتري - ${notes ?? ""}',
         'version': 1,
+        'created_by_name': performedByName,
+        'created_by_id': performedById,
         'created_at': now,
         'updated_at': now,
         'is_synced': 0,
@@ -2626,22 +2541,12 @@ class DatabaseService {
     map.remove('id');
     map['uuid'] = (p.uuid.isEmpty) ? _uuid.v4() : p.uuid;
     map['version'] = 1;
-    map['created_by_name'] = performedByName;
-    map['created_by_id'] = performedById;
+    map['created_by_name'] = performedByName ?? p.createdByName;
+    map['created_by_id'] = performedById ?? p.createdById;
     // On insert, updated_at matches created_at (accountant's date).
     map['updated_at'] = (p.createdAt.isNotEmpty) ? p.createdAt : now;
     map['is_synced'] = 0;
     final purchaseId = await db.insert('purchases', map);
-
-    await logActivity(
-      targetId: purchaseId,
-      targetType: 'PURCHASE',
-      action: 'CREATE',
-      summary: 'مشتريات جديدة من: ${p.merchantName} بمبلغ ${p.amount.toStringAsFixed(2)} NIS',
-      performedById: performedById,
-      performedByName: performedByName,
-      createdAt: map['created_at'],
-    );
 
     return purchaseId;
   }
@@ -2977,6 +2882,12 @@ class DatabaseService {
     int? storeManagerId,
     String? createdAt,
   }) async {
+    // Safeguard: Do not log CREATE actions or non-invoice/transaction/purchase actions to edit_history
+    if (action == 'CREATE' ||
+        (targetType != 'INVOICE' && targetType != 'TRANSACTION' && targetType != 'PURCHASE')) {
+      return;
+    }
+
     final now = createdAt ?? TimestampFormatter.nowWithOffset();
     await txn.insert('edit_history', {
       'uuid': _uuid.v4(),
@@ -3277,6 +3188,20 @@ class DatabaseService {
   }) async {
     final uuid = data['uuid'];
     if (uuid == null) return {'id': -1, 'status': 'ERROR'};
+
+    // Skip obsolete history records during sync
+    if (table == 'edit_history') {
+      final action = data['action'];
+      final targetType = data['target_type'];
+      final summary = data['summary'] ?? '';
+      if (action == 'CREATE' ||
+          (targetType != 'INVOICE' && targetType != 'TRANSACTION' && targetType != 'PURCHASE') ||
+          summary.toString().startsWith('إضافة') ||
+          summary.toString().contains('جديدة') ||
+          summary.toString().contains('جديد')) {
+        return {'id': -1, 'status': 'SKIP'};
+      }
+    }
 
     final sanitizedData = Map<String, dynamic>.from(data);
     sanitizedData.remove('id');

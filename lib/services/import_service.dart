@@ -165,6 +165,84 @@ class ImportService {
     final Map<String, Map<String, int>> uuidToIdCache = {};
 
     await db.transaction((txn) async {
+      // ── Build Creator Lookup from incoming edit_history & Filter History ────
+      final List<dynamic> rawEditHistory = (data['edit_history'] as List<dynamic>?) ?? [];
+      final Map<String, Map<String, dynamic>> createHistoryLookupByUuid = {};
+      final Map<int, Map<String, dynamic>> createHistoryLookupById = {};
+      final Map<String, Map<String, dynamic>> createHistoryLookupByTypedId = {};
+
+      for (final dynamic item in rawEditHistory) {
+        if (item is! Map) continue;
+        final map = Map<String, dynamic>.from(item);
+        final action = map['action'] as String?;
+        final summary = map['summary'] as String? ?? '';
+        final targetType = map['target_type'] as String?;
+        final targetUuid = map['target_uuid'] as String? ?? map['target_uuid_key'] as String?;
+        final targetId = map['target_id'] as int?;
+
+        bool isCreate = action == 'CREATE' ||
+            summary.startsWith('إضافة') ||
+            summary.contains('جديدة') ||
+            summary.contains('جديد');
+
+        if (isCreate) {
+          final creatorInfo = {
+            'name': map['edited_by_name'] ?? map['created_by_name'],
+            'id': map['edited_by_id'] ?? map['created_by_id'],
+            'uuid': map['edited_by_uuid'] ?? map['created_by_uuid'],
+          };
+          if (targetUuid != null && targetUuid.isNotEmpty) {
+            createHistoryLookupByUuid[targetUuid] = creatorInfo;
+          }
+          if (targetId != null) {
+            createHistoryLookupById[targetId] = creatorInfo;
+            if (targetType != null) {
+              createHistoryLookupByTypedId['$targetType:$targetId'] = creatorInfo;
+            }
+          }
+        }
+      }
+
+      // Filter out CREATE actions and non-invoice/transaction/purchase history entries from data['edit_history']
+      if (data.containsKey('edit_history')) {
+        data['edit_history'] = rawEditHistory.where((item) {
+          if (item is! Map) return false;
+          final action = item['action'] as String?;
+          final targetType = item['target_type'] as String?;
+          final summary = item['summary'] as String? ?? '';
+
+          if (action == 'CREATE') return false;
+          if (summary.startsWith('إضافة') || summary.contains('جديدة') || summary.contains('جديد')) {
+            return false;
+          }
+          if (targetType != 'INVOICE' && targetType != 'TRANSACTION' && targetType != 'PURCHASE') {
+            return false;
+          }
+          return true;
+        }).toList();
+      }
+
+      // Find Store Manager in incoming JSON data for creator backfill fallback
+      Map<String, dynamic>? jsonStoreManager;
+      final List<dynamic> rawUsers = (data['users'] as List<dynamic>?) ?? [];
+      for (final dynamic u in rawUsers) {
+        if (u is Map) {
+          final role = u['role'] as String?;
+          if (role == 'STORE_MANAGER' || role == 'SUPER_ADMIN') {
+            jsonStoreManager = Map<String, dynamic>.from(u as Map);
+            break;
+          }
+        }
+      }
+
+      // Query local DB store manager details as second fallback (excluding DEVELOPER)
+      final managerRows = await txn.query('users', where: "role IN ('STORE_MANAGER', 'SUPER_ADMIN')", limit: 1);
+      final Map<String, dynamic>? dbStoreManager = managerRows.isNotEmpty ? managerRows.first : null;
+
+      // Final fallback developer account if no store manager exists anywhere
+      final devRows = await txn.query('users', where: "role = 'DEVELOPER'", limit: 1);
+      final Map<String, dynamic>? devUser = devRows.isNotEmpty ? devRows.first : null;
+
       for (final table in _tableOrder) {
         final List<dynamic> rows = (data[table] as List<dynamic>?) ?? [];
         if (rows.isEmpty) {
@@ -223,6 +301,48 @@ class ImportService {
 
             // Resolve UUID-based FKs back to local integer IDs
             _resolveUuidForeignKeys(table, row, uuidToIdCache);
+
+            // ── Backfill missing created_by_name / created_by_id ────────────
+            if (table == 'invoices' || table == 'transactions' || table == 'purchases') {
+              if (row['created_by_name'] == null || row['created_by_id'] == null) {
+                final String? rUuid = row['uuid'] as String?;
+                final int? rId = row['id'] as int?;
+                final String targetType = table == 'invoices'
+                    ? 'INVOICE'
+                    : (table == 'transactions' ? 'TRANSACTION' : 'PURCHASE');
+
+                Map<String, dynamic>? creatorInfo;
+                if (rUuid != null && createHistoryLookupByUuid.containsKey(rUuid)) {
+                  creatorInfo = createHistoryLookupByUuid[rUuid];
+                } else if (rId != null && createHistoryLookupByTypedId.containsKey('$targetType:$rId')) {
+                  creatorInfo = createHistoryLookupByTypedId['$targetType:$rId'];
+                } else if (rId != null && createHistoryLookupById.containsKey(rId)) {
+                  creatorInfo = createHistoryLookupById[rId];
+                }
+
+                if (creatorInfo != null) {
+                  row['created_by_name'] ??= creatorInfo['name'];
+                  row['created_by_id'] ??= creatorInfo['id'];
+                }
+
+                // Fallback to store manager (from incoming JSON or local DB), avoiding developer account
+                final fallbackUser = jsonStoreManager ?? dbStoreManager ?? devUser;
+                if (fallbackUser != null) {
+                  final String? fallbackName = fallbackUser['name'] ?? fallbackUser['username'];
+                  final String? fallbackUuid = fallbackUser['uuid'] as String?;
+                  final int? fallbackId = (fallbackUuid != null && uuidToIdCache.containsKey('users'))
+                      ? uuidToIdCache['users']![fallbackUuid]
+                      : (fallbackUser['id'] as int?);
+
+                  row['created_by_name'] ??= fallbackName;
+                  row['created_by_id'] ??= fallbackId;
+                }
+              }
+            }
+
+            if (table == 'edit_history') {
+              row['action'] ??= 'UPDATE';
+            }
 
             if (table == 'users') {
               final String? password = row['password'] as String?;
@@ -372,6 +492,21 @@ class ImportService {
         }
         upsertedCounts[table] = count;
       }
+
+      // ── Purge obsolete history entries from local DB after import ───────────
+      try {
+        await txn.execute("UPDATE edit_history SET action = 'UPDATE' WHERE action IS NULL");
+        await txn.execute('''
+          DELETE FROM edit_history
+          WHERE action = 'CREATE'
+             OR target_type NOT IN ('INVOICE', 'TRANSACTION', 'PURCHASE')
+             OR summary LIKE 'إضافة %'
+             OR summary LIKE '%جديدة%'
+             OR summary LIKE '%جديد%'
+        ''');
+      } catch (e) {
+        debugPrint('[ImportService] Error purging local history after import: $e');
+      }
     });
 
     // ── Recalculate all customer balances ───────────────────────────────────
@@ -445,6 +580,13 @@ class ImportService {
           'users',
           cache,
         );
+        _replaceUuidWithId(
+          row,
+          'created_by_uuid',
+          'created_by_id',
+          'users',
+          cache,
+        );
         break;
       case 'transactions':
         _replaceUuidWithId(row, 'buyer_uuid', 'buyer_id', 'users', cache);
@@ -469,6 +611,13 @@ class ImportService {
           'users',
           cache,
         );
+        _replaceUuidWithId(
+          row,
+          'created_by_uuid',
+          'created_by_id',
+          'users',
+          cache,
+        );
         break;
       case 'purchases':
         _replaceUuidWithId(
@@ -482,6 +631,13 @@ class ImportService {
           row,
           'store_manager_uuid',
           'store_manager_id',
+          'users',
+          cache,
+        );
+        _replaceUuidWithId(
+          row,
+          'created_by_uuid',
+          'created_by_id',
           'users',
           cache,
         );

@@ -1184,6 +1184,10 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     final db = context.read<DatabaseService>();
     final history = await db.getEditHistory(inv.id!, 'INVOICE');
     if (!mounted) return;
+
+    final creatorName = inv.createdByName ?? 'غير معروف';
+    final creationDate = TimestampFormatter.formatShort(inv.createdAt);
+
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -1195,126 +1199,201 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         ]),
         content: SizedBox(
           width: 360,
-          child: history.isEmpty
-              ? const Text('لا توجد تعديلات مسجلة.')
-              : ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: history.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (_, i) {
-                    final h = history[i];
-                    // Resolve field label from raw DB key
-                    final rawField = h['field_name'] as String?;
-                    final fieldLabel = rawField == 'amount'
-                        ? 'المبلغ'
-                        : rawField == 'payment_status'
-                            ? 'حالة الدفع'
-                            : rawField == 'notes'
-                                ? 'الملاحظات'
-                                : rawField == 'payment_method_id'
-                                    ? 'طريقة الدفع'
-                                    : rawField;
-                    final action = h['action'] as String? ?? 'UPDATE';
-                    final summary = h['summary'] as String?;
-                    final oldVal = h['old_value'] as String?;
-                    final newVal = h['new_value'] as String?;
-                    final editorName = h['edited_by_name'] as String?;
-                    final createdByName = h['created_by_name'] as String?;
-                    final createdById = h['created_by_id'];
-                    final hasFieldChange = fieldLabel != null && oldVal != null && newVal != null;
-                    // Badge color by action type
-                    final badgeColor = action == 'CREATE'
-                        ? Colors.green
-                        : action == 'DELETE'
-                            ? Colors.red
-                            : Colors.orange;
-                    // Format date
-                    String dateStr = h['created_at']?.toString() ?? '';
-                    try {
-                      final dt = DateTime.parse(dateStr);
-                      dateStr = '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}  ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-                    } catch (_) {
-                      if (dateStr.length > 16) dateStr = dateStr.substring(0, 16);
-                    }
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Action badge + field label
-                            Row(children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: badgeColor.withOpacity(0.12),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  action == 'CREATE' ? 'إضافة' : action == 'DELETE' ? 'حذف' : 'تعديل',
-                                  style: TextStyle(fontSize: 11, color: badgeColor, fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                              if (hasFieldChange) ...[
-                                const SizedBox(width: 8),
-                                const Icon(Icons.edit_note_rounded, size: 16, color: Colors.blue),
-                                const SizedBox(width: 4),
-                                Text(fieldLabel!, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                              ],
-                            ]),
-                            // Creator name for CREATE/DELETE actions
-                            if ((createdByName ?? editorName) != null && (createdByName ?? editorName)!.isNotEmpty) ...[
-                              const SizedBox(height: 4),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Creation Card Header (from invoices table)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.green.withValues(alpha: 0.25)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.green,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              'إنشاء الفاتورة',
+                              style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '${inv.amount.toStringAsFixed(2)} NIS',
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.green),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Icon(Icons.person_outline, size: 14, color: Colors.grey.shade700),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              'أنشئت بواسطة: $creatorName',
+                              style: TextStyle(fontSize: 12, color: Colors.grey.shade800, fontWeight: FontWeight.w600),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(Icons.access_time, size: 14, color: Colors.grey.shade700),
+                          const SizedBox(width: 4),
+                          Text(
+                            creationDate,
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
+                            textDirection: ui.TextDirection.ltr,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (history.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Center(
+                      child: Text('لا توجد تعديلات مسجلة لهذه الفاتورة', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                    ),
+                  )
+                else
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: history.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (_, i) {
+                      final h = history[i];
+                      // Resolve field label from raw DB key
+                      final rawField = h['field_name'] as String?;
+                      final fieldLabel = rawField == 'amount'
+                          ? 'المبلغ'
+                          : rawField == 'payment_status'
+                              ? 'حالة الدفع'
+                              : rawField == 'notes'
+                                  ? 'الملاحظات'
+                                  : rawField == 'payment_method_id'
+                                      ? 'طريقة الدفع'
+                                      : rawField;
+                      final action = h['action'] as String? ?? 'UPDATE';
+                      final summary = h['summary'] as String?;
+                      final oldVal = h['old_value'] as String?;
+                      final newVal = h['new_value'] as String?;
+                      final editorName = h['edited_by_name'] as String?;
+                      final createdByName = h['created_by_name'] as String?;
+                      final hasFieldChange = fieldLabel != null && oldVal != null && newVal != null;
+                      // Badge color by action type
+                      final badgeColor = action == 'CREATE'
+                          ? Colors.green
+                          : action == 'DELETE'
+                              ? Colors.red
+                              : Colors.orange;
+                      // Format date
+                      String dateStr = h['created_at']?.toString() ?? '';
+                      try {
+                        final dt = DateTime.parse(dateStr);
+                        dateStr = '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}  ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+                      } catch (_) {
+                        if (dateStr.length > 16) dateStr = dateStr.substring(0, 16);
+                      }
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Action badge + field label
                               Row(children: [
-                                Icon(
-                                  action == 'CREATE' ? Icons.person_add_rounded : Icons.person_rounded,
-                                  size: 13,
-                                  color: badgeColor,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  action == 'CREATE'
-                                      ? 'أُنشئت بواسطة: ${createdByName ?? editorName ?? "غير معروف"}'
-                                      : action == 'DELETE'
-                                          ? 'حُذفت بواسطة: ${editorName ?? "غير معروف"}'
-                                          : 'عُدّلت بواسطة: ${editorName ?? "غير معروف"}',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: badgeColor,
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: badgeColor.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    action == 'CREATE' ? 'إضافة' : action == 'DELETE' ? 'حذف' : 'تعديل',
+                                    style: TextStyle(fontSize: 11, color: badgeColor, fontWeight: FontWeight.bold),
                                   ),
                                 ),
+                                if (hasFieldChange) ...[
+                                  const SizedBox(width: 8),
+                                  const Icon(Icons.edit_note_rounded, size: 16, color: Colors.blue),
+                                  const SizedBox(width: 4),
+                                  Text(fieldLabel!, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                ],
                               ]),
-                            ],
-                            // Summary line (if available)
-                            if (summary != null && summary.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Text(summary, style: const TextStyle(fontSize: 12, color: Colors.black87)),
-                            ],
-                            // Creation date for CREATE action
-                            if (action == 'CREATE') ...[
-                              const SizedBox(height: 4),
-                              Text('تاريخ الإنشاء: $dateStr', style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
-                            ],
-                            // Old → New values (only when a specific field changed)
-                            if (hasFieldChange) ...[
-                              const SizedBox(height: 4),
-                              Row(children: [
-                                Flexible(child: Text('من: $oldVal', style: const TextStyle(color: Colors.red, fontSize: 12))),
-                                const SizedBox(width: 8),
-                                const Icon(Icons.arrow_forward_rounded, size: 14, color: Colors.grey),
-                                const SizedBox(width: 8),
-                                Flexible(child: Text('إلى: $newVal', style: const TextStyle(color: Colors.green, fontSize: 12))),
-                              ]),
-                            ],
-                            if (h['edit_reason'] != null && h['edit_reason'].toString().isNotEmpty)
-                              Text('السبب: ${h['edit_reason']}',
-                                  style: const TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic)),
-                            const SizedBox(height: 2),
-                            Text(dateStr, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                          ]),
-                    );
-                  },
-                ),
+                              // Creator name for CREATE/DELETE actions
+                              if ((createdByName ?? editorName) != null && (createdByName ?? editorName)!.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Row(children: [
+                                  Icon(
+                                    action == 'CREATE' ? Icons.person_add_rounded : Icons.person_rounded,
+                                    size: 13,
+                                    color: badgeColor,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    action == 'CREATE'
+                                        ? 'أُنشئت بواسطة: ${createdByName ?? editorName ?? "غير معروف"}'
+                                        : action == 'DELETE'
+                                            ? 'حُذفت بواسطة: ${editorName ?? "غير معروف"}'
+                                            : 'عُدّلت بواسطة: ${editorName ?? "غير معروف"}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: badgeColor,
+                                    ),
+                                  ),
+                                ]),
+                              ],
+                              // Summary line (if available)
+                              if (summary != null && summary.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(summary, style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                              ],
+                              // Creation date for CREATE action
+                              if (action == 'CREATE') ...[
+                                const SizedBox(height: 4),
+                                Text('تاريخ الإنشاء: $dateStr', style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
+                              ],
+                              // Old → New values (only when a specific field changed)
+                              if (hasFieldChange) ...[
+                                const SizedBox(height: 4),
+                                Row(children: [
+                                  Flexible(child: Text('من: $oldVal', style: const TextStyle(color: Colors.red, fontSize: 12))),
+                                  const SizedBox(width: 8),
+                                  const Icon(Icons.arrow_forward_rounded, size: 14, color: Colors.grey),
+                                  const SizedBox(width: 8),
+                                  Flexible(child: Text('إلى: $newVal', style: const TextStyle(color: Colors.green, fontSize: 12))),
+                                ]),
+                              ],
+                              if (h['edit_reason'] != null && h['edit_reason'].toString().isNotEmpty)
+                                Text('السبب: ${h['edit_reason']}',
+                                    style: const TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic)),
+                              const SizedBox(height: 2),
+                              Text(dateStr, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                            ]),
+                      );
+                    },
+                  ),
+              ],
+            ),
+          ),
         ),
         actions: [
           TextButton(

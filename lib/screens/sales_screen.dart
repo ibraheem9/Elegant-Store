@@ -736,15 +736,20 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
-  Future<void> _showEditHistory(int invoiceId) async {
+  Future<void> _showEditHistory(Invoice inv) async {
     final db = context.read<DatabaseService>();
-    final history = await db.getEditHistory(invoiceId, 'INVOICE');
+    final history = await db.getEditHistory(inv.id!, 'INVOICE');
+
+    if (!mounted) return;
 
     showDialog(
       context: context,
       builder: (context) {
         final screenWidth = MediaQuery.of(context).size.width;
         final dialogWidth = screenWidth > 900 ? 800.0 : screenWidth > 600 ? 550.0 : double.maxFinite;
+
+        final creatorName = inv.createdByName ?? 'غير معروف';
+        final creationDate = TimestampFormatter.formatShort(inv.createdAt);
 
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -758,145 +763,215 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
             ],
           ),
-          content: history.isEmpty 
-            ? const Padding(
-                padding: EdgeInsets.symmetric(vertical: 20),
-                child: Text('لا يوجد تعديلات سابقة لهذه الفاتورة', textAlign: TextAlign.center),
-              )
-            : SizedBox(
-                width: dialogWidth,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: MediaQuery.of(context).size.height * 0.7,
-                  ),
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: history.length,
-                    separatorBuilder: (_, __) => const Divider(height: 24),
-                    itemBuilder: (context, index) {
-                      final item = history[index];
-                      // Resolve field label
-                      final rawField = item['field_name'] as String?;
-                      final fieldLabel = rawField == 'amount'
-                          ? 'المبلغ'
-                          : rawField == 'payment_status'
-                              ? 'حالة الدفع'
-                              : rawField == 'notes'
-                                  ? 'الملاحظات'
-                                  : rawField == 'payment_method_id'
-                                      ? 'طريقة الدفع'
-                                      : rawField == 'created_at'
-                                          ? 'تاريخ الفاتورة'
-                                          : rawField ?? 'بيانات الفاتورة';
-                      
-                      final action = item['action'] as String? ?? 'UPDATE';
-                      final String? summary = _translateSummary(item['summary'] as String?);
-                      
-                      final editorName = item['edited_by_name'] as String?;
-                      final createdByName = item['created_by_name'] as String?;
-                      final rawOldVal = item['old_value'] as String?;
-                      final rawNewVal = item['new_value'] as String?;
-                      
-                      // Translate status values and format dates in old/new values
-                      final oldVal = _translateHistoryValue(rawField ?? '', rawOldVal);
-                      final newVal = _translateHistoryValue(rawField ?? '', rawNewVal);
-                      final reason = item['edit_reason'] as String?;
-                      
-                      // Format record timestamp (when the edit happened)
-                      final displayTime = TimestampFormatter.formatShort(item['created_at'] as String?);
-                      
-                      final badgeColor = action == 'CREATE'
-                          ? Colors.green
-                          : action == 'DELETE'
-                              ? Colors.red
-                              : Colors.orange;
-
-                      return Column(
+          content: SizedBox(
+            width: dialogWidth,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.7,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Creation Card Section
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.green.withValues(alpha: 0.25)),
+                      ),
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: badgeColor.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
+                                  color: Colors.green,
+                                  borderRadius: BorderRadius.circular(6),
                                 ),
-                                child: Text(
-                                  action == 'CREATE' ? 'إضافة' : action == 'DELETE' ? 'حذف' : 'تعديل',
-                                  style: TextStyle(fontSize: 12, color: badgeColor, fontWeight: FontWeight.bold),
+                                child: const Text(
+                                  'إنشاء الفاتورة',
+                                  style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
                                 ),
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      summary ?? 'تغيير $fieldLabel',
-                                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                                    ),
-                                    if (action == 'CREATE')
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 4),
-                                        child: Text('تاريخ الإنشاء: $displayTime', style: const TextStyle(fontSize: 13, color: Colors.blueGrey)),
-                                      )
-                                    else if (oldVal != null && newVal != null && rawField != 'MULTIPLE' && oldVal != '-' && newVal != '-')
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 4),
-                                        child: Text('من: $oldVal  ←  إلى: $newVal', style: const TextStyle(fontSize: 13, color: Colors.blueGrey)),
-                                      ),
-                                    if (reason != null && reason.isNotEmpty)
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 6),
-                                        child: Container(
-                                          padding: const EdgeInsets.all(8),
-                                          decoration: BoxDecoration(
-                                            color: Colors.grey.shade50,
-                                            borderRadius: BorderRadius.circular(8),
-                                            border: Border.all(color: Colors.grey.shade200),
-                                          ),
-                                          child: Text(
-                                            'سبب التعديل: $reason',
-                                            style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
+                              const Spacer(),
+                              Text(
+                                '${inv.amount.toStringAsFixed(2)} NIS',
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.green),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 8),
                           Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
                             children: [
-                              Icon(Icons.person_outline, size: 14, color: Colors.grey.shade600),
+                              Icon(Icons.person_outline, size: 14, color: Colors.grey.shade700),
                               const SizedBox(width: 4),
                               Text(
-                                action == 'CREATE'
-                                    ? 'بواسطة: ${createdByName ?? editorName ?? "غير معروف"}'
-                                    : 'بواسطة: ${editorName ?? "غير معروف"}',
-                                style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                                'أنشئت بواسطة: $creatorName',
+                                style: TextStyle(fontSize: 12, color: Colors.grey.shade800, fontWeight: FontWeight.w600),
                               ),
-                              const SizedBox(width: 12),
-                              Icon(Icons.access_time, size: 14, color: Colors.grey.shade600),
+                              const Spacer(),
+                              Icon(Icons.access_time, size: 14, color: Colors.grey.shade700),
                               const SizedBox(width: 4),
                               Text(
-                                displayTime,
-                                style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                                creationDate,
+                                style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
                                 textDirection: ui.TextDirection.ltr,
                               ),
                             ],
                           ),
                         ],
-                      );
-                    },
-                  ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (history.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 20),
+                        child: Center(
+                          child: Text(
+                            'لا يوجد تعديلات سابقة لهذه الفاتورة',
+                            style: TextStyle(fontSize: 13, color: Colors.grey),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      )
+                    else
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: history.length,
+                        separatorBuilder: (_, __) => const Divider(height: 24),
+                        itemBuilder: (context, index) {
+                          final item = history[index];
+                          // Resolve field label
+                          final rawField = item['field_name'] as String?;
+                          final fieldLabel = rawField == 'amount'
+                              ? 'المبلغ'
+                              : rawField == 'payment_status'
+                                  ? 'حالة الدفع'
+                                  : rawField == 'notes'
+                                      ? 'الملاحظات'
+                                      : rawField == 'payment_method_id'
+                                          ? 'طريقة الدفع'
+                                          : rawField == 'created_at'
+                                              ? 'تاريخ الفاتورة'
+                                              : rawField ?? 'بيانات الفاتورة';
+                          
+                          final action = item['action'] as String? ?? 'UPDATE';
+                          final String? summary = _translateSummary(item['summary'] as String?);
+                          
+                          final editorName = item['edited_by_name'] as String?;
+                          final createdByName = item['created_by_name'] as String?;
+                          final rawOldVal = item['old_value'] as String?;
+                          final rawNewVal = item['new_value'] as String?;
+                          
+                          // Translate status values and format dates in old/new values
+                          final oldVal = _translateHistoryValue(rawField ?? '', rawOldVal);
+                          final newVal = _translateHistoryValue(rawField ?? '', rawNewVal);
+                          final reason = item['edit_reason'] as String?;
+                          
+                          // Format record timestamp (when the edit happened)
+                          final displayTime = TimestampFormatter.formatShort(item['created_at'] as String?);
+                          
+                          final badgeColor = action == 'CREATE'
+                              ? Colors.green
+                              : action == 'DELETE'
+                                  ? Colors.red
+                                  : Colors.orange;
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: badgeColor.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
+                                    ),
+                                    child: Text(
+                                      action == 'CREATE' ? 'إضافة' : action == 'DELETE' ? 'حذف' : 'تعديل',
+                                      style: TextStyle(fontSize: 12, color: badgeColor, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          summary ?? 'تغيير $fieldLabel',
+                                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                                        ),
+                                        if (action == 'CREATE')
+                                          Padding(
+                                            padding: const EdgeInsets.only(top: 4),
+                                            child: Text('تاريخ الإنشاء: $displayTime', style: const TextStyle(fontSize: 13, color: Colors.blueGrey)),
+                                          )
+                                        else if (oldVal != null && newVal != null && rawField != 'MULTIPLE' && oldVal != '-' && newVal != '-')
+                                          Padding(
+                                            padding: const EdgeInsets.only(top: 4),
+                                            child: Text('من: $oldVal  ←  إلى: $newVal', style: const TextStyle(fontSize: 13, color: Colors.blueGrey)),
+                                          ),
+                                        if (reason != null && reason.isNotEmpty)
+                                          Padding(
+                                            padding: const EdgeInsets.only(top: 6),
+                                            child: Container(
+                                              padding: const EdgeInsets.all(8),
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey.shade50,
+                                                borderRadius: BorderRadius.circular(8),
+                                                border: Border.all(color: Colors.grey.shade200),
+                                              ),
+                                              child: Text(
+                                                'سبب التعديل: $reason',
+                                                style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  Icon(Icons.person_outline, size: 14, color: Colors.grey.shade600),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    action == 'CREATE'
+                                        ? 'بواسطة: ${createdByName ?? editorName ?? "غير معروف"}'
+                                        : 'بواسطة: ${editorName ?? "غير معروف"}',
+                                    style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Icon(Icons.access_time, size: 14, color: Colors.grey.shade600),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    displayTime,
+                                    style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                                    textDirection: ui.TextDirection.ltr,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                  ],
                 ),
               ),
+            ),
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -1730,7 +1805,7 @@ class _SalesScreenState extends State<SalesScreen> {
               IconButton(
                 icon: Icon(Icons.history, color: effectiveStatusColor.withOpacity(0.7), size: 20),
                 tooltip: 'سجل التعديلات',
-                onPressed: () => _showEditHistory(inv.id!),
+                onPressed: () => _showEditHistory(inv),
               ),
               IconButton(
                 icon: Icon(Icons.edit, color: effectiveStatusColor, size: 20),
@@ -1829,7 +1904,7 @@ class _SalesScreenState extends State<SalesScreen> {
                     Text(inv.lastEditedBy!, style: TextStyle(fontSize: 10, color: isDark ? Colors.white54 : Colors.blueGrey[500], fontStyle: FontStyle.italic)),
                     const SizedBox(width: 4),
                   ],
-                  IconButton(icon: Icon(Icons.history, color: isDark ? Colors.white70 : rowNameColor.withOpacity(0.7), size: 18), onPressed: () => _showEditHistory(inv.id!)),
+                  IconButton(icon: Icon(Icons.history, color: isDark ? Colors.white70 : rowNameColor.withOpacity(0.7), size: 18), onPressed: () => _showEditHistory(inv)),
                   IconButton(icon: Icon(Icons.edit, color: isDark ? Colors.white : rowNameColor, size: 18), onPressed: () => _showEditInvoiceDialog(inv)),
                   IconButton(icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18), onPressed: () => _deleteInvoice(inv)),
                 ],

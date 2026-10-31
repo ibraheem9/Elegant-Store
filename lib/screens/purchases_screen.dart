@@ -335,18 +335,91 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     final db      = context.read<DatabaseService>();
     final history = await db.getPurchaseEditHistory(p.id!);
     if (!mounted) return;
+
+    final creatorName = p.createdByName ?? 'غير معروف';
+    final creationDate = TimestampFormatter.formatShort(p.createdAt);
+
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('سجل تعديلات: ${p.merchantName}'),
         content: SizedBox(
           width: 400,
-          child: history.isEmpty
-              ? const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('لا توجد تعديلات مسجلة'),
-                )
-              : Builder(builder: (_) {
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Creation Card Header (from purchases table)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.green.withValues(alpha: 0.25)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.green,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              'إنشاء المشتريات',
+                              style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '${p.amount.toStringAsFixed(2)} NIS',
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.green),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Icon(Icons.person_outline, size: 14, color: Colors.grey.shade700),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              'أنشئت بواسطة: $creatorName',
+                              style: TextStyle(fontSize: 12, color: Colors.grey.shade800, fontWeight: FontWeight.w600),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(Icons.access_time, size: 14, color: Colors.grey.shade700),
+                          const SizedBox(width: 4),
+                          Text(
+                            creationDate,
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
+                            textDirection: ui.TextDirection.ltr,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (history.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Center(
+                      child: Text('لا توجد تعديلات مسجلة لهذه المشتريات', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                    ),
+                  )
+                else
+                  Builder(builder: (_) {
                     // Filter out null→null entries (no meaningful change), but keep CREATE/DELETE
                     final filtered = history.where((h) {
                       final action = h['action'] as String? ?? 'UPDATE';
@@ -358,12 +431,15 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                     }).toList();
                     if (filtered.isEmpty) {
                       return const Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Text('لا توجد تعديلات مسجلة'),
+                        padding: EdgeInsets.all(12),
+                        child: Center(
+                          child: Text('لا توجد تعديلات مسجلة لهذه المشتريات', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                        ),
                       );
                     }
                     return ListView.separated(
                       shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
                       itemCount: filtered.length,
                       separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (_, i) {
@@ -439,6 +515,9 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                       },
                     );
                   }),
+              ],
+            ),
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إغلاق')),

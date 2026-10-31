@@ -401,6 +401,12 @@ class ExportService {
       final List<Map<String, dynamic>> rows;
       if (table == 'users') {
         rows = await db.query(table, where: "role != 'DEVELOPER'");
+      } else if (table == 'edit_history') {
+        rows = await db.query(
+          table,
+          where:
+              "(action IS NULL OR action != 'CREATE') AND target_type IN ('INVOICE', 'TRANSACTION', 'PURCHASE') AND (summary IS NULL OR (summary NOT LIKE 'إضافة %' AND summary NOT LIKE '%جديدة%' AND summary NOT LIKE '%جديد%'))",
+        );
       } else {
         rows = await db.query(table);
       }
@@ -464,8 +470,12 @@ class ExportService {
       if (table == 'invoices') {
         where = 'invoice_date >= ? AND invoice_date <= ?';
         whereArgs = [startStr, endStr];
-      } else if (table == 'transactions' || table == 'purchases' || table == 'daily_statistics' || table == 'edit_history') {
+      } else if (table == 'transactions' || table == 'purchases' || table == 'daily_statistics') {
         where = 'created_at >= ? AND created_at <= ?';
+        whereArgs = [startStr, endStr];
+      } else if (table == 'edit_history') {
+        where =
+            "created_at >= ? AND created_at <= ? AND (action IS NULL OR action != 'CREATE') AND target_type IN ('INVOICE', 'TRANSACTION', 'PURCHASE') AND (summary IS NULL OR (summary NOT LIKE 'إضافة %' AND summary NOT LIKE '%جديدة%' AND summary NOT LIKE '%جديد%'))";
         whereArgs = [startStr, endStr];
       } else if (table == 'users') {
         // For users, we export customers created in the range, and ALWAYS exclude DEVELOPER
